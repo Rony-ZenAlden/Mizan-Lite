@@ -34,6 +34,9 @@ func NoFloat(cfg *config.Config) (*analysis.Analyzer, bool) {
 			insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 			insp.Preorder([]ast.Node{(*ast.Ident)(nil)}, func(n ast.Node) {
 				id := n.(*ast.Ident)
+				if skipPos(pass, id.Pos()) {
+					return
+				}
 				if obj := pass.TypesInfo.Uses[id]; obj != nil &&
 					(obj == float32Obj || obj == float64Obj) {
 					pass.Reportf(id.Pos(), "[no-float] %s",

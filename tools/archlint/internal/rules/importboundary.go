@@ -28,6 +28,9 @@ func ImportBoundary(cfg *config.Config) (*analysis.Analyzer, bool) {
 				}
 				for _, f := range pass.Files {
 					for _, spec := range f.Imports {
+						if skipPos(pass, spec.Pos()) {
+							continue
+						}
 						ip, err := strconv.Unquote(spec.Path.Value)
 						if err != nil {
 							continue

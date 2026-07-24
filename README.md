@@ -34,13 +34,28 @@ reusable kernel that future modules plug into. See [`docs/architecture/`](docs/a
 ## Common tasks
 
 ```bash
+make ci          # full LOCAL, OFFLINE CI: Go core + architecture + frontend
 make lint        # golangci-lint + the Mizan architecture-rule framework
 make arch        # architecture rules only (tools/archlint)
-make test        # go test ./... with race + coverage
+make test        # go test with race + coverage (core packages)
 make dev         # wails dev (hot-reload desktop app)
 make build       # production desktop binary
-make check       # everything CI runs: lint + arch + test + typecheck
+make vendor      # vendor Go deps for fully offline, self-contained builds
 ```
+
+## Local & offline by design
+
+Mizan ERP builds, tests, and runs **entirely on your machine**. There is no dependency on
+GitHub, remote CI, or any cloud service.
+
+- **CI is local:** `scripts/check.sh` (`make ci`) runs every check offline. Once Go modules
+  and `frontend/node_modules` are fetched once, no internet connection is needed.
+- **No auto-push, no remote:** version control is local Git only. No remote is configured.
+- **GitHub is optional and inert:** an opt-in Actions template lives in
+  [ci/optional-github-actions/](ci/optional-github-actions/); it does nothing unless you
+  deliberately enable it in the future. Nothing in the project requires it.
+- **Fully self-contained builds:** `make vendor` vendors Go dependencies so builds need no
+  downloads at all.
 
 ## Architecture enforcement
 

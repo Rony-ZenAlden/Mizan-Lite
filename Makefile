@@ -46,6 +46,15 @@ vet: ## go vet
 .PHONY: check
 check: lint vet test ## Everything CI runs (Go side)
 
+.PHONY: ci
+ci: ## Full local, offline CI (Go core + architecture + frontend). No GitHub needed.
+	./scripts/check.sh
+
+.PHONY: vendor
+vendor: ## Vendor Go dependencies for fully offline, self-contained builds
+	go mod vendor
+	@echo "Vendored. Builds now work with no module downloads (go build -mod=vendor)."
+
 .PHONY: dev
 dev: ## Run the desktop app with hot reload (requires the wails CLI)
 	wails dev

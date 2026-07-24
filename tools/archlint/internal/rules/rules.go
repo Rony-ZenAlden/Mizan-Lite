@@ -9,7 +9,14 @@
 // "extensible without redesigning the tooling" contract.
 package rules
 
-import "github.com/mizan-erp/mizan/tools/archlint/internal/engine"
+import (
+	"go/token"
+	"strings"
+
+	"golang.org/x/tools/go/analysis"
+
+	"github.com/mizan-erp/mizan/tools/archlint/internal/engine"
+)
 
 // AllBuilders is the registry of every architecture rule. Order is irrelevant;
 // each builder self-reports whether it is enabled.
@@ -27,4 +34,15 @@ func msgOr(msg, fallback string) string {
 		return msg
 	}
 	return fallback
+}
+
+// skipPos reports whether the file at pos should be exempt from architecture rules.
+// Architecture rules govern production source: test files and machine-generated
+// files (the go-test main, dependency sources in the module cache) are not the
+// project's architecture and are skipped.
+func skipPos(pass *analysis.Pass, pos token.Pos) bool {
+	f := pass.Fset.Position(pos).Filename
+	return strings.HasSuffix(f, "_test.go") ||
+		strings.Contains(f, "/go-build/") ||
+		strings.Contains(f, "/pkg/mod/")
 }

@@ -32,6 +32,9 @@ func ForbidCall(cfg *config.Config) (*analysis.Analyzer, bool) {
 
 			insp.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(n ast.Node) {
 				call := n.(*ast.CallExpr)
+				if skipPos(pass, call.Pos()) {
+					return
+				}
 				name := calleeName(pass.TypesInfo, call)
 				if name == "" {
 					return

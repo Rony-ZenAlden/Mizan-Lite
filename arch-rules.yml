@@ -1,0 +1,88 @@
+# Mizan ERP — Architecture rules (data-driven).
+#
+# These rules are enforced by tools/archlint (see tools/archlint/README.md).
+# They are DATA: adding or tuning a rule here changes enforcement without touching Go code,
+# as long as the rule *kind* already exists. Adding a brand-new rule *kind* is one Go file
+# plus a registry line — the framework itself is not redesigned.
+#
+# Pattern syntax (doublestar-style):
+#   *   matches within a single path segment
+#   **  matches across segments
+#   the token `std` in an import allowlist means "any Go standard-library package"
+#   the token `self` expands to the module path (github.com/mizan-erp/mizan)
+
+module: github.com/mizan-erp/mizan
+
+rules:
+  # ── Layer & module import boundaries ────────────────────────────────────────
+  import-boundary:
+    enabled: true
+    boundaries:
+      - name: kernel-purity
+        description: The kernel is pure; it may import only stdlib, itself, and uuid.
+        applies_to: ["self/internal/kernel/**"]
+        allow_only: ["std", "self/internal/kernel/**", "github.com/google/uuid"]
+        message: "kernel packages may import only stdlib, other kernel packages, and google/uuid"
+
+      - name: domain-purity
+        description: Domain layers hold business rules only; no infrastructure.
+        applies_to: ["self/internal/modules/*/domain/**"]
+        allow_only: ["std", "self/internal/kernel/**", "self/internal/modules/*/domain/**"]
+        message: "domain packages may import only stdlib, kernel, and their own module's domain"
+
+      - name: no-driver-outside-infra
+        description: SQL drivers and Wails belong to infrastructure, never domain/app.
+        applies_to: ["self/internal/modules/*/domain/**", "self/internal/modules/*/app/**"]
+        forbid: ["modernc.org/sqlite**", "github.com/wailsapp/**", "database/sql"]
+        message: "database drivers and Wails may be imported only from infra/platform layers"
+
+  # ── Forbidden calls, scoped by location ─────────────────────────────────────
+  forbid-call:
+    enabled: true
+    calls:
+      - selector: "panic"
+        applies_to: ["self/**"]
+        exclude: ["**/tools/**", "**/bootstrap/**", "**_test.go"]
+        message: "no panic() in production code — return a typed kernel/errs error instead"
+
+      - selector: "os.Exit"
+        applies_to: ["self/**"]
+        exclude: ["**/cmd/**", "**/bootstrap/**", "**/tools/**", "**_test.go"]
+        message: "no os.Exit() outside the application bootstrap"
+
+      - selector: "fmt.Println"
+        applies_to: ["self/internal/**"]
+        exclude: ["**_test.go"]
+        message: "use structured logging (log/slog), not fmt.Println"
+
+      - selector: "fmt.Print"
+        applies_to: ["self/internal/**"]
+        exclude: ["**_test.go"]
+        message: "use structured logging (log/slog), not fmt.Print"
+
+      - selector: "fmt.Printf"
+        applies_to: ["self/internal/**"]
+        exclude: ["**_test.go"]
+        message: "use structured logging (log/slog), not fmt.Printf"
+
+      - selector: "time.Now"
+        applies_to: ["self/internal/modules/*/domain/**", "self/internal/kernel/money/**"]
+        exclude: ["**_test.go", "**/clock/**"]
+        message: "do not call time.Now() in domain code — take a kernel/clock.Clock"
+
+  # ── No floating-point in money/domain ───────────────────────────────────────
+  no-float:
+    enabled: true
+    applies_to:
+      - "self/internal/kernel/money/**"
+      - "self/internal/kernel/quantity/**"
+      - "self/internal/modules/*/domain/**"
+    message: "float32/float64 are forbidden here — use kernel integer money/quantity types"
+
+# ── Planned rule kinds (documented seams, added later without redesign) ────────
+# The following require a whole-program package-graph pass (tools/archlint -graph).
+# They are listed here as intent; each becomes one registered rule when implemented:
+#   - module-isolation      : a module may import another module only via its /contract
+#   - max-dependency-depth  : cap the import-chain depth of any package
+#   - domain-tests-required : every domain package must have a _test.go
+#   - no-package-cycles     : (Go forbids these already at compile time; kept for modules)

@@ -1,0 +1,71 @@
+# golangci-lint configuration for Mizan ERP.
+#
+# This covers the STANDARD, well-known rules. Mizan-specific architectural invariants
+# (layer boundaries, no-float-in-money, forbidden calls by location) are enforced by the
+# separate extensible framework in tools/archlint — see tools/archlint/README.md.
+# Together they mean architecture is enforced by tooling, not code review.
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet            # correctness vetting
+    - staticcheck      # the big static-analysis suite
+    - errcheck         # unchecked errors
+    - ineffassign      # ineffectual assignments
+    - unused           # dead code
+    - gosimple         # simplifications
+    - contextcheck     # context.Context is propagated correctly
+    - sloglint         # structured logging hygiene (log/slog)
+    - forbidigo        # forbidden identifiers (see below)
+    - bodyclose        # HTTP bodies closed
+    - rowserrcheck     # sql.Rows errors checked
+    - sqlclosecheck    # sql.Rows/Stmt closed
+    - gocritic         # opinionated correctness/style
+    - revive           # style, replaces golint
+    - misspell
+    - unconvert
+    - wastedassign
+    - nilerr
+    - predeclared      # no shadowing of predeclared identifiers
+
+linters-settings:
+  forbidigo:
+    # Backstop for the arch rules; archlint is the location-aware authority.
+    forbid:
+      - p: '^fmt\.Print.*$'
+        msg: use log/slog for output, not fmt.Print*
+    exclude-godoc-examples: true
+    analyze-types: true
+
+  sloglint:
+    no-mixed-args: true
+    kv-only: false
+    attr-only: true
+    context: scope
+    static-msg: false
+    key-naming-case: snake
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment   # not worth the churn at this stage
+
+  revive:
+    rules:
+      - name: exported
+        disabled: true   # doc.go markers are intentionally sparse during scaffolding
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Tests may use fmt and are less strict.
+    - path: _test\.go
+      linters: [forbidigo, errcheck]
+    # The arch-lint tool is a CLI; fmt/os.Exit are legitimate there.
+    - path: tools/archlint/
+      linters: [forbidigo]

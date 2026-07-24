@@ -1,0 +1,52 @@
+# Binaries & build output (root-anchored so they don't match source dirs like tools/archlint/)
+/bin/
+/build/bin/
+*.exe
+*.out
+/mizan
+/archlint
+/Mizan ERP
+
+# Go
+/vendor/
+*.test
+*.prof
+coverage.out
+coverage.html
+
+# Wails
+frontend/dist/
+frontend/node_modules/
+frontend/wailsjs/
+
+# Node
+node_modules/
+npm-debug.log*
+.vite/
+
+# Databases & backups (never commit customer data)
+*.db
+*.db-wal
+*.db-shm
+*.mizanbak
+/data/
+
+# Local env & editor
+.env
+.env.local
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Placeholder from initial workspace
+/hey.htm
+
+# keep a dist placeholder so go:embed compiles before a frontend build
+!frontend/dist/
+frontend/dist/*
+!frontend/dist/index.html
+
+# tsc build cache
+*.tsbuildinfo

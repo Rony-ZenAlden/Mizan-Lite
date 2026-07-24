@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design tokens ───────────────────────────────────────────────────────────
+   Semantic colours as RGB channels so Tailwind can apply alpha. Theme switches by
+   swapping these variables; components reference token-backed utilities only. */
+:root {
+  --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic";
+  --radius: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --color-surface: 255 255 255;
+  --color-surface-raised: 248 250 252;
+  --color-border: 226 232 240;
+  --color-text: 15 23 42;
+  --color-text-muted: 100 116 139;
+  --color-primary: 37 99 235;
+  --color-primary-fg: 255 255 255;
+  --color-danger: 220 38 38;
+  --color-success: 22 163 74;
+}
+
+:root[data-theme="dark"] {
+  --color-surface: 15 23 42;
+  --color-surface-raised: 30 41 59;
+  --color-border: 51 65 85;
+  --color-text: 241 245 249;
+  --color-text-muted: 148 163 184;
+  --color-primary: 59 130 246;
+  --color-primary-fg: 255 255 255;
+  --color-danger: 248 113 113;
+  --color-success: 74 222 128;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Arabic needs slightly more vertical breathing room at the same size. */
+:root[lang="ar"] body {
+  line-height: 1.75;
+}

@@ -42,7 +42,11 @@ rules:
     calls:
       - selector: "panic"
         applies_to: ["self/**"]
-        exclude: ["**/tools/**", "**/bootstrap/**", "**_test.go"]
+        # Exempt: tooling; the bootstrap recover boundary; the dbtest harness (which
+        # deliberately induces a panic to test rollback); and uow.go, whose recover
+        # rolls back the transaction and RE-RAISES the original panic (with its stack)
+        # so it reaches the binding-layer recover — cleanup, not control flow.
+        exclude: ["**/tools/**", "**/bootstrap/**", "**/dbtest/**", "**/database/uow.go", "**_test.go"]
         message: "no panic() in production code — return a typed kernel/errs error instead"
 
       - selector: "os.Exit"

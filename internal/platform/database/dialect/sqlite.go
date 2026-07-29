@@ -81,6 +81,29 @@ func (sqliteDialect) BooleanLiteral(b bool) string {
 	return "0"
 }
 
+// TableExistsQuery consults sqlite_master, SQLite's schema catalogue.
+func (sqliteDialect) TableExistsQuery() string {
+	return "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
+}
+
+// IntegrityCheckStatement returns SQLite's built-in verifier. It walks the whole B-tree
+// structure, so it genuinely detects a corrupt file rather than merely opening it.
+func (sqliteDialect) IntegrityCheckStatement() string { return "PRAGMA integrity_check" }
+
+// OnlineBackupStatement uses VACUUM INTO, which writes a single consistent, compacted
+// file while connections are open.
+//
+// This is deliberately not a file copy: copying a WAL-mode database with open
+// connections does not produce a consistent snapshot, and the result looks valid while
+// silently missing committed data.
+//
+// dest cannot be parameterised (it is part of the statement, not a value), so the
+// single-quote escape is the injection boundary. Callers pass application-controlled
+// paths, never user input.
+func (sqliteDialect) OnlineBackupStatement(dest string) string {
+	return "VACUUM INTO '" + strings.ReplaceAll(dest, "'", "''") + "'"
+}
+
 func (sqliteDialect) TranslateError(err error) error {
 	if err == nil {
 		return nil

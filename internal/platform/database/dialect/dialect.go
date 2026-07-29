@@ -60,4 +60,35 @@ type Dialect interface {
 	// category and Code, so business code branches identically on every engine.
 	// Non-driver errors (e.g. sql.ErrNoRows, context errors) are returned unchanged.
 	TranslateError(err error) error
+
+	// ── Schema-administration surface (used by platform/migrate) ────────────────
+	//
+	// These exist so the migration runner contains no engine-specific SQL. Without
+	// them the runner would reach for sqlite_master, PRAGMA, and VACUUM INTO
+	// directly, and a PostgreSQL port would become a diff across migrate/ instead
+	// of a new Dialect implementation.
+
+	// TableExistsQuery returns a query reporting whether one table exists. It takes
+	// exactly one '?' parameter — the unquoted table name — and yields at least one
+	// row when the table is present and no rows when it is absent.
+	TableExistsQuery() string
+
+	// IntegrityCheckStatement returns a statement that verifies physical database
+	// integrity: one row per problem found, or a single row reading "ok" when the
+	// database is healthy.
+	//
+	// Empty when the engine offers no such check (PostgreSQL, MySQL). Callers must
+	// treat empty as "this engine cannot self-check" and skip the step, rather than
+	// substituting a query that proves nothing.
+	IntegrityCheckStatement() string
+
+	// OnlineBackupStatement returns a statement writing a consistent snapshot of the
+	// live database to dest while connections are open. dest is escaped for the
+	// dialect by the implementation.
+	//
+	// Empty when the engine has no in-engine equivalent (PostgreSQL and MySQL back up
+	// through external tooling). Callers must treat empty as "no backup was taken"
+	// and refuse to proceed, never as success — a safety net nobody verified is worse
+	// than none, because it is trusted.
+	OnlineBackupStatement(dest string) string
 }

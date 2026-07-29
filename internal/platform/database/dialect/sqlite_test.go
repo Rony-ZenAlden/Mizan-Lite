@@ -1,6 +1,7 @@
 package dialect_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mizan-erp/mizan/internal/platform/database/dialect"
@@ -63,3 +64,42 @@ func TestTranslateErrorPassthrough(t *testing.T) {
 type errorString string
 
 func (e errorString) Error() string { return string(e) }
+
+// ── schema-administration surface (used by platform/migrate) ────────────────────
+
+func TestSQLiteTableExistsQueryTakesOneParameter(t *testing.T) {
+	q := dialect.NewSQLite().TableExistsQuery()
+	if n := strings.Count(q, "?"); n != 1 {
+		t.Errorf("TableExistsQuery has %d placeholders, want exactly 1: %q", n, q)
+	}
+	// The contract is "at least one row when present" — the runner must not have to know
+	// which catalogue it came from.
+	if !strings.Contains(strings.ToUpper(q), "SELECT") {
+		t.Errorf("TableExistsQuery is not a SELECT: %q", q)
+	}
+}
+
+func TestSQLiteIntegrityCheckStatementIsPresent(t *testing.T) {
+	// Empty would mean "this engine cannot self-check", which is false for SQLite and
+	// would silently disable the migration pre-flight.
+	if got := dialect.NewSQLite().IntegrityCheckStatement(); got != "PRAGMA integrity_check" {
+		t.Errorf("IntegrityCheckStatement = %q, want PRAGMA integrity_check", got)
+	}
+}
+
+func TestSQLiteOnlineBackupStatementEscapesDestination(t *testing.T) {
+	d := dialect.NewSQLite()
+
+	if got := d.OnlineBackupStatement("/tmp/backup.db"); got != `VACUUM INTO '/tmp/backup.db'` {
+		t.Errorf("OnlineBackupStatement = %q", got)
+	}
+	// A single quote in the path must not be able to terminate the literal. Paths are
+	// application-controlled, but this is the injection boundary and it is one line.
+	got := d.OnlineBackupStatement("/tmp/o'brien/backup.db")
+	if got != `VACUUM INTO '/tmp/o''brien/backup.db'` {
+		t.Errorf("single quote not escaped: %q", got)
+	}
+	if strings.Count(got, "'")%2 != 0 {
+		t.Errorf("unbalanced quoting would break the statement: %q", got)
+	}
+}

@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-07-27**. Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-07-30**. Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -41,6 +41,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/PHASE_0_FOUNDATION.md` | Phase 0 detailed design + the 12-step sequence + Definition of Done. |
 | `docs/architecture/STEP_0_2_NUMERIC_KERNEL.md` | Numeric kernel design + implementation record. |
 | `docs/architecture/STEP_0_3_DATABASE_PLATFORM.md` | Database platform design + implementation record. |
+| `docs/architecture/STEP_0_4_MIGRATIONS.md` | Migration runner + safety layer design, implementation record, and the amended D1. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -80,8 +81,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.1** | Repo scaffold, tooling, archlint framework, CI, Wails shell, frontend foundation | ✅ committed |
 | **0.2** | Numeric kernel (money/quantity/rounding) | ✅ committed |
 | **0.3** | Database platform (pools, dialect, Unit of Work, contract suite) | ✅ committed |
-| **0.4** | Migration runner + desktop safety layer + `0001_platform.sql` | ⬜ next — design first |
-| **0.5** | Config registries (settings + metadata) + strategy registry | ⬜ |
+| **0.4** | Migration runner + desktop safety layer + `0001_platform.sql` | ✅ committed |
+| **0.5** | Config registries (settings + metadata) + strategy registry | ⬜ next — design first |
 | **0.6** | Event bus + transactional outbox | ⬜ |
 | **0.7** | Durable job scheduler + outbox dispatcher | ⬜ |
 | **0.8** | i18n platform + seed locales | ⬜ |
@@ -131,6 +132,30 @@ The reusable **application kernel** future modules plug into (no business featur
 - **`platform/database/dbtest`** — dialect-agnostic **contract suite (13 subtests)**; a future
   PostgreSQL dialect must pass it identically.
 
+### Step 0.4 — Migration runner & platform schema
+- **`platform/migrate`** — forward-only runner: `Up()` / `Status()`, one transaction per
+  migration with its version row, **SHA-256 checksum verification on every boot**, a
+  **version gate** (an older binary refuses a newer database), a **cross-process advisory
+  lock** with a 15-minute stale-lock reclaim, and `Progress` phases for the splash screen.
+- **Desktop safety layer** — `integrity_check` → **free-space pre-flight** → `VACUUM INTO`
+  snapshot → **verify the snapshot** → migrate → **automatic restore on failure**, keeping the
+  failed database as `.failed-<ts>` and pruning to the newest 5 backups after success only.
+- **Loader** — `<version>_<name>.sql`, numeric ordering, duplicate-version detection, and a
+  statement-aware scanner that rejects `PRAGMA`/`VACUUM`/`ATTACH` (comment- and
+  string-literal-safe, so `…; PRAGMA x` on one line is caught).
+- **`migrations/`** (module root, `go:embed`) — `SQLite()` exposes `0001_platform.sql`, which
+  creates all **eight platform tables** (`schema_migrations`, `schema_lock`, `settings`,
+  `feature_flags`, `outbox_events`, `jobs`, `job_runs`, `translations`, `number_series`) under
+  the portable type contract.
+- **Dialect shim extended** — `TableExistsQuery`, `IntegrityCheckStatement`,
+  `OnlineBackupStatement`; the runner contains **no engine-specific SQL**, so the PostgreSQL
+  port stays a dialect implementation.
+- **30 tests, 85.8% coverage**, including the four required drills (injected failure with data
+  survival, checksum tamper, version gate, corrupt database) — each **mutation-verified** to
+  fail when its protection is removed.
+- Decision **D1 was amended**: hand-written runner instead of `pressly/goose`. Reasoning in
+  `STEP_0_4_MIGRATIONS.md` §11.1. Zero new dependencies; still stdlib-only.
+
 ---
 
 ## 7. Repository map (as built)
@@ -144,10 +169,13 @@ Mizan ERP/
 ├── cmd/, build/                        # (reserved)
 ├── internal/
 │   ├── buildinfo/                      # version metadata
-│   ├── kernel/                         # money, quantity, round, errs, internal/fixed,
-│   │                                   #   + markers: id, clock, event, locale, validation, paging
+│   ├── kernel/                         # money, quantity, round, errs, clock, internal/fixed,
+│   │                                   #   + markers: id, event, locale, validation, paging
 │   ├── platform/database/              # DB pools, dialect, executor, uow, helpers, dbtest
+│   ├── platform/migrate/               # migration runner + desktop safety layer
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
+├── migrations/                         # go:embed'd schema, one dir per dialect
+│   └── sqlite/0001_platform.sql
 ├── frontend/                           # Vite + React + TS foundation
 ├── tools/archlint/                     # architecture-rule framework
 └── docs/architecture/                  # design docs (+ this PROGRESS.md one level up)
@@ -173,11 +201,15 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.4 — migration runner (goose, embedded) + the desktop safety layer
-  (auto-backup → integrity-check → migrate → auto-restore on failure) + `0001_platform.sql`.
+- **Immediate next:** Step 0.5 — config registries (settings + metadata) + the strategy
+  registry. `settings` and `feature_flags` tables already exist from `0001_platform.sql`.
   **Design first, await approval** per the protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
+- **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
+  `Load` reads one FS; merging arrives with the second module that ships migrations (0.9,
+  currency). The bootstrap must **reopen or exit** after a failed migration, since `Up` leaves
+  the `Store` closed once it restores — wire that in Step 0.10.
 - **Before Phase 2 (financial spine):** need the first customer's real tax rates / chart of
   accounts, or confirmation to ship an empty, user-configured tax profile.
 
@@ -186,6 +218,8 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+f71384d  Phase 0 Step 0.4: migration runner + desktop safety layer
+b763230  docs: add PROGRESS.md — running status / resume-point
 299d075  Phase 0 Step 0.3: database platform (pools, dialect, Unit of Work)
 ebd263d  Phase 0 Step 0.2: numeric kernel (money, quantity, rounding)
 cbd68d3  Phase 0 Step 0.1: repo scaffold, arch-rule framework, Wails shell

@@ -42,6 +42,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_2_NUMERIC_KERNEL.md` | Numeric kernel design + implementation record. |
 | `docs/architecture/STEP_0_3_DATABASE_PLATFORM.md` | Database platform design + implementation record. |
 | `docs/architecture/STEP_0_4_MIGRATIONS.md` | Migration runner + safety layer design, implementation record, and the amended D1. |
+| `docs/architecture/STEP_0_5_CONFIG_REGISTRIES.md` | Settings/flags/strategy/metadata registries — the mandate's mechanism. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -82,8 +83,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.2** | Numeric kernel (money/quantity/rounding) | ✅ committed |
 | **0.3** | Database platform (pools, dialect, Unit of Work, contract suite) | ✅ committed |
 | **0.4** | Migration runner + desktop safety layer + `0001_platform.sql` | ✅ committed |
-| **0.5** | Config registries (settings + metadata) + strategy registry | ⬜ next — design first |
-| **0.6** | Event bus + transactional outbox | ⬜ |
+| **0.5** | Config registries (settings + metadata) + strategy registry | ✅ committed |
+| **0.6** | Event bus + transactional outbox | ⬜ next — design first |
 | **0.7** | Durable job scheduler + outbox dispatcher | ⬜ |
 | **0.8** | i18n platform + seed locales | ⬜ |
 | **0.9** | Currency module (schema `0002`, repos, converter, seeds) | ⬜ |
@@ -156,6 +157,38 @@ The reusable **application kernel** future modules plug into (no business featur
 - Decision **D1 was amended**: hand-written runner instead of `pressly/goose`. Reasoning in
   `STEP_0_4_MIGRATIONS.md` §11.1. Zero new dependencies; still stdlib-only.
 
+### Step 0.5 — Configuration & metadata registries
+The mechanism behind the mandate. **Three mechanisms, kept deliberately separate** (§CFG.1):
+*settings* (typed knobs), *metadata* (kinds of things), *strategies* (named behaviours).
+- **`kernel/id`** — UUIDv7 as `CHAR(36)` text; time-ordered for index locality, nil UUID
+  rejected. `google/uuid` promoted from indirect to direct — **no new dependency**.
+- **`kernel/clock`** — `Format`/`ParseTimestamp`/`TimestampLayout`: the single definition of
+  the portable CHAR(24) timestamp (fixed-width UTC, so lexical order = chronological order).
+- **`kernel/round.ParseMode`** — the missing inverse of `String()`, which the docs already
+  called the storage form. Unknown names rejected, never defaulted.
+- **`platform/config`** — settings **declared in code**, read through the typed handle
+  declaration returns (`TaxEnabled.Get(ctx)`), so call sites hold no key strings and cannot
+  mismatch types. Scope chain **Session ► User ► Branch ► Company ► System ► default**;
+  load-all snapshot cache with a version counter; codecs that never route money or int64
+  through a float; `Set` validating scope/enum/permission/custom rules through the dialect
+  upsert. **Feature flags** share the machinery with their own lifecycle
+  (`Stability`, `RemoveBy`, `ExpiredFlags`).
+- **Three ports** — `ScopeProvider`, `ChangeNotifier`, `Authorizer` — so config never imports
+  `api`, and does not pre-empt the event bus (0.6) or RBAC (Phase 1).
+- **`platform/strategy`** — generic `Registry[T]`; duplicate registration is an error, an
+  unknown key is a typed NotFound naming the point and key, `Keys()` sorted for admin UIs.
+  Nine extension points exported as **names**; typed registries are created by the package
+  owning each contract type.
+- **`platform/metadata`** — the `code`/`name`/`is_system`/`is_active` contract plus an
+  idempotent, **code-keyed** seeder: never deletes, never touches admin-owned rows, and a
+  second identical run is a no-op.
+- **archlint gained two enforced boundaries** (D6, substituted — see §11.3): platform may not
+  import modules or api; modules/api may not import the dialect shim. Both verified by
+  planting violations.
+- **60 tests, `-race` clean**, run against the real `0001_platform.sql` schema; config 79.4%,
+  strategy 97.1%, metadata 85.6%, id 91.7%. Precedence resolution and seed idempotency were
+  **mutation-verified**.
+
 ---
 
 ## 7. Repository map (as built)
@@ -169,10 +202,13 @@ Mizan ERP/
 ├── cmd/, build/                        # (reserved)
 ├── internal/
 │   ├── buildinfo/                      # version metadata
-│   ├── kernel/                         # money, quantity, round, errs, clock, internal/fixed,
-│   │                                   #   + markers: id, event, locale, validation, paging
+│   ├── kernel/                         # money, quantity, round, errs, clock, id, internal/fixed,
+│   │                                   #   + markers: event, locale, validation, paging
 │   ├── platform/database/              # DB pools, dialect, executor, uow, helpers, dbtest
 │   ├── platform/migrate/               # migration runner + desktop safety layer
+│   ├── platform/config/                # settings + feature flags (typed handles)
+│   ├── platform/strategy/              # generic extension-point registry
+│   ├── platform/metadata/              # reference-data contract + idempotent seeder
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── migrations/                         # go:embed'd schema, one dir per dialect
 │   └── sqlite/0001_platform.sql
@@ -201,15 +237,22 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.5 — config registries (settings + metadata) + the strategy
-  registry. `settings` and `feature_flags` tables already exist from `0001_platform.sql`.
-  **Design first, await approval** per the protocol.
+- **Immediate next:** Step 0.6 — event bus + transactional outbox. The `outbox_events`
+  table already exists from `0001_platform.sql`, and `config.ChangeNotifier` is the port
+  waiting for the bus. **Design first, await approval** per the protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
   `Load` reads one FS; merging arrives with the second module that ships migrations (0.9,
   currency). The bootstrap must **reopen or exit** after a failed migration, since `Up` leaves
   the `Store` closed once it restores — wire that in Step 0.10.
+- **Carried from 0.5 (deliberate, not gaps):** JSON seed-**file** discovery/ordering across
+  modules lands with the first real seed (0.9). The bootstrap must call
+  `config.Registry.Validate()` and `config.Bind()` on the root context (0.10) — without the
+  bind, every setting silently resolves to its declared default. `ChangeNotifier` and
+  `Authorizer` get real implementations in 0.6 and Phase 1 respectively.
+  Known edge: `Settings.Set` nested in a business transaction that rolls back needs
+  `Reload` (design §11.5).
 - **Before Phase 2 (financial spine):** need the first customer's real tax rates / chart of
   accounts, or confirmation to ship an empty, user-configured tax profile.
 
@@ -218,6 +261,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+4160a7a  Phase 0 Step 0.5: configuration & metadata registries
 f71384d  Phase 0 Step 0.4: migration runner + desktop safety layer
 b763230  docs: add PROGRESS.md — running status / resume-point
 299d075  Phase 0 Step 0.3: database platform (pools, dialect, Unit of Work)

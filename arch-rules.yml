@@ -36,6 +36,25 @@ rules:
         forbid: ["modernc.org/sqlite**", "github.com/wailsapp/**", "database/sql"]
         message: "database drivers and Wails may be imported only from infra/platform layers"
 
+      # Added in Step 0.5. Dependencies point inward: platform is reusable infrastructure
+      # that knows nothing about any business module. Without this, a "small" import of a
+      # module type into platform/config or platform/strategy would quietly invert the
+      # architecture and make the configuration mechanisms un-reusable.
+      - name: platform-independent-of-modules
+        description: Platform infrastructure must never depend on a business module.
+        applies_to: ["self/internal/platform/**"]
+        forbid: ["self/internal/modules/**", "self/internal/api/**"]
+        message: "platform must not import business modules or the API layer — dependencies point inward"
+
+      # Added in Step 0.5. The dialect shim is the ENTIRE portability surface (§8.5): a
+      # module that reaches for it is writing engine-aware code, which is precisely what
+      # would make the future PostgreSQL port a rewrite instead of one new dialect.
+      - name: dialect-is-platform-only
+        description: Only the database platform may be dialect-aware.
+        applies_to: ["self/internal/modules/**", "self/internal/api/**"]
+        forbid: ["self/internal/platform/database/dialect**"]
+        message: "only platform/database may be dialect-aware (ARCHITECTURE_v1 §8.5)"
+
   # ── Forbidden calls, scoped by location ─────────────────────────────────────
   forbid-call:
     enabled: true

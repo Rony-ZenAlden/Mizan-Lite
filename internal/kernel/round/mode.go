@@ -42,6 +42,22 @@ const (
 // Valid reports whether m is a defined rounding mode.
 func (m RoundingMode) Valid() bool { return m <= maxMode }
 
+// ParseMode is the inverse of String.
+//
+// String is documented as the storage form, so a parser is the other half of that
+// contract: a rounding mode persisted in a settings row or a currency record has to come
+// back as the same mode, on any engine, years later. Unknown names are rejected rather
+// than silently defaulting — a typo in a seed file that quietly changed how money rounds
+// would be almost impossible to trace from the symptom.
+func ParseMode(s string) (RoundingMode, bool) {
+	for m := RoundingMode(0); m <= maxMode; m++ {
+		if m.String() == s {
+			return m, true
+		}
+	}
+	return 0, false
+}
+
 // String returns a stable, snake_case name suitable for storage and settings.
 func (m RoundingMode) String() string {
 	switch m {

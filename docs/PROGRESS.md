@@ -43,6 +43,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_3_DATABASE_PLATFORM.md` | Database platform design + implementation record. |
 | `docs/architecture/STEP_0_4_MIGRATIONS.md` | Migration runner + safety layer design, implementation record, and the amended D1. |
 | `docs/architecture/STEP_0_5_CONFIG_REGISTRIES.md` | Settings/flags/strategy/metadata registries — the mandate's mechanism. |
+| `docs/architecture/STEP_0_6_EVENTS_OUTBOX.md` | Event bus + transactional outbox, and the amended D3 (per-handler deliveries). |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -84,10 +85,10 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.3** | Database platform (pools, dialect, Unit of Work, contract suite) | ✅ committed |
 | **0.4** | Migration runner + desktop safety layer + `0001_platform.sql` | ✅ committed |
 | **0.5** | Config registries (settings + metadata) + strategy registry | ✅ committed |
-| **0.6** | Event bus + transactional outbox | ⬜ next — design first |
-| **0.7** | Durable job scheduler + outbox dispatcher | ⬜ |
+| **0.6** | Event bus + transactional outbox | ✅ committed |
+| **0.7** | Durable job scheduler + outbox dispatcher | ⬜ next — design first |
 | **0.8** | i18n platform + seed locales | ⬜ |
-| **0.9** | Currency module (schema `0002`, repos, converter, seeds) | ⬜ |
+| **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ⬜ |
 | **0.10** | Composition root wiring the full graph + graceful shutdown | ⬜ |
 | **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ (base done in 0.1; full design system pending) |
 | **0.12** | Phase 0 Definition-of-Done review | ⬜ |
@@ -189,6 +190,33 @@ The mechanism behind the mandate. **Three mechanisms, kept deliberately separate
   strategy 97.1%, metadata 85.6%, id 91.7%. Precedence resolution and seed idempotency were
   **mutation-verified**.
 
+### Step 0.6 — Event bus & transactional outbox
+The atomicity guarantee under every cross-module side effect. **Two mechanisms, deliberately
+separate** (§23.1): synchronous domain events, durable integration events.
+- **`kernel/event`** — `Event`/`Envelope` plus correlation & causation carried in the context
+  and **stamped automatically**, so causal chains do not depend on every handler author
+  remembering to pass them along.
+- **`platform/eventbus`** — typed generic `Subscribe`, explicit registration (no reflection
+  discovery, so subscriptions are greppable), registration-order delivery. A handler error or
+  **panic aborts the publish and rolls the transaction back** — recovered, never swallowed: a
+  recovered panic that let the commit proceed would be worse than the crash.
+- **`platform/outbox`** — `Publish` writes the event **and one delivery row per registered
+  handler inside the caller's transaction**. That single fact is the whole guarantee: a
+  rolled-back sale leaves no event.
+- **Dispatcher** (`DispatchOnce`, callable; 0.7 schedules it) — compare-and-swap claim,
+  **per-(aggregate, handler) head-of-line ordering**, capped exponential backoff with jitter,
+  dead-lettering after `MaxAttempts`, and visibility-timeout reclaim of deliveries abandoned
+  by a crashed dispatcher. A `dead` delivery halts its stream until a human intervenes.
+- **`0002_outbox_deliveries.sql`** — D3 was **rejected in review** in favour of per-handler
+  tracking, so a retry re-runs only what failed. Correctness no longer depends on every
+  handler being idempotent. **Currency's migration becomes `0003`.**
+- **`config.ChangeNotifier` port closed** — `SettingChanged` publishes on the domain bus
+  (D7), making "language change without restart" real. A failing subscriber never undoes the
+  write.
+- **54 tests, `-race` clean**; eventbus 92.7%, outbox 86.7%, config 79.4%. The concurrency
+  test caught a **real claim race** (30 deliveries instead of 10) that every per-row assertion
+  missed. Atomicity and ordering **mutation-verified**.
+
 ---
 
 ## 7. Repository map (as built)
@@ -202,16 +230,18 @@ Mizan ERP/
 ├── cmd/, build/                        # (reserved)
 ├── internal/
 │   ├── buildinfo/                      # version metadata
-│   ├── kernel/                         # money, quantity, round, errs, clock, id, internal/fixed,
-│   │                                   #   + markers: event, locale, validation, paging
+│   ├── kernel/                         # money, quantity, round, errs, clock, id, event,
+│   │                                   #   internal/fixed + markers: locale, validation, paging
 │   ├── platform/database/              # DB pools, dialect, executor, uow, helpers, dbtest
 │   ├── platform/migrate/               # migration runner + desktop safety layer
 │   ├── platform/config/                # settings + feature flags (typed handles)
 │   ├── platform/strategy/              # generic extension-point registry
 │   ├── platform/metadata/              # reference-data contract + idempotent seeder
+│   ├── platform/eventbus/              # in-process domain event bus
+│   ├── platform/outbox/                # transactional outbox + dispatcher
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── migrations/                         # go:embed'd schema, one dir per dialect
-│   └── sqlite/0001_platform.sql
+│   └── sqlite/0001_platform.sql, 0002_outbox_deliveries.sql
 ├── frontend/                           # Vite + React + TS foundation
 ├── tools/archlint/                     # architecture-rule framework
 └── docs/architecture/                  # design docs (+ this PROGRESS.md one level up)
@@ -237,9 +267,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.6 — event bus + transactional outbox. The `outbox_events`
-  table already exists from `0001_platform.sql`, and `config.ChangeNotifier` is the port
-  waiting for the bus. **Design first, await approval** per the protocol.
+- **Immediate next:** Step 0.7 — durable job scheduler + outbox dispatcher job. The `jobs`
+  and `job_runs` tables already exist from `0001_platform.sql`, and `Dispatcher.DispatchOnce`
+  is the callable unit waiting to be scheduled. **Design first, await approval** per the
+  protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
@@ -261,6 +292,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+2a7b00b  Phase 0 Step 0.6: event bus + transactional outbox
 4160a7a  Phase 0 Step 0.5: configuration & metadata registries
 f71384d  Phase 0 Step 0.4: migration runner + desktop safety layer
 b763230  docs: add PROGRESS.md — running status / resume-point

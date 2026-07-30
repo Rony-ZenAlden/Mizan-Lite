@@ -258,23 +258,37 @@ func TestChecksumIsContentAddressed(t *testing.T) {
 // ── happy path ──────────────────────────────────────────────────────────────────
 
 func TestUpAppliesRealPlatformSchema(t *testing.T) {
-	// The shipped 0001_platform.sql, through the embedded FS the binary actually uses.
+	// The shipped migrations, through the embedded FS the binary actually uses.
 	_, dbPath := tempDB(t)
 	st := openStore(t, dbPath)
 	r := newRunner(t, st, dbPath, migrations.SQLite())
+
+	// Derived, not hardcoded: an earlier version asserted "exactly one migration", which
+	// meant every future migration broke this test for no good reason.
+	shipped, err := Load(migrations.SQLite())
+	if err != nil {
+		t.Fatalf("loading shipped migrations: %v", err)
+	}
+	if len(shipped) == 0 {
+		t.Fatal("no migrations are embedded in the binary")
+	}
+	highest := shipped[len(shipped)-1].Version
 
 	res, err := r.Up(context.Background())
 	if err != nil {
 		t.Fatalf("Up: %v", err)
 	}
-	if res.Applied != 1 || res.ToVersion != 1 {
-		t.Fatalf("Applied=%d ToVersion=%d, want 1 and 1", res.Applied, res.ToVersion)
+	if res.Applied != len(shipped) || res.ToVersion != highest {
+		t.Fatalf("Applied=%d ToVersion=%d, want %d and %d",
+			res.Applied, res.ToVersion, len(shipped), highest)
 	}
 
-	// All eight platform tables from design §7, plus the two bookkeeping ones.
+	// The eight platform tables from 0.4 design §7, the two bookkeeping ones, and the
+	// per-handler delivery table added by 0.6.
 	for _, table := range []string{
 		"schema_migrations", "schema_lock", "settings", "feature_flags",
-		"outbox_events", "jobs", "job_runs", "translations", "number_series",
+		"outbox_events", "outbox_deliveries", "jobs", "job_runs",
+		"translations", "number_series",
 	} {
 		if !tableExists(t, dbPath, table) {
 			t.Errorf("table %q was not created", table)

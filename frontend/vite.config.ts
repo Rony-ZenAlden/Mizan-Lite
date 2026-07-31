@@ -12,6 +12,14 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  server: {
+    fs: {
+      // locales/ is the single source shared with the Go backend (ARCHITECTURE_v1 §22.1)
+      // and sits above the Vite root, so dev-mode file serving must be allowed to reach it.
+      // Production builds inline the JSON at build time and need no allowance.
+      allow: [".."],
+    },
+  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

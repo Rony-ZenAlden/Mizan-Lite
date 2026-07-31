@@ -1,0 +1,68 @@
+{
+  "config.duplicate_key": "تم تعريف هذا الإعداد أكثر من مرة.",
+  "config.invalid_default": "أحد الإعدادات يحتوي على قيمة افتراضية غير صالحة.",
+  "config.invalid_key": "تم تعريف إعداد بدون مفتاح.",
+  "config.invalid_value": "هذه القيمة غير صالحة لهذا الإعداد.",
+  "config.load_failed": "تعذّر تحميل الإعدادات.",
+  "config.not_permitted": "لا تملك صلاحية تغيير هذا الإعداد.",
+  "config.registry_invalid": "إعدادات التطبيق غير صحيحة. يُرجى التواصل مع الدعم الفني.",
+  "config.scope_not_allowed": "لا يمكن تغيير هذا الإعداد على هذا المستوى.",
+  "config.undeclared_key": "هذا الإعداد غير موجود.",
+  "config.write_failed": "تعذّر حفظ الإعداد.",
+
+  "database.concurrent_modification": "قام مستخدم آخر بتعديل هذا السجل أثناء تحريرك له. يُرجى إعادة التحميل والمحاولة مرة أخرى.",
+  "database.constraint_violation": "بعض المعلومات المطلوبة ناقصة أو غير صالحة.",
+  "database.duplicate": "يوجد سجل بهذه البيانات مسبقاً.",
+  "database.internal": "حدث خطأ في قاعدة البيانات.",
+  "database.reference_violation": "هذا السجل مُستخدم في مكان آخر ولا يمكن تعديله أو حذفه.",
+
+  "eventbus.duplicate_subscription": "تم تسجيل اشتراك داخلي في الأحداث مرتين.",
+  "eventbus.handler_failed": "تعذّرت معالجة حدث داخلي.",
+  "eventbus.handler_panicked": "فشل معالج حدث داخلي بشكل غير متوقع.",
+  "eventbus.invalid_subscription": "اشتراك الأحداث الداخلي غير مكتمل.",
+
+  "id.generate_failed": "تعذّر توليد معرّف فريد.",
+  "id.invalid": "هذا المعرّف غير صالح.",
+
+  "i18n.catalog_invalid": "ملفات اللغة تالفة. يُرجى إعادة تثبيت ميزان.",
+  "i18n.invalid_locale": "هذه ليست لغة صالحة.",
+  "i18n.translation_load_failed": "تعذّر تحميل الترجمات.",
+  "i18n.translation_write_failed": "تعذّر حفظ الترجمة.",
+
+  "jobs.claim_failed": "تعذّر بدء مهمة في الخلفية.",
+  "jobs.duplicate_key": "تم تعريف مهمة خلفية أكثر من مرة.",
+  "jobs.invalid_definition": "تعريف المهمة الخلفية غير صحيح.",
+  "jobs.invalid_schedule": "هذا الجدول الزمني غير صالح.",
+  "jobs.reconcile_failed": "تعذّر تجهيز المهام الخلفية.",
+  "jobs.run_failed": "تعذّر تسجيل تنفيذ المهمة الخلفية.",
+  "jobs.unknown_key": "هذه المهمة الخلفية غير موجودة.",
+
+  "metadata.duplicate_code": "يتكرر الرمز نفسه أكثر من مرة في البيانات الأولية.",
+  "metadata.invalid_seed": "البيانات الأولية غير صالحة.",
+  "metadata.seed_failed": "تعذّر تجهيز البيانات المرجعية.",
+  "metadata.system_row_protected": "هذا سجل مُدمج في النظام. يمكن تعطيله ولكن لا يمكن حذفه.",
+
+  "migrate.backup_failed": "تعذّر إنشاء نسخة احتياطية وقائية، لذلك لم يتم تطبيق التحديث. بياناتك لم تتغيّر.",
+  "migrate.bad_file_name": "اسم أحد ملفات التحديث غير صحيح.",
+  "migrate.checksum_mismatch": "تم تعديل تحديث سبق تطبيقه منذ تثبيته. يُرجى إعادة تثبيت ميزان.",
+  "migrate.corrupt_database": "يبدو أن قاعدة بياناتك تالفة. يُرجى الاستعادة من نسخة احتياطية قبل المتابعة.",
+  "migrate.database_too_new": "أُنشئت قاعدة البيانات هذه بإصدار أحدث من ميزان (الإصدار {current})، بينما يدعم هذا الإصدار حتى {target}. يُرجى تحديث التطبيق.",
+  "migrate.duplicate_version": "يحمل تحديثان رقم الإصدار نفسه.",
+  "migrate.forbidden_statement": "يحتوي أحد التحديثات على تعليمة غير مسموح بها.",
+  "migrate.insufficient_disk": "لا تتوفر مساحة كافية على القرص لإجراء التحديث بأمان. يُرجى تفريغ بعض المساحة وإعادة تشغيل ميزان.",
+  "migrate.load_failed": "تعذّرت قراءة التحديثات.",
+  "migrate.lock_unavailable": "نسخة أخرى من ميزان تقوم حالياً بتحديث قاعدة البيانات هذه.",
+  "migrate.migration_failed": "تعذّر تطبيق التحديث. تمت استعادة بياناتك وهي لم تتغيّر.",
+  "migrate.missing_history": "تعذّرت قراءة سجل التحديثات.",
+  "migrate.restore_failed": "فشل التحديث وتعذّرت استعادة بياناتك تلقائياً. تتوفر نسخة احتياطية في {backup}.",
+
+  "outbox.claim_failed": "تعذّرت قراءة الأعمال المعلّقة في الخلفية.",
+  "outbox.duplicate_subscription": "تم تسجيل معالج داخلي مرتين.",
+  "outbox.handler_panicked": "فشل معالج داخلي بشكل غير متوقع.",
+  "outbox.invalid_subscription": "تسجيل المعالج الداخلي غير مكتمل.",
+  "outbox.publish_failed": "تعذّر تسجيل حدث داخلي.",
+
+  "strategy.duplicate": "تم تسجيل مكوّنين بالاسم نفسه.",
+  "strategy.invalid": "تم تسجيل مكوّن بدون اسم.",
+  "strategy.unknown": "المكوّن المطلوب \"{key}\" غير مثبّت."
+}

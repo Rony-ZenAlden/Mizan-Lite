@@ -1,0 +1,68 @@
+{
+  "config.duplicate_key": "This setting is declared more than once.",
+  "config.invalid_default": "A setting has an invalid default value.",
+  "config.invalid_key": "A setting was declared without a key.",
+  "config.invalid_value": "That value is not valid for this setting.",
+  "config.load_failed": "Settings could not be loaded.",
+  "config.not_permitted": "You do not have permission to change this setting.",
+  "config.registry_invalid": "The application's settings are misconfigured. Please contact support.",
+  "config.scope_not_allowed": "This setting cannot be changed at that level.",
+  "config.undeclared_key": "That setting does not exist.",
+  "config.write_failed": "The setting could not be saved.",
+
+  "database.concurrent_modification": "Someone else changed this record while you were editing it. Please reload and try again.",
+  "database.constraint_violation": "Some required information is missing or invalid.",
+  "database.duplicate": "A record with these details already exists.",
+  "database.internal": "A database error occurred.",
+  "database.reference_violation": "This record is used elsewhere and cannot be changed or removed.",
+
+  "eventbus.duplicate_subscription": "An internal event subscription is registered twice.",
+  "eventbus.handler_failed": "An internal event could not be processed.",
+  "eventbus.handler_panicked": "An internal event handler failed unexpectedly.",
+  "eventbus.invalid_subscription": "An internal event subscription is incomplete.",
+
+  "id.generate_failed": "A unique identifier could not be generated.",
+  "id.invalid": "That identifier is not valid.",
+
+  "i18n.catalog_invalid": "The language files are damaged. Please reinstall Mizan.",
+  "i18n.invalid_locale": "That is not a valid language.",
+  "i18n.translation_load_failed": "Translations could not be loaded.",
+  "i18n.translation_write_failed": "The translation could not be saved.",
+
+  "jobs.claim_failed": "A background task could not be started.",
+  "jobs.duplicate_key": "A background task is declared more than once.",
+  "jobs.invalid_definition": "A background task is declared incorrectly.",
+  "jobs.invalid_schedule": "That schedule is not valid.",
+  "jobs.reconcile_failed": "Background tasks could not be prepared.",
+  "jobs.run_failed": "A background task could not be recorded.",
+  "jobs.unknown_key": "That background task does not exist.",
+
+  "metadata.duplicate_code": "The same code appears more than once in the seed data.",
+  "metadata.invalid_seed": "The seed data is not valid.",
+  "metadata.seed_failed": "Reference data could not be prepared.",
+  "metadata.system_row_protected": "This is a built-in record. It can be deactivated but not deleted.",
+
+  "migrate.backup_failed": "A safety backup could not be created, so the update was not applied. Your data is unchanged.",
+  "migrate.bad_file_name": "An update file is named incorrectly.",
+  "migrate.checksum_mismatch": "An already-applied update has changed since it was installed. Please reinstall Mizan.",
+  "migrate.corrupt_database": "Your database appears to be damaged. Please restore from a backup before continuing.",
+  "migrate.database_too_new": "This database was created by a newer version of Mizan (version {current}); this version understands up to {target}. Please update the application.",
+  "migrate.duplicate_version": "Two updates claim the same version number.",
+  "migrate.forbidden_statement": "An update contains an instruction that is not allowed.",
+  "migrate.insufficient_disk": "There is not enough free disk space to update safely. Please free some space and restart Mizan.",
+  "migrate.load_failed": "The updates could not be read.",
+  "migrate.lock_unavailable": "Another copy of Mizan is currently updating this database.",
+  "migrate.migration_failed": "The update could not be applied. Your data was restored and is unchanged.",
+  "migrate.missing_history": "The update history could not be read.",
+  "migrate.restore_failed": "The update failed and your data could not be restored automatically. A backup is available at {backup}.",
+
+  "outbox.claim_failed": "Pending background work could not be read.",
+  "outbox.duplicate_subscription": "An internal handler is registered twice.",
+  "outbox.handler_panicked": "An internal handler failed unexpectedly.",
+  "outbox.invalid_subscription": "An internal handler registration is incomplete.",
+  "outbox.publish_failed": "An internal event could not be recorded.",
+
+  "strategy.duplicate": "Two components are registered under the same name.",
+  "strategy.invalid": "A component was registered without a name.",
+  "strategy.unknown": "The required component \"{key}\" is not installed."
+}

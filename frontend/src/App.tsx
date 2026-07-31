@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DIRECTION, MESSAGES, type Locale } from "@/i18n/locales";
+import { DIRECTION, translate, type Locale } from "@/i18n/messages";
 import { getHealth, type HealthInfo } from "@/lib/health";
 
 type Theme = "light" | "dark";
@@ -9,7 +9,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>("light");
   const [health, setHealth] = useState<HealthInfo | null>(null);
 
-  const t = (key: string) => MESSAGES[locale][key] ?? key;
+  const t = (key: string) => translate(locale, key);
 
   // Drive <html lang/dir/data-theme> — runtime locale + theme switching, no reload.
   useEffect(() => {

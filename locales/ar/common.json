@@ -1,0 +1,10 @@
+{
+  "app.title": "ميزان",
+  "app.tagline": "حيث تلتقي الدقة بالبساطة.",
+  "shell.status": "الأساس جاهز",
+  "shell.backend": "الخادم",
+  "shell.version": "الإصدار",
+  "shell.platform": "المنصة",
+  "action.toggleTheme": "تبديل السمة",
+  "action.toggleLanguage": "English"
+}

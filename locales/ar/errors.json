@@ -1,4 +1,8 @@
 {
+  "bootstrap.migration_failed": "فشل تحديث قاعدة البيانات، لذلك لا يمكن تشغيل ميزان. بياناتك لم تتغيّر.",
+  "bootstrap.registry_invalid": "هذه النسخة من ميزان غير مُعدّة بشكل صحيح. يُرجى إعادة التثبيت أو التواصل مع الدعم.",
+  "bootstrap.startup_failed": "تعذّر تشغيل ميزان.",
+
   "config.duplicate_key": "تم تعريف هذا الإعداد أكثر من مرة.",
   "config.invalid_default": "أحد الإعدادات يحتوي على قيمة افتراضية غير صالحة.",
   "config.invalid_key": "تم تعريف إعداد بدون مفتاح.",
@@ -64,11 +68,19 @@
   "migrate.missing_history": "تعذّرت قراءة سجل التحديثات.",
   "migrate.restore_failed": "فشل التحديث وتعذّرت استعادة بياناتك تلقائياً. تتوفر نسخة احتياطية في {backup}.",
 
+  "modules.dependency_cycle": "وحدات التطبيق تشكّل حلقة اعتماد متبادلة ولا يمكن تشغيلها.",
+  "modules.duplicate_key": "وحدتان تُعرّفان المفتاح نفسه.",
+  "modules.duplicate_module": "وحدتان تحملان الاسم نفسه.",
+  "modules.unknown_dependency": "وحدة تعتمد على وحدة أخرى غير مثبّتة.",
+
   "outbox.claim_failed": "تعذّرت قراءة الأعمال المعلّقة في الخلفية.",
   "outbox.duplicate_subscription": "تم تسجيل معالج داخلي مرتين.",
   "outbox.handler_panicked": "فشل معالج داخلي بشكل غير متوقع.",
   "outbox.invalid_subscription": "تسجيل المعالج الداخلي غير مكتمل.",
   "outbox.publish_failed": "تعذّر تسجيل حدث داخلي.",
+
+  "paths.not_writable": "لا يستطيع ميزان الكتابة في مجلد البيانات {path}. تحقّق من صلاحيات المجلد والمساحة المتاحة.",
+  "paths.unresolvable": "تعذّر على ميزان تحديد مكان تخزين بياناتك.",
 
   "strategy.duplicate": "تم تسجيل مكوّنين بالاسم نفسه.",
   "strategy.invalid": "تم تسجيل مكوّن بدون اسم.",

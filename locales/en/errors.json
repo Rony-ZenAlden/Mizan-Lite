@@ -1,4 +1,8 @@
 {
+  "bootstrap.migration_failed": "The database update failed, so Mizan cannot start. Your data is unchanged.",
+  "bootstrap.registry_invalid": "This build of Mizan is misconfigured. Please reinstall or contact support.",
+  "bootstrap.startup_failed": "Mizan could not start.",
+
   "config.duplicate_key": "This setting is declared more than once.",
   "config.invalid_default": "A setting has an invalid default value.",
   "config.invalid_key": "A setting was declared without a key.",
@@ -64,11 +68,19 @@
   "migrate.missing_history": "The update history could not be read.",
   "migrate.restore_failed": "The update failed and your data could not be restored automatically. A backup is available at {backup}.",
 
+  "modules.dependency_cycle": "The application's modules form a dependency cycle and cannot be started.",
+  "modules.duplicate_key": "Two modules declare the same key.",
+  "modules.duplicate_module": "Two modules share the same name.",
+  "modules.unknown_dependency": "A module depends on one that is not installed.",
+
   "outbox.claim_failed": "Pending background work could not be read.",
   "outbox.duplicate_subscription": "An internal handler is registered twice.",
   "outbox.handler_panicked": "An internal handler failed unexpectedly.",
   "outbox.invalid_subscription": "An internal handler registration is incomplete.",
   "outbox.publish_failed": "An internal event could not be recorded.",
+
+  "paths.not_writable": "Mizan cannot write to its data folder at {path}. Check the folder's permissions and free space.",
+  "paths.unresolvable": "Mizan could not determine where to store your data.",
 
   "strategy.duplicate": "Two components are registered under the same name.",
   "strategy.invalid": "A component was registered without a name.",

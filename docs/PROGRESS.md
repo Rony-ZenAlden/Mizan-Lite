@@ -47,6 +47,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_7_JOB_SCHEDULER.md` | Durable job scheduler, catch-up policies, and the outbox dispatch job. |
 | `docs/architecture/STEP_0_8_I18N.md` | i18n platform, the single shared catalog, and the error-code coverage gate. |
 | `docs/architecture/STEP_0_9_CURRENCY.md` | Currency module, rate types, redenomination, and the corrected rate uniqueness. |
+| `docs/architecture/STEP_0_10_COMPOSITION_ROOT.md` | Composition root, startup ordering, the error taxonomy, and shutdown. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -92,8 +93,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.7** | Durable job scheduler + outbox dispatcher | ✅ committed |
 | **0.8** | i18n platform + seed locales | ✅ committed |
 | **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ✅ committed |
-| **0.10** | Composition root wiring the full graph + graceful shutdown | ⬜ next — design first |
-| **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ (base done in 0.1; full design system pending) |
+| **0.10** | Composition root wiring the full graph + graceful shutdown | ✅ committed |
+| **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ next — design first (base done in 0.1) |
 | **0.12** | Phase 0 Definition-of-Done review | ⬜ |
 
 ---
@@ -296,6 +297,31 @@ ordered set via the new `migrate.Merge` — which closes the item **0.4 carried 
   mutation-verified; single-rounding asserted directly but **not** mutation-verified — see
   §9.4 of the step doc for why.
 
+### Step 0.10 — Composition root & full graph wiring
+The step where everything built so far has to start **together**, in the right order, and stop
+again without losing anything. Manual constructor injection, one root, no container (§6).
+- **`platform/paths`** closes a real gap: `database.Config.Path` was required and nothing
+  supplied it. OS app-data dirs, `MIZAN_DATA_DIR` override, `0o700`, and a **write check at
+  startup** — "cannot write to the data folder" is fixable at launch and a disaster mid-sale.
+- **Module registry**: topological order (deterministic for independent modules), cycle
+  detection, unknown dependencies, and cross-module duplicate setting/flag keys — all **fatal**.
+- **The error taxonomy, now written down (D3):** *code* defects are fatal at startup; *data*
+  leftovers are reported and ignored. Applied consistently since 0.4; the composition root is
+  where it is enforced.
+- **`api/envelope`** enforces §5.4: every binding returns `Result[T]`, and **no English prose
+  crosses the boundary** — a test asserts developer text never appears in the JSON.
+  `api/appctx` stamps locale (closing 0.8's carried item) and a per-call correlation id.
+- **Ordering:** migrate before anything reads a table; subscriptions before the scheduler
+  starts. **Seeding runs every boot** (D4) — no first-run flag, and it self-heals a deleted
+  system row.
+- **Shutdown is politeness, not durability** (D6): bounded, best-effort, and correctness comes
+  from the outbox, job reclaim, and the WAL.
+- `main.go`/`app.go` now start through the root, with `Health()` and `Currencies()` as the
+  envelope's first consumers.
+- **38 tests, `-race` clean**; envelope 100%, modules 95.6%, bootstrap 70.3%. Cycle detection
+  **mutation-verified** (stack overflow without the guard). The ordering test is honestly
+  scoped — see step doc §9.1.
+
 ## 7. Repository map (as built)
 
 ```
@@ -320,6 +346,9 @@ Mizan ERP/
 │   ├── platform/i18n/                  # message catalog + user-content translations
 │   ├── platform/modules/               # the Module contract every business module implements
 │   ├── modules/currency/               # first business module (own migrations, domain, infra)
+│   ├── platform/paths/                 # OS app-data locations
+│   ├── api/envelope/, api/appctx/      # result envelope + per-request context
+│   ├── bootstrap/                      # the composition root
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── locales/{en,ar}/                     # go:embed'd catalogs, shared with the frontend
 ├── migrations/                         # go:embed'd schema, one dir per dialect
@@ -349,9 +378,9 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.10 — composition root wiring the full graph + graceful shutdown.
-  The `Module` contract exists and currency implements it; 0.10 adds the validating registry
-  (no dependency cycles, no duplicate setting keys across modules) and starts the scheduler.
+- **Immediate next:** Step 0.11 — frontend foundation: design tokens, primitives, the app
+  shell, providers, and the bindings wrapper over `envelope.Result`. It is also where a
+  startup failure and the migration `Progress` events finally get somewhere to be shown.
   **Design first, await approval** per the protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
@@ -374,6 +403,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+5ac657c  Phase 0 Step 0.10: composition root + full graph wiring
 a4cd7ff  Phase 0 Step 0.9: currency module
 6b3b773  Phase 0 Step 0.8: i18n platform + seed locales
 8b769c9  Phase 0 Step 0.7: durable job scheduler + outbox dispatch job

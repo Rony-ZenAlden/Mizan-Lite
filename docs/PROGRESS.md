@@ -46,6 +46,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_6_EVENTS_OUTBOX.md` | Event bus + transactional outbox, and the amended D3 (per-handler deliveries). |
 | `docs/architecture/STEP_0_7_JOB_SCHEDULER.md` | Durable job scheduler, catch-up policies, and the outbox dispatch job. |
 | `docs/architecture/STEP_0_8_I18N.md` | i18n platform, the single shared catalog, and the error-code coverage gate. |
+| `docs/architecture/STEP_0_9_CURRENCY.md` | Currency module, rate types, redenomination, and the corrected rate uniqueness. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -90,8 +91,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.6** | Event bus + transactional outbox | ✅ committed |
 | **0.7** | Durable job scheduler + outbox dispatcher | ✅ committed |
 | **0.8** | i18n platform + seed locales | ✅ committed |
-| **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ⬜ next — design first |
-| **0.10** | Composition root wiring the full graph + graceful shutdown | ⬜ |
+| **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ✅ committed |
+| **0.10** | Composition root wiring the full graph + graceful shutdown | ⬜ next — design first |
 | **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ (base done in 0.1; full design system pending) |
 | **0.12** | Phase 0 Definition-of-Done review | ⬜ |
 
@@ -269,6 +270,32 @@ existed.
 - **30 Go + 9 frontend tests**, `-race` clean; locale 93.9%, i18n 87.4%. Fallback chain and
   the coverage gate **mutation-verified**.
 
+### Step 0.9 — Currency module
+The **first business module**, in Phase 0 because Money, rate types, and redenomination are
+kernel-adjacent (§CUR). Schema `0003`, owned by the module and merged into the globally
+ordered set via the new `migrate.Merge` — which closes the item **0.4 carried forward**.
+- **Three currency roles** (§18.1): pricing, functional/ledger, transaction — all settings, so
+  a single-currency company sets them equal and every conversion collapses to identity.
+- **A contradiction in the approved schema, corrected (D3).** `UNIQUE (from, to, rate_type,
+  valid_from)` and "append-only, a correction is a new row" cannot both hold: correcting
+  today's rate an hour later is rejected. `created_at` joins the key; resolution takes the
+  newest. The correction drill is **mutation-verified**.
+- **Resolution:** identity → direct → inverse → pivot (one rounding) → last-known-with-age →
+  typed error. **A rate is never fabricated.** `Result` carries the rate, source, `AsOf` and
+  `Age` so the caller stores what §18.1 requires and the POS can show staleness.
+- **Six rate-type contexts** resolved independently (§G.1/§CUR.2) — official for tax and
+  statutory, market for pricing and purchasing.
+- **Redenomination** (§G.2) walks the successor chain with cycle detection and a hop bound;
+  stored documents keep their original amounts forever.
+- **First real use of three earlier mechanisms:** the 0.5 metadata seeder (idempotency drill
+  passes), the 0.8 `translations` table (Arabic currency names as data, no `name_ar` column),
+  and `round.ParseMode` for `rounding_mode` round-tripping.
+- **`Module` contract** defined in `platform/modules` and implemented here; no `Permissions()`
+  (Phase 1) and no events (no subscriber exists).
+- **23 tests + 4 merge tests, `-race` clean**, currency 73.9%. Temporal resolution
+  mutation-verified; single-rounding asserted directly but **not** mutation-verified — see
+  §9.4 of the step doc for why.
+
 ## 7. Repository map (as built)
 
 ```
@@ -291,6 +318,8 @@ Mizan ERP/
 │   ├── platform/outbox/                # transactional outbox + dispatcher
 │   ├── platform/jobs/                  # durable job scheduler + built-in jobs
 │   ├── platform/i18n/                  # message catalog + user-content translations
+│   ├── platform/modules/               # the Module contract every business module implements
+│   ├── modules/currency/               # first business module (own migrations, domain, infra)
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── locales/{en,ar}/                     # go:embed'd catalogs, shared with the frontend
 ├── migrations/                         # go:embed'd schema, one dir per dialect
@@ -320,9 +349,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.9 — currency module: schema `0003`, repositories, the converter,
-  and seeds. The first *business* module, and the first use of the metadata seeder (0.5) and
-  the `code`-keyed `is_system` contract. **Design first, await approval** per the protocol.
+- **Immediate next:** Step 0.10 — composition root wiring the full graph + graceful shutdown.
+  The `Module` contract exists and currency implements it; 0.10 adds the validating registry
+  (no dependency cycles, no duplicate setting keys across modules) and starts the scheduler.
+  **Design first, await approval** per the protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
@@ -344,6 +374,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+a4cd7ff  Phase 0 Step 0.9: currency module
 6b3b773  Phase 0 Step 0.8: i18n platform + seed locales
 8b769c9  Phase 0 Step 0.7: durable job scheduler + outbox dispatch job
 2a7b00b  Phase 0 Step 0.6: event bus + transactional outbox

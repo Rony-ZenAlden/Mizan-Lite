@@ -50,3 +50,7 @@ frontend/dist/*
 
 # tsc build cache
 *.tsbuildinfo
+
+# pgregory.net/rapid writes a reproduction file when a property test fails.
+# It is a local debugging artifact for one machine's failing seed, not a fixture.
+testdata/rapid/

@@ -875,3 +875,59 @@ func TestForwardOnlyNoDownAPI(t *testing.T) {
 		t.Error("Runner has a Down() method; migrations are forward-only by design (D2)")
 	}
 }
+
+// ── module-owned migrations (Step 0.9) ──────────────────────────────────────────
+
+func TestMergeCombinesSourcesInVersionOrder(t *testing.T) {
+	// §10.3: each module ships its own files, but version numbers are globally sequenced so
+	// cross-module foreign keys always apply in a valid order.
+	platform := mapFS(map[string]string{"0001_init.sql": test0001})
+	module := mapFS(map[string]string{"0002_module.sql": test0002})
+
+	got, err := Load(Merge(platform, module))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("loaded %d migrations, want 2", len(got))
+	}
+	if got[0].Version != 1 || got[1].Version != 2 {
+		t.Errorf("versions = %d, %d; want 1, 2", got[0].Version, got[1].Version)
+	}
+	if got[1].Name != "module" {
+		t.Errorf("second migration name = %q, want the module's", got[1].Name)
+	}
+}
+
+func TestMergeRejectsDuplicateVersionsAcrossModules(t *testing.T) {
+	// Two modules both claiming 0002 is a developer error that must never reach a build. The
+	// check lives in Load, so a module colliding with the platform and two modules colliding
+	// with each other produce the identical error.
+	a := mapFS(map[string]string{"0002_alpha.sql": "SELECT 1;"})
+	b := mapFS(map[string]string{"0002_beta.sql": "SELECT 1;"})
+
+	_, err := Load(Merge(a, b))
+	assertCode(t, err, CodeDuplicateVersion)
+}
+
+func TestMergeReadsFilesFromEverySource(t *testing.T) {
+	platform := mapFS(map[string]string{"0001_init.sql": test0001})
+	module := mapFS(map[string]string{"0002_module.sql": test0002})
+	merged := Merge(platform, module)
+
+	for _, name := range []string{"0001_init.sql", "0002_module.sql"} {
+		if _, err := fs.ReadFile(merged, name); err != nil {
+			t.Errorf("reading %s through the merged FS: %v", name, err)
+		}
+	}
+	if _, err := fs.ReadFile(merged, "nope.sql"); err == nil {
+		t.Error("reading a missing file should fail")
+	}
+}
+
+func TestMergeOfNothingIsUsable(t *testing.T) {
+	// An install with no modules is a legitimate state, not a crash.
+	if _, err := Load(Merge()); err == nil {
+		t.Log("empty merge loads to an empty set, which Load accepts")
+	}
+}

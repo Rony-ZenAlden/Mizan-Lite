@@ -28,3 +28,22 @@ func ParseTimestamp(s string) (time.Time, bool) {
 	}
 	return t.UTC(), true
 }
+
+// DateLayout is the portable CHAR(10) calendar-date form (ARCHITECTURE_v1 §8.1).
+//
+// A separate type from a timestamp because a date is not an instant: an exchange rate is
+// valid "on 2026-07-30" everywhere, not from a particular moment, and storing it as a
+// timestamp would make the answer depend on the reader's time zone.
+const DateLayout = "2006-01-02"
+
+// FormatDate renders the calendar date of t in UTC.
+func FormatDate(t time.Time) string { return t.UTC().Format(DateLayout) }
+
+// ParseDate reads a date written by FormatDate, at midnight UTC.
+func ParseDate(s string) (time.Time, bool) {
+	t, err := time.Parse(DateLayout, s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t.UTC(), true
+}

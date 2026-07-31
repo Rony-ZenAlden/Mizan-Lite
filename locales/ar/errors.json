@@ -10,6 +10,14 @@
   "config.undeclared_key": "هذا الإعداد غير موجود.",
   "config.write_failed": "تعذّر حفظ الإعداد.",
 
+  "currency.conversion_failed": "تعذّر تحويل المبلغ.",
+  "currency.invalid_currency": "هذه العملة غير مُعدّة بشكل صحيح.",
+  "currency.invalid_rate": "سعر الصرف هذا غير صالح.",
+  "currency.no_rate": "لا يتوفر سعر صرف من {from} إلى {to}. أدخل سعراً للمتابعة.",
+  "currency.redenomination_loop": "تسلسل استبدال العملة من {from} إلى {to} يشكّل حلقة مغلقة ولا يمكن حلّه.",
+  "currency.unknown_currency": "لا توجد عملة بالرمز {code}.",
+  "currency.unknown_rate_type": "لا يوجد نوع سعر بالرمز {code}.",
+
   "database.concurrent_modification": "قام مستخدم آخر بتعديل هذا السجل أثناء تحريرك له. يُرجى إعادة التحميل والمحاولة مرة أخرى.",
   "database.constraint_violation": "بعض المعلومات المطلوبة ناقصة أو غير صالحة.",
   "database.duplicate": "يوجد سجل بهذه البيانات مسبقاً.",

@@ -10,6 +10,14 @@
   "config.undeclared_key": "That setting does not exist.",
   "config.write_failed": "The setting could not be saved.",
 
+  "currency.conversion_failed": "The amount could not be converted.",
+  "currency.invalid_currency": "That currency is not configured correctly.",
+  "currency.invalid_rate": "That exchange rate is not valid.",
+  "currency.no_rate": "No exchange rate is available from {from} to {to}. Enter one to continue.",
+  "currency.redenomination_loop": "The currency succession from {from} to {to} forms a loop and cannot be resolved.",
+  "currency.unknown_currency": "There is no currency with the code {code}.",
+  "currency.unknown_rate_type": "There is no rate type with the code {code}.",
+
   "database.concurrent_modification": "Someone else changed this record while you were editing it. Please reload and try again.",
   "database.constraint_violation": "Some required information is missing or invalid.",
   "database.duplicate": "A record with these details already exists.",

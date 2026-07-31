@@ -45,6 +45,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_5_CONFIG_REGISTRIES.md` | Settings/flags/strategy/metadata registries — the mandate's mechanism. |
 | `docs/architecture/STEP_0_6_EVENTS_OUTBOX.md` | Event bus + transactional outbox, and the amended D3 (per-handler deliveries). |
 | `docs/architecture/STEP_0_7_JOB_SCHEDULER.md` | Durable job scheduler, catch-up policies, and the outbox dispatch job. |
+| `docs/architecture/STEP_0_8_I18N.md` | i18n platform, the single shared catalog, and the error-code coverage gate. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -88,8 +89,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.5** | Config registries (settings + metadata) + strategy registry | ✅ committed |
 | **0.6** | Event bus + transactional outbox | ✅ committed |
 | **0.7** | Durable job scheduler + outbox dispatcher | ✅ committed |
-| **0.8** | i18n platform + seed locales | ⬜ next — design first |
-| **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ⬜ |
+| **0.8** | i18n platform + seed locales | ✅ committed |
+| **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ⬜ next — design first |
 | **0.10** | Composition root wiring the full graph + graceful shutdown | ⬜ |
 | **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ (base done in 0.1; full design system pending) |
 | **0.12** | Phase 0 Definition-of-Done review | ⬜ |
@@ -244,6 +245,30 @@ scheduling loses work" (§24.1). **No migration** — `jobs`/`job_runs` already 
   **mutation-verified** — the original two-scheduler test passed under mutation, so a
   deterministic one was added.
 
+### Step 0.8 — i18n platform & seed locales
+Two problems that share a word and must not share a mechanism (§22.4): UI strings shipped in
+the binary, user content typed by the customer. **No migration** — `translations` already
+existed.
+- **One catalog** (§22.1): `locales/{en,ar}/{common,errors}.json` at the module root,
+  `go:embed`'d by Go and imported directly by Vite. The placeholder dictionary in
+  `frontend/src/i18n/locales.ts` is **deleted**, and a test fails if it reappears.
+- **`kernel/locale`** — any well-formed tag (not an enum of two), RTL by language subtag,
+  fallback chain `ar-SY → ar → en`, context carrier. A missing key **returns the key itself**:
+  visible and greppable beats a blank label.
+- **Error-code coverage gate** — an AST walk over `internal/**` collects every `Code*`
+  constant and asserts each has a translation in **every** locale. It caught four missing
+  codes on its first run — ones this step had just introduced. **65 keys per locale, 57 of
+  them error codes.**
+- **User content** resolves via the generic `translations` table with a lazy
+  per-`(entity_type, locale)` cache and `ResolveMany` to avoid the grid N+1. It **never falls
+  back across languages** — the owner's own text beats a stray English translation.
+- **Locale is a setting** (`ui.locale`, scoped system/company/user); `OnLocaleChanged` filters
+  the existing `SettingChangedEvent` rather than adding a second mechanism.
+- **No pluralisation**, deliberately: Arabic has six forms and a naive `count == 1` fallback
+  would be wrong in front of every Arabic customer.
+- **30 Go + 9 frontend tests**, `-race` clean; locale 93.9%, i18n 87.4%. Fallback chain and
+  the coverage gate **mutation-verified**.
+
 ## 7. Repository map (as built)
 
 ```
@@ -265,7 +290,9 @@ Mizan ERP/
 │   ├── platform/eventbus/              # in-process domain event bus
 │   ├── platform/outbox/                # transactional outbox + dispatcher
 │   ├── platform/jobs/                  # durable job scheduler + built-in jobs
+│   ├── platform/i18n/                  # message catalog + user-content translations
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
+├── locales/{en,ar}/                     # go:embed'd catalogs, shared with the frontend
 ├── migrations/                         # go:embed'd schema, one dir per dialect
 │   └── sqlite/0001_platform.sql, 0002_outbox_deliveries.sql
 ├── frontend/                           # Vite + React + TS foundation
@@ -293,9 +320,9 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.8 — i18n platform + seed locales. The `translations` table
-  already exists from `0001_platform.sql`, and `kernel/locale` is still a marker package.
-  **Design first, await approval** per the protocol.
+- **Immediate next:** Step 0.9 — currency module: schema `0003`, repositories, the converter,
+  and seeds. The first *business* module, and the first use of the metadata seeder (0.5) and
+  the `code`-keyed `is_system` contract. **Design first, await approval** per the protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
@@ -317,6 +344,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+6b3b773  Phase 0 Step 0.8: i18n platform + seed locales
 8b769c9  Phase 0 Step 0.7: durable job scheduler + outbox dispatch job
 2a7b00b  Phase 0 Step 0.6: event bus + transactional outbox
 4160a7a  Phase 0 Step 0.5: configuration & metadata registries

@@ -44,6 +44,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_4_MIGRATIONS.md` | Migration runner + safety layer design, implementation record, and the amended D1. |
 | `docs/architecture/STEP_0_5_CONFIG_REGISTRIES.md` | Settings/flags/strategy/metadata registries — the mandate's mechanism. |
 | `docs/architecture/STEP_0_6_EVENTS_OUTBOX.md` | Event bus + transactional outbox, and the amended D3 (per-handler deliveries). |
+| `docs/architecture/STEP_0_7_JOB_SCHEDULER.md` | Durable job scheduler, catch-up policies, and the outbox dispatch job. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -86,8 +87,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.4** | Migration runner + desktop safety layer + `0001_platform.sql` | ✅ committed |
 | **0.5** | Config registries (settings + metadata) + strategy registry | ✅ committed |
 | **0.6** | Event bus + transactional outbox | ✅ committed |
-| **0.7** | Durable job scheduler + outbox dispatcher | ⬜ next — design first |
-| **0.8** | i18n platform + seed locales | ⬜ |
+| **0.7** | Durable job scheduler + outbox dispatcher | ✅ committed |
+| **0.8** | i18n platform + seed locales | ⬜ next — design first |
 | **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ⬜ |
 | **0.10** | Composition root wiring the full graph + graceful shutdown | ⬜ |
 | **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ (base done in 0.1; full design system pending) |
@@ -219,6 +220,30 @@ separate** (§23.1): synchronous domain events, durable integration events.
 
 ---
 
+### Step 0.7 — Durable job scheduler
+Persisted, not in-memory, because "a desktop app is closed every evening, so in-memory
+scheduling loses work" (§24.1). **No migration** — `jobs`/`job_runs` already existed.
+- **Declared in code, reconciled at startup.** A new job inserts its row; an admin's
+  `is_enabled` survives upgrades; a row this build no longer declares is **disabled and
+  reported, never fatal**.
+- **Catch-up policies** (§24.1) — `run_once` (default, collapses missed into one), `skip`,
+  `run_all`. **`run_all` is capped per job** (default 50) with the excess logged: a shop closed
+  a month with a 30-second job accumulates ~86,000 occurrences, and running them all would make
+  the app unusable at 8am.
+- **Claiming is a single conditional UPDATE** on `next_run_at` — the same compare-and-swap as
+  the outbox, for the same reason.
+- **Singleton by default** (`AllowConcurrent` inverted so the zero value is the safe one),
+  leased via `job_runs.status` + `jobs.timeout_seconds` — no extra column.
+- **Execution:** bounded pool, per-job context timeout, in-process retries with jittered
+  backoff, panics recorded as ordinary failures, **catch-up runs sequential** (concurrent ones
+  broke both ordering and singleton), graceful drain marking survivors `cancelled`, and
+  **startup reclaim** of runs abandoned by a killed process.
+- **Two jobs registered:** `outbox.dispatch` (closes 0.6's carried-forward item) and
+  `platform.heartbeat`. `RecentRuns`/`JobStates` are the query API the Phase 9 panel will read.
+- **28 tests, `-race` clean, 83.7%.** Claim atomicity and catch-up bounding
+  **mutation-verified** — the original two-scheduler test passed under mutation, so a
+  deterministic one was added.
+
 ## 7. Repository map (as built)
 
 ```
@@ -239,6 +264,7 @@ Mizan ERP/
 │   ├── platform/metadata/              # reference-data contract + idempotent seeder
 │   ├── platform/eventbus/              # in-process domain event bus
 │   ├── platform/outbox/                # transactional outbox + dispatcher
+│   ├── platform/jobs/                  # durable job scheduler + built-in jobs
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── migrations/                         # go:embed'd schema, one dir per dialect
 │   └── sqlite/0001_platform.sql, 0002_outbox_deliveries.sql
@@ -267,10 +293,9 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.7 — durable job scheduler + outbox dispatcher job. The `jobs`
-  and `job_runs` tables already exist from `0001_platform.sql`, and `Dispatcher.DispatchOnce`
-  is the callable unit waiting to be scheduled. **Design first, await approval** per the
-  protocol.
+- **Immediate next:** Step 0.8 — i18n platform + seed locales. The `translations` table
+  already exists from `0001_platform.sql`, and `kernel/locale` is still a marker package.
+  **Design first, await approval** per the protocol.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
@@ -292,6 +317,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+8b769c9  Phase 0 Step 0.7: durable job scheduler + outbox dispatch job
 2a7b00b  Phase 0 Step 0.6: event bus + transactional outbox
 4160a7a  Phase 0 Step 0.5: configuration & metadata registries
 f71384d  Phase 0 Step 0.4: migration runner + desktop safety layer

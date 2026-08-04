@@ -1,8 +1,10 @@
 package identity
 
 import (
+	"context"
 	"embed"
 	"io/fs"
+	"time"
 
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
@@ -61,8 +63,31 @@ func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 // changed, deactivated — once the audit module exists (1.7).
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
 
-// Jobs: none. Session expiry sweeping arrives with sessions in 1.3.
-func (m *Module) Jobs() []jobs.Def { return nil }
+// Jobs declares the session sweep — the first job declared by a MODULE rather than by the
+// platform itself (0.7 shipped outbox.dispatch and platform.heartbeat).
+//
+// CatchUp Skip because it is pure housekeeping: a session is validated against its own
+// timestamps on every use, so a sweep missed while the shop was closed changes nothing about
+// whether an expired session works. That is exactly what Skip means (0.7 §5.2), and using
+// RunOnce here would schedule work whose only effect is to tidy rows nobody is reading.
+func (m *Module) Jobs() []jobs.Registration {
+	if m.svc == nil {
+		return nil
+	}
+	return []jobs.Registration{{
+		Def: jobs.Def{
+			Key:         "identity.session_sweep",
+			Schedule:    jobs.Every(time.Hour),
+			CatchUp:     jobs.Skip,
+			Timeout:     2 * time.Minute,
+			Description: "jobs.identity.session_sweep",
+		},
+		Handler: func(ctx context.Context, _ jobs.RunContext) error {
+			_, _, err := m.svc.SweepSessions(ctx)
+			return err
+		},
+	}}
+}
 
 // Bindings: none in this step. Login lands in 1.3 with sessions, and the user admin screens in
 // 1.11 — a binding with no screen would be shape without a consumer.

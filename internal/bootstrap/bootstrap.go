@@ -354,8 +354,11 @@ func (a *App) registerJobs(mods []modules.Module) error {
 			"registering the heartbeat job")
 	}
 	for _, m := range mods {
-		for _, def := range m.Jobs() {
-			if err := reg.Register(def, nil); err != nil {
+		for _, reg2 := range m.Jobs() {
+			// The handler comes from the module, paired with its declaration. Passing nil here
+			// (as this did until Step 1.3) is rejected by Register, so the module-jobs path
+			// had never actually worked — no module declared a job until identity's sweep.
+			if err := reg.Register(reg2.Def, reg2.Handler); err != nil {
 				return errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
 					"registering jobs for module "+m.Name())
 			}

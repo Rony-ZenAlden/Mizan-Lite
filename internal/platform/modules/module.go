@@ -58,7 +58,7 @@ type Module interface {
 	Subscribe(bus *eventbus.Bus, integration *outbox.Subscribers) error
 
 	// Jobs are the module's background tasks (§24).
-	Jobs() []jobs.Def
+	Jobs() []jobs.Registration
 
 	// Bindings returns the Wails binding struct exposed to the frontend. DTOs only —
 	// never a domain aggregate.

@@ -233,6 +233,18 @@ func (s *Service) DefaultBranch(ctx context.Context) (domain.Branch, error) {
 		"the company has no active default branch")
 }
 
+// DefaultBranchID returns the default branch's identifier.
+//
+// The second half of the one-method-per-need port identity declares: every session carries a
+// branch (§26.1), and a session created without one would have to invent the concept later.
+func (s *Service) DefaultBranchID(ctx context.Context) (id.ID, error) {
+	branch, err := s.DefaultBranch(ctx)
+	if err != nil {
+		return "", err
+	}
+	return branch.ID, nil
+}
+
 // Warehouses lists a branch's warehouses, the default first.
 func (s *Service) Warehouses(ctx context.Context, branchID id.ID) ([]domain.Warehouse, error) {
 	return s.repos.Warehouses(ctx, branchID)

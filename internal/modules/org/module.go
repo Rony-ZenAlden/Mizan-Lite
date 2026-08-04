@@ -74,7 +74,7 @@ func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
 
 // Jobs: none.
-func (m *Module) Jobs() []jobs.Def { return nil }
+func (m *Module) Jobs() []jobs.Registration { return nil }
 
 // Bindings: none in this step. The Setup binding arrives in 1.9 and the org settings screens
 // in 1.11; a binding struct with no screen to call it would be shape without a consumer.

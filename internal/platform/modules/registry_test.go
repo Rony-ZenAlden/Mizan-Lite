@@ -29,7 +29,7 @@ func (f fake) Migrations() fs.FS                                  { return fstes
 func (f fake) Settings() []config.Definition                      { return f.settings }
 func (f fake) FeatureFlags() []config.FlagDef                     { return f.flags }
 func (f fake) Metadata() []metadata.SeedSpec                      { return nil }
-func (f fake) Jobs() []jobs.Def                                   { return nil }
+func (f fake) Jobs() []jobs.Registration                          { return nil }
 func (f fake) Bindings() any                                      { return nil }
 func (f fake) Subscribe(*eventbus.Bus, *outbox.Subscribers) error { return nil }
 

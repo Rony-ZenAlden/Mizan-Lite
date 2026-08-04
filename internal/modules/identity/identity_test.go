@@ -29,6 +29,13 @@ const goodPassword = "a sufficiently long passphrase"
 // schema (0001–0005), so every foreign key and unique constraint is genuinely exercised.
 func newFixture(t *testing.T) (*identity.Service, *database.Store, id.ID) {
 	t.Helper()
+	return newFixtureAt(t, clock.System())
+}
+
+// newFixtureAt is newFixture with an injected clock, so session expiry and throttle backoff can
+// be exercised against controlled time rather than by sleeping.
+func newFixtureAt(t *testing.T, clk clock.Clock) (*identity.Service, *database.Store, id.ID) {
+	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "test.db")
 
@@ -62,7 +69,7 @@ func newFixture(t *testing.T) (*identity.Service, *database.Store, id.ID) {
 		t.Fatalf("seeding currency: %v", err)
 	}
 
-	orgSvc := org.NewService(store, clock.System())
+	orgSvc := org.NewService(store, clk)
 	result, err := orgSvc.Provision(ctx, org.ProvisionInput{
 		Company: org.CompanyInput{
 			Code: "MAIN", Name: "Demo", CountryCode: "SY", FunctionalCurrency: "SYP",
@@ -76,7 +83,7 @@ func newFixture(t *testing.T) (*identity.Service, *database.Store, id.ID) {
 		t.Fatalf("provision: %v", err)
 	}
 
-	return identity.NewService(store, orgSvc, clock.System()), store, result.CompanyID
+	return identity.NewService(store, orgSvc, clk), store, result.CompanyID
 }
 
 // bound returns a context with settings bound, so the password policy resolves.

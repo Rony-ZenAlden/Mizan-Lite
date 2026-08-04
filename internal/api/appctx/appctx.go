@@ -16,23 +16,68 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/i18n"
 )
 
+// Actor is who a call is being made by, and where.
+//
+// Held in the context rather than passed as an argument because every layer beneath the
+// binding needs it and none of them should have to thread it — the same reasoning that puts
+// the transaction in the context (0.3 §3.2).
+type Actor struct {
+	UserID    id.ID
+	CompanyID id.ID
+	BranchID  id.ID
+	Username  string
+	// Locale is the acting user's stored preference, empty if they have none.
+	Locale string
+}
+
+type actorKey struct{}
+
+// WithActor stamps the acting principal onto a context.
+//
+// Called by the binding decorator (1.5) after a session validates. The setup wizard and the
+// login screen run WITHOUT one, which is a legitimate state, not an error.
+func WithActor(ctx context.Context, a Actor) context.Context {
+	return context.WithValue(ctx, actorKey{}, a)
+}
+
+// ActorFrom returns the acting principal, if there is one.
+func ActorFrom(ctx context.Context) (Actor, bool) {
+	a, ok := ctx.Value(actorKey{}).(Actor)
+	return a, ok
+}
+
 // Scopes reports the acting company, branch, and user for settings resolution.
 //
-// In Phase 0 it reports NONE of them, because identity does not exist until Phase 1 — there
-// are no companies, branches, or users to be acting as. Settings therefore resolve at system
-// scope or fall through to their declared defaults, which is the correct behaviour before the
-// setup wizard has run, not a placeholder.
+// Until Step 1.3 this reported NONE of them, because identity did not exist — settings
+// resolved at system scope, which is why Step 0.11 (D4) had to write `ui.locale` and
+// `ui.theme` at system scope even though both are declared user-scopable.
 //
-// Phase 1 replaces this with a session-reading implementation. Because it satisfies
-// config.ScopeProvider, that is a constructor argument in the composition root and no call
-// site changes.
+// It now reads the session's actor, which closes the item 0.10 §6.2 and 0.11 D4 both carried.
+// Two things arrive for free, because the machinery was built expecting them: settings resolve
+// PER USER through the 0.5 scope chain with no frontend change, and two people sharing a
+// machine each get their own language and theme.
+//
+// With no actor — the login screen, the setup wizard — every scope is absent and resolution
+// falls through to system scope exactly as before. That is a legitimate state, not a
+// degradation.
 type Scopes struct{}
 
 var _ config.ScopeProvider = Scopes{}
 
-func (Scopes) CompanyID(context.Context) (id.ID, bool) { return "", false }
-func (Scopes) BranchID(context.Context) (id.ID, bool)  { return "", false }
-func (Scopes) UserID(context.Context) (id.ID, bool)    { return "", false }
+func (Scopes) CompanyID(ctx context.Context) (id.ID, bool) {
+	a, ok := ActorFrom(ctx)
+	return a.CompanyID, ok && !a.CompanyID.IsZero()
+}
+
+func (Scopes) BranchID(ctx context.Context) (id.ID, bool) {
+	a, ok := ActorFrom(ctx)
+	return a.BranchID, ok && !a.BranchID.IsZero()
+}
+
+func (Scopes) UserID(ctx context.Context) (id.ID, bool) {
+	a, ok := ActorFrom(ctx)
+	return a.UserID, ok && !a.UserID.IsZero()
+}
 
 // Enrich stamps a context for one unit of work.
 //

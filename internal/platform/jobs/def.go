@@ -280,3 +280,21 @@ func fmtRunError(err error) string {
 	}
 	return fmt.Sprintf("%v", err)
 }
+
+// Registration pairs a job declaration with the code that runs it.
+//
+// # Why this type exists (Step 1.3)
+//
+// The Module contract declared `Jobs() []Def` from Step 0.7, and the composition root
+// registered them as `Register(def, nil)`. But Register REJECTS a nil handler — correctly, a
+// job that cannot run is not a job — so the module-jobs path had never worked. It went
+// unnoticed because the two jobs Phase 0 shipped are the platform's own, registered through
+// helpers that pair a handler at the call site, and no module declared one until identity's
+// session sweep.
+//
+// Def stays a pure declaration (data: key, schedule, timeouts); the Handler is behaviour, and
+// pairing them here keeps the split while making a module's job actually runnable.
+type Registration struct {
+	Def     Def
+	Handler Handler
+}

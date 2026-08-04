@@ -24,14 +24,18 @@ type Database interface {
 	database.UnitOfWork
 }
 
-// Organisation is the little identity needs to know about org: which company a user belongs
-// to when none was named.
+// Organisation is the little identity needs to know about org.
 //
-// A one-method interface declared HERE, at the point of use, rather than an import of org's
-// contract — Go's convention, and it means org owes identity nothing. The composition root
-// supplies org's service, which satisfies it.
+// Declared HERE, at the point of use, rather than importing org's package — Go's convention,
+// and it means org owes identity nothing. The composition root supplies org's service, which
+// satisfies it.
+//
+// Two methods, both genuinely needed: the company scopes a username's uniqueness, and every
+// session must carry a branch (§26.1 requires the AppContext to always have one, so that a
+// future branch switch is a session update rather than a new concept).
 type Organisation interface {
 	CurrentCompanyID(ctx context.Context) (id.ID, error)
+	DefaultBranchID(ctx context.Context) (id.ID, error)
 }
 
 // Service is the identity module's application layer.

@@ -73,7 +73,7 @@ func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { retur
 
 // Jobs: none yet. Scheduled rate fetching arrives with the providers in Phase 5; there is
 // nothing to fetch from while the only rate source is manual entry.
-func (m *Module) Jobs() []jobs.Def { return nil }
+func (m *Module) Jobs() []jobs.Registration { return nil }
 
 // Bindings returns the Wails binding surface. Nil until Step 0.11 defines the frontend
 // contract — a binding struct with no screen to call it would be shape without a consumer.

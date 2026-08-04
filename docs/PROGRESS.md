@@ -53,6 +53,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/PHASE_1_CORE_DATA.md` | **Phase 1 detailed design** — org, identity, RBAC, the policy mechanism, audit, setup. |
 | `docs/architecture/STEP_1_1_ORG_AND_RULES.md` | Step 1.1: module-isolation + no-sql rules, and the org module. |
 | `docs/architecture/STEP_1_2_IDENTITY.md` | Step 1.2: Argon2id credentials, users, password policy, `Authenticator`. |
+| `docs/architecture/STEP_1_3_SESSIONS.md` | Step 1.3: sessions, throttling, the sweep job, and the real AppContext. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -111,8 +112,8 @@ and D7 synchronous in-transaction audit).
 |---|---|---|
 | **1.1** | `module-isolation` + `no-sql` rules; org module (company/branch/warehouse/fiscal) | ✅ committed |
 | **1.2** | Identity: credentials (Argon2id), `Authenticator` port, users | ✅ committed |
-| **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ⬜ next — design first |
-| **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ⬜ |
+| **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ✅ committed |
+| **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ⬜ next — design first |
 | **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ⬜ |
 | **1.6** | Field-level redaction | ⬜ |
 | **1.7** | Audit module (in-transaction, D7) | ⬜ |
@@ -456,6 +457,33 @@ the system behaves correctly right up until someone attacks it.
   declares itself, so org owes identity nothing.
 - 25 new tests; mutation-verified on constant-work verification and history enforcement.
 
+### Step 1.3 — Sessions, throttling & the real AppContext
+- **Throttle, never permanently lock (D2).** This product has no password-reset email, no help
+  desk, and on a fresh install one administrator. A permanent lock is not a security feature —
+  it is an outage an attacker triggers with five wrong guesses against a username printed on
+  the shop's own invoices, recoverable only by hand-editing the database. The delay is capped
+  and always elapses; `TestTheThrottleAlwaysElapses` is the guarantee.
+- **Idle timeout is 60 minutes, revising the 30 I had proposed (D1).** A shop is quiet for
+  stretches, and re-typing a twelve-character passphrase after every lull drives users to
+  shorter passwords or switching the timeout off — the same failure the password policy avoids.
+  A till wants a PIN-resumed screen lock (Phase 5), not a shorter timeout.
+- **Tokens are 256-bit random, stored as SHA-256** (D3) — a backup must not be a set of working
+  logins. Not Argon2: a high-entropy token has no dictionary to attack. Not a UUIDv7: v7 is
+  time-ordered, which is right for a key and wrong for a bearer credential.
+- **Absolute expiry is checked before idle**, so activity cannot mask it. Removing the check
+  fails with *"a session survived past its absolute expiry because activity kept extending it"*.
+- **No session cache**: revocation must take effect on the very next call, not when a cache
+  entry expires.
+- **`last_seen_at` written at minute granularity** (D4), so session upkeep does not put a write
+  on every call behind SQLite's single writer.
+- **A latent contract defect, found and fixed.** `Module.Jobs()` returned declarations with no
+  handler and the composition root registered them as `Register(def, nil)` — which `Register`
+  rejects. **No module could ever have declared a job**; identity's sweep is the first to try.
+  Now `jobs.Registration{Def, Handler}`. An unused seam is an untested seam.
+- **`appctx` reads a real session**, closing the item 0.10 §6.2 and 0.11 D4 both carried:
+  settings now resolve at *user* scope, so two people sharing a machine get their own language.
+- 21 new tests; mutation-verified on absolute expiry and throttle clearing.
+
 ---
 
 ## 7. Repository map (as built)
@@ -520,10 +548,11 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.3 — Sessions, lockout, login attempts** (migration `0006`), plus
-  `appctx` reading a real session. **Design first, await approval** per the protocol.
-- **Open, needed by 1.3:** session idle/absolute timeouts. Proposed 30 min idle, 12 h
-  absolute, "stay signed in" off by default — a shop floor may want very different values.
+- **Immediate next: Step 1.4 — RBAC** (permissions sync via `Module.Permissions()`, roles,
+  grants, scope resolution, the real `config.Authorizer`). **Design first, await approval.**
+- **Built but not yet reached by any production path:** sessions. `Validate` is fully tested
+  and nothing calls it — the binding decorator that stamps `appctx.WithActor` is Step 1.5, and
+  the login screen is 1.10. Same for `must_change`, carried from 1.2.
 - **Closed in Step 1.1:** REPO.3 rule 2 (`module-isolation`) and rule 7 (restated as `no-sql`)
   are both enforced and verified by planting. **All seven REPO.3 rules now hold.**
 - **One manual launch** to visually confirm the shell before Phase 1 UI work.
@@ -548,6 +577,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.3: sessions, throttling, and the real AppContext
 (pending) Phase 1 Step 1.2: identity — Argon2id credentials and users
 (pending) Phase 1 Step 1.1: architecture rules + the org module
 (pending) Phase 0 Step 0.12: Definition-of-Done review — Phase 0 complete

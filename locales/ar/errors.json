@@ -1,8 +1,12 @@
 {
+  "app.bridge_unavailable": "يتعذّر على ميزان الوصول إلى الواجهة الخلفية. يرجى إعادة تشغيل التطبيق.",
+  "app.call_failed": "تعذّر إتمام هذا الإجراء. يرجى المحاولة مرة أخرى.",
+  "app.malformed_response": "تلقّى ميزان استجابة غير متوقّعة من الواجهة الخلفية.",
+  "app.not_ready": "لا يزال ميزان قيد التشغيل. يرجى الانتظار لحظة.",
+  "app.unknown_error": "حدث خطأ ما.",
   "bootstrap.migration_failed": "فشل تحديث قاعدة البيانات، لذلك لا يمكن تشغيل ميزان. بياناتك لم تتغيّر.",
   "bootstrap.registry_invalid": "هذه النسخة من ميزان غير مُعدّة بشكل صحيح. يُرجى إعادة التثبيت أو التواصل مع الدعم.",
   "bootstrap.startup_failed": "تعذّر تشغيل ميزان.",
-
   "config.duplicate_key": "تم تعريف هذا الإعداد أكثر من مرة.",
   "config.invalid_default": "أحد الإعدادات يحتوي على قيمة افتراضية غير صالحة.",
   "config.invalid_key": "تم تعريف إعداد بدون مفتاح.",
@@ -13,7 +17,6 @@
   "config.scope_not_allowed": "لا يمكن تغيير هذا الإعداد على هذا المستوى.",
   "config.undeclared_key": "هذا الإعداد غير موجود.",
   "config.write_failed": "تعذّر حفظ الإعداد.",
-
   "currency.conversion_failed": "تعذّر تحويل المبلغ.",
   "currency.invalid_currency": "هذه العملة غير مُعدّة بشكل صحيح.",
   "currency.invalid_rate": "سعر الصرف هذا غير صالح.",
@@ -21,26 +24,21 @@
   "currency.redenomination_loop": "تسلسل استبدال العملة من {from} إلى {to} يشكّل حلقة مغلقة ولا يمكن حلّه.",
   "currency.unknown_currency": "لا توجد عملة بالرمز {code}.",
   "currency.unknown_rate_type": "لا يوجد نوع سعر بالرمز {code}.",
-
   "database.concurrent_modification": "قام مستخدم آخر بتعديل هذا السجل أثناء تحريرك له. يُرجى إعادة التحميل والمحاولة مرة أخرى.",
   "database.constraint_violation": "بعض المعلومات المطلوبة ناقصة أو غير صالحة.",
   "database.duplicate": "يوجد سجل بهذه البيانات مسبقاً.",
   "database.internal": "حدث خطأ في قاعدة البيانات.",
   "database.reference_violation": "هذا السجل مُستخدم في مكان آخر ولا يمكن تعديله أو حذفه.",
-
   "eventbus.duplicate_subscription": "تم تسجيل اشتراك داخلي في الأحداث مرتين.",
   "eventbus.handler_failed": "تعذّرت معالجة حدث داخلي.",
   "eventbus.handler_panicked": "فشل معالج حدث داخلي بشكل غير متوقع.",
   "eventbus.invalid_subscription": "اشتراك الأحداث الداخلي غير مكتمل.",
-
-  "id.generate_failed": "تعذّر توليد معرّف فريد.",
-  "id.invalid": "هذا المعرّف غير صالح.",
-
   "i18n.catalog_invalid": "ملفات اللغة تالفة. يُرجى إعادة تثبيت ميزان.",
   "i18n.invalid_locale": "هذه ليست لغة صالحة.",
   "i18n.translation_load_failed": "تعذّر تحميل الترجمات.",
   "i18n.translation_write_failed": "تعذّر حفظ الترجمة.",
-
+  "id.generate_failed": "تعذّر توليد معرّف فريد.",
+  "id.invalid": "هذا المعرّف غير صالح.",
   "jobs.claim_failed": "تعذّر بدء مهمة في الخلفية.",
   "jobs.duplicate_key": "تم تعريف مهمة خلفية أكثر من مرة.",
   "jobs.invalid_definition": "تعريف المهمة الخلفية غير صحيح.",
@@ -48,12 +46,10 @@
   "jobs.reconcile_failed": "تعذّر تجهيز المهام الخلفية.",
   "jobs.run_failed": "تعذّر تسجيل تنفيذ المهمة الخلفية.",
   "jobs.unknown_key": "هذه المهمة الخلفية غير موجودة.",
-
   "metadata.duplicate_code": "يتكرر الرمز نفسه أكثر من مرة في البيانات الأولية.",
   "metadata.invalid_seed": "البيانات الأولية غير صالحة.",
   "metadata.seed_failed": "تعذّر تجهيز البيانات المرجعية.",
   "metadata.system_row_protected": "هذا سجل مُدمج في النظام. يمكن تعطيله ولكن لا يمكن حذفه.",
-
   "migrate.backup_failed": "تعذّر إنشاء نسخة احتياطية وقائية، لذلك لم يتم تطبيق التحديث. بياناتك لم تتغيّر.",
   "migrate.bad_file_name": "اسم أحد ملفات التحديث غير صحيح.",
   "migrate.checksum_mismatch": "تم تعديل تحديث سبق تطبيقه منذ تثبيته. يُرجى إعادة تثبيت ميزان.",
@@ -67,21 +63,17 @@
   "migrate.migration_failed": "تعذّر تطبيق التحديث. تمت استعادة بياناتك وهي لم تتغيّر.",
   "migrate.missing_history": "تعذّرت قراءة سجل التحديثات.",
   "migrate.restore_failed": "فشل التحديث وتعذّرت استعادة بياناتك تلقائياً. تتوفر نسخة احتياطية في {backup}.",
-
   "modules.dependency_cycle": "وحدات التطبيق تشكّل حلقة اعتماد متبادلة ولا يمكن تشغيلها.",
   "modules.duplicate_key": "وحدتان تُعرّفان المفتاح نفسه.",
   "modules.duplicate_module": "وحدتان تحملان الاسم نفسه.",
   "modules.unknown_dependency": "وحدة تعتمد على وحدة أخرى غير مثبّتة.",
-
   "outbox.claim_failed": "تعذّرت قراءة الأعمال المعلّقة في الخلفية.",
   "outbox.duplicate_subscription": "تم تسجيل معالج داخلي مرتين.",
   "outbox.handler_panicked": "فشل معالج داخلي بشكل غير متوقع.",
   "outbox.invalid_subscription": "تسجيل المعالج الداخلي غير مكتمل.",
   "outbox.publish_failed": "تعذّر تسجيل حدث داخلي.",
-
   "paths.not_writable": "لا يستطيع ميزان الكتابة في مجلد البيانات {path}. تحقّق من صلاحيات المجلد والمساحة المتاحة.",
   "paths.unresolvable": "تعذّر على ميزان تحديد مكان تخزين بياناتك.",
-
   "strategy.duplicate": "تم تسجيل مكوّنين بالاسم نفسه.",
   "strategy.invalid": "تم تسجيل مكوّن بدون اسم.",
   "strategy.unknown": "المكوّن المطلوب \"{key}\" غير مثبّت."

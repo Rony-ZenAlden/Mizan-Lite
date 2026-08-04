@@ -37,9 +37,17 @@ type APIError struct {
 }
 
 // Result is the envelope every binding method returns.
+//
+// Data deliberately carries NO omitempty. encoding/json omits an empty slice but never omits a
+// struct, so with omitempty the wire shape depended on T: a list binding with zero rows
+// serialised as {"ok":true} — no data key at all — and the frontend received undefined where
+// it expected []. A boundary whose shape varies with its payload type cannot be consumed by
+// one generic unwrap, which is the whole point of the envelope (§5.4).
+//
+// The cost is `"data":null` on every failure result, which no caller reads.
 type Result[T any] struct {
 	OK    bool      `json:"ok"`
-	Data  T         `json:"data,omitempty"`
+	Data  T         `json:"data"`
 	Error *APIError `json:"error,omitempty"`
 }
 

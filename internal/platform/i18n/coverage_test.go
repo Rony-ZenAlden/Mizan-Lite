@@ -1,10 +1,12 @@
 package i18n_test
 
 import (
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -124,38 +126,75 @@ func TestEveryErrorCodeHasATranslation(t *testing.T) {
 	}
 }
 
+// frontendOwnedCodes are error codes produced by the TypeScript transport layer rather than by
+// Go, so no Go constant declares them.
+//
+// They are listed explicitly rather than pattern-matched, so adding one is a deliberate act.
+// Their own coverage gate lives in frontend/src/lib/wails/call.test.ts, which asserts each has
+// a translation in every locale — the same guarantee, enforced from the side that owns them.
+var frontendOwnedCodes = map[string]string{
+	"app.bridge_unavailable": "frontend/src/lib/wails/call.ts",
+	"app.call_failed":        "frontend/src/lib/wails/call.ts",
+	"app.malformed_response": "frontend/src/lib/wails/call.ts",
+	"app.unknown_error":      "frontend/src/lib/wails/call.ts",
+}
+
 func TestNoOrphanErrorTranslations(t *testing.T) {
 	// The other direction: a translation for a code that no longer exists is dead weight that
 	// a translator will keep maintaining forever.
-	catalog, err := i18n.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	//
+	// Scoped to errors.json by READING THE FILE, rather than by deriving "error-looking"
+	// prefixes from the declared codes. The prefix heuristic broke the moment a real code
+	// shared a namespace with UI vocabulary: `app.not_ready` made `app` an error prefix, which
+	// then swept in `app.title` and `app.tagline` from common.json — UI strings that will never
+	// have a Go constant. Reading the file is both simpler and exact.
 	codes := declaredErrorCodes(t)
 
-	// Only keys that look like error codes are checked; common.json holds UI vocabulary that
-	// has no corresponding constant.
-	errorPrefixes := map[string]bool{}
-	for code := range codes {
-		if i := strings.Index(code, "."); i > 0 {
-			errorPrefixes[code[:i]] = true
-		}
+	path := filepath.Join(repoRoot(t), "locales", locale.Default.String(), "errors.json")
+	raw, err := os.ReadFile(path) //nolint:gosec // a fixed path under the module root
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	var entries map[string]string
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+	if len(entries) < 20 {
+		// A guard on the guard, matching declaredErrorCodes: a catalog that failed to parse
+		// into something meaningful would make this test pass vacuously.
+		t.Fatalf("errors.json only has %d entries; the read is probably wrong", len(entries))
 	}
 
 	var orphans []string
-	for _, key := range catalog.Keys(locale.Default) {
-		i := strings.Index(key, ".")
-		if i <= 0 || !errorPrefixes[key[:i]] {
+	for key := range entries {
+		if _, declared := codes[key]; declared {
 			continue
 		}
-		if _, declared := codes[key]; !declared {
-			orphans = append(orphans, key)
+		if _, owned := frontendOwnedCodes[key]; owned {
+			continue
 		}
+		orphans = append(orphans, key)
 	}
 	if len(orphans) > 0 {
 		sort.Strings(orphans)
 		t.Errorf("errors.json defines %d keys no code declares:\n  %s",
 			len(orphans), strings.Join(orphans, "\n  "))
+	}
+}
+
+// TestFrontendOwnedCodesAreTranslated closes the loop on the allowance above: a code exempted
+// from the orphan check must still have a translation, or the exemption becomes a hole.
+func TestFrontendOwnedCodesAreTranslated(t *testing.T) {
+	catalog, err := i18n.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for code, owner := range frontendOwnedCodes {
+		for _, loc := range catalog.Locales() {
+			if !catalog.Has(loc, code) {
+				t.Errorf("locale %q has no translation for %q (declared in %s)", loc, code, owner)
+			}
+		}
 	}
 }
 

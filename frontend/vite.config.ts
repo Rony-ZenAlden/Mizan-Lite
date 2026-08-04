@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
@@ -23,5 +24,13 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+  },
+  test: {
+    // jsdom, because DoD item 8 requires RTL snapshot tests in both directions and a
+    // component cannot be rendered without a DOM. Added in Step 0.11 with testing-library.
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    globals: true,
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
 });

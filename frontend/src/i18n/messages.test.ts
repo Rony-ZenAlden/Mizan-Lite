@@ -30,11 +30,20 @@ describe("i18n key coverage", () => {
   it("has no untranslated Arabic entries", () => {
     // A copy-paste that left English text in the Arabic catalog is invisible to a
     // non-Arabic-speaking reviewer, so it is checked mechanically.
+    //
+    // Language names are the one legitimate exception: they are ENDONYMS, written in their own
+    // language whatever the surrounding UI is. A user hunting for Arabic is looking for
+    // "العربية", not for "Arabic" transliterated into a script they may not read. Listed
+    // explicitly rather than pattern-matched, so a new exception has to be argued for.
+    const ENDONYMS = ["locale.name.en", "locale.name.ar"];
+
     const identical = reference.filter(
-      (key) => MESSAGES.ar[key] === MESSAGES.en[key] && MESSAGES.en[key]!.length > 3,
+      (key) =>
+        !ENDONYMS.includes(key) &&
+        MESSAGES.ar[key] === MESSAGES.en[key] &&
+        MESSAGES.en[key]!.length > 3,
     );
-    // "Mizan ERP" and the language-toggle label are intentionally different by design;
-    // anything else identical in both languages is almost certainly a missed translation.
+    // Anything else identical in both languages is almost certainly a missed translation.
     expect(identical).toEqual([]);
   });
 });

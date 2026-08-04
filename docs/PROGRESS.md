@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-07-30**. Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-04**. Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -48,6 +48,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_8_I18N.md` | i18n platform, the single shared catalog, and the error-code coverage gate. |
 | `docs/architecture/STEP_0_9_CURRENCY.md` | Currency module, rate types, redenomination, and the corrected rate uniqueness. |
 | `docs/architecture/STEP_0_10_COMPOSITION_ROOT.md` | Composition root, startup ordering, the error taxonomy, and shutdown. |
+| `docs/architecture/STEP_0_11_FRONTEND_FOUNDATION.md` | Frontend foundation: the bindings wrapper, boot inversion, tokens, primitives, shell. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -94,8 +95,8 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.8** | i18n platform + seed locales | ✅ committed |
 | **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ✅ committed |
 | **0.10** | Composition root wiring the full graph + graceful shutdown | ✅ committed |
-| **0.11** | Frontend foundation: tokens, primitives, shell, providers, bindings wrapper | ⬜ next — design first (base done in 0.1) |
-| **0.12** | Phase 0 Definition-of-Done review | ⬜ |
+| **0.11** | Frontend foundation: bindings wrapper, boot inversion, tokens, primitives, shell | ✅ committed |
+| **0.12** | Phase 0 Definition-of-Done review | ⬜ next |
 
 ---
 
@@ -322,11 +323,49 @@ again without losing anything. Manual constructor injection, one root, no contai
   **mutation-verified** (stack overflow without the guard). The ordering test is honestly
   scoped — see step doc §9.1.
 
+### Step 0.11 — Frontend foundation
+The step where the boundary ten steps built finally got a consumer — and turned out to have
+been leaking since 0.10.
+- **The defect that shaped the step.** `App.Health()` began returning `Result[T]` in 0.10; the
+  frontend wrapper still declared the flat shape, so the packaged app showed "…" forever.
+  Invisible because the dev mock returned the *old* shape (certifying the broken path), nothing
+  tested the wrapper, and §FE.4's "one unwrap point" was a sentence rather than a build gate.
+- **A second, latent instance of the same class**: `Result.Data` had `omitempty`, which omits
+  empty slices — so a list binding with zero rows sent no `data` key and the frontend would
+  have crashed on `.map()`. `Currencies()` was one empty database away.
+- **`lib/wails`** is now the single unwrap point: `call()` returns data or **throws**
+  `BindingError` (a union a caller can forget to check is how §1.2 happened). An ESLint rule
+  forbids `window.go` anywhere else, **verified by planting**; a Go-generated fixture pins the
+  wire shape so neither language can change it alone.
+- **Boot inverted (D2).** The window opens first; the graph builds in `OnStartup`; bindings are
+  **static façades attached on success** — "declared in code, reconciled at startup", the same
+  pattern as settings (0.5) and jobs (0.7). Every guarded method returns a typed not-ready
+  error, never a nil dereference. 0.10's ordering guarantee is preserved because the *shell*
+  still does not mount until ready — only a boot screen does. Migration `Progress`, emitted
+  since 0.4 and never consumed, finally has somewhere to draw.
+- **A failed start is now a screen**, rendered from code + params with the backup path — not a
+  log line and `os.Exit(1)`. `os.Exit` survives only for an unresolvable data directory, where
+  there is genuinely no window.
+- **Locale and theme became settings** (`ui.theme` is new, with a `system` value). The shell's
+  private `useState` locale and the backend's `ui.locale` were two unrelated facts that had not
+  yet disagreed only because nothing on the backend rendered text.
+- **Tokens before primitives**, with a **WCAG AA contrast gate** over both themes — 52
+  assertions parsed from the real `index.css`. The classic dark-theme trap fails it at 3.68:1.
+- **Radix primitives** (D1: Radix yes, TanStack/Zustand/router deferred to a real consumer).
+  A focus test found a genuine defect: a *controlled* Radix dialog has no Trigger, so Radix
+  dropped focus to `<body>` on close, stranding keyboard users. Fixed in the primitive.
+- **Job status panel** over the 0.7 query API, closing DoD item 5. `RunNow` deliberately
+  unexposed until it can be permission-gated.
+- **121 frontend tests + 23 binding subtests**, `-race` clean; envelope 100%, bindings 89.2%.
+  Five mutation drills, including the shipped bug reproduced exactly.
+
+---
+
 ## 7. Repository map (as built)
 
 ```
 Mizan ERP/
-├── main.go, app.go, wails.json         # Wails desktop shell
+├── main.go, shell.go, wails.json       # Wails desktop shell (boot inversion, 0.11)
 ├── arch-rules.yml                      # data-driven architecture rules
 ├── Makefile, scripts/check.sh          # local, offline dev + CI
 ├── ci/optional-github-actions/         # inert opt-in GH Actions template
@@ -347,13 +386,16 @@ Mizan ERP/
 │   ├── platform/modules/               # the Module contract every business module implements
 │   ├── modules/currency/               # first business module (own migrations, domain, infra)
 │   ├── platform/paths/                 # OS app-data locations
+│   ├── platform/ui/                    # presentation preferences (ui.theme)
 │   ├── api/envelope/, api/appctx/      # result envelope + per-request context
+│   ├── api/bindings/                   # the static Wails façades (Boot/System/Config/Ops/Money)
 │   ├── bootstrap/                      # the composition root
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── locales/{en,ar}/                     # go:embed'd catalogs, shared with the frontend
 ├── migrations/                         # go:embed'd schema, one dir per dialect
-│   └── sqlite/0001_platform.sql, 0002_outbox_deliveries.sql
-├── frontend/                           # Vite + React + TS foundation
+│   └── sqlite/0001_platform.sql, 0002_outbox_deliveries.sql  (+ module-owned 0003)
+├── frontend/                           # Vite + React + TS + Tailwind + Radix
+│   └── src/{app,shared/ui,lib/wails,modules}/   # shell, primitives, bindings, screens
 ├── tools/archlint/                     # architecture-rule framework
 └── docs/architecture/                  # design docs (+ this PROGRESS.md one level up)
 ```
@@ -378,10 +420,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.11 — frontend foundation: design tokens, primitives, the app
-  shell, providers, and the bindings wrapper over `envelope.Result`. It is also where a
-  startup failure and the migration `Progress` events finally get somewhere to be shown.
-  **Design first, await approval** per the protocol.
+- **Immediate next:** Step 0.12 — the Phase 0 Definition-of-Done review. Items 1, 5 and 8
+  are closed by 0.11; item 1 wants a real `wails dev` run, which needs the `wails` CLI
+  (`make tools`) — the Go and frontend halves are proven separately but have not yet been run
+  **together** in a window on this machine.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
@@ -403,6 +445,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 0 Step 0.11: frontend foundation + bindings wrapper
 5ac657c  Phase 0 Step 0.10: composition root + full graph wiring
 a4cd7ff  Phase 0 Step 0.9: currency module
 6b3b773  Phase 0 Step 0.8: i18n platform + seed locales

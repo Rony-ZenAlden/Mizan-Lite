@@ -59,6 +59,12 @@ type Options struct {
 	DispatchInterval time.Duration
 	// HeartbeatInterval is how often the heartbeat job runs. Default 1m.
 	HeartbeatInterval time.Duration
+	// Progress, if set, receives migration progress.
+	//
+	// Step 0.4 has emitted these since it was built and nothing consumed them, because until
+	// Step 0.11 inverted the boot sequence there was no window to draw on while migrating.
+	// The shell forwards them to the boot screen.
+	Progress func(migrate.Progress)
 }
 
 func (o Options) withDefaults() Options {
@@ -284,6 +290,7 @@ func (a *App) runMigrations(ctx context.Context, mods ...modules.Module) error {
 		DBPath:     a.Paths.DBFile,
 		BackupDir:  a.Paths.Backups,
 		SkipBackup: a.opts.SkipBackup,
+		Progress:   a.opts.Progress,
 		Clock:      a.opts.Clock,
 		Logger:     a.log,
 	})
@@ -294,8 +301,20 @@ func (a *App) runMigrations(ctx context.Context, mods ...modules.Module) error {
 
 	result, err := runner.Up(ctx)
 	if err != nil {
-		return errs.Wrap(err, errs.CategoryInternal, CodeMigrationFatal,
+		wrapped := errs.Wrap(err, errs.CategoryInternal, CodeMigrationFatal,
 			"the database update failed; the application cannot start")
+		// Carry the cause's parameters onto the wrapper.
+		//
+		// errs.AsError finds the OUTERMOST *Error, so without this the backup path Step 0.4
+		// attaches to the migration failure is lost the moment it is wrapped — and the backup
+		// path is the one thing the user actually needs ("your data is safe, here it is").
+		// The UI renders Params; it cannot walk the wrapped chain.
+		if inner, ok := errs.AsError(err); ok {
+			for k, v := range inner.Params {
+				wrapped = wrapped.WithParam(k, v)
+			}
+		}
+		return wrapped
 	}
 	if result.Applied > 0 {
 		a.log.InfoContext(ctx, "database updated",

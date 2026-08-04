@@ -1,0 +1,76 @@
+{
+  "emptyListOk": {
+    "ok": true,
+    "data": []
+  },
+  "healthOk": {
+    "ok": true,
+    "data": {
+      "version": "1.2.3",
+      "commit": "abc1234",
+      "buildTime": "2026-08-04T00:00:00.000Z",
+      "goVersion": "go1.26.0",
+      "platform": "darwin/arm64"
+    }
+  },
+  "listOk": {
+    "ok": true,
+    "data": [
+      "SYP",
+      "USD"
+    ]
+  },
+  "typedFailure": {
+    "ok": false,
+    "data": {
+      "version": "",
+      "commit": "",
+      "buildTime": "",
+      "goVersion": "",
+      "platform": ""
+    },
+    "error": {
+      "code": "migrate.database_too_new",
+      "messageKey": "migrate.database_too_new",
+      "params": {
+        "current": "5",
+        "target": "3"
+      }
+    }
+  },
+  "untypedFailure": {
+    "ok": false,
+    "data": {
+      "version": "",
+      "commit": "",
+      "buildTime": "",
+      "goVersion": "",
+      "platform": ""
+    },
+    "error": {
+      "code": "database.internal",
+      "messageKey": "database.internal"
+    }
+  },
+  "validationFailure": {
+    "ok": false,
+    "data": {
+      "version": "",
+      "commit": "",
+      "buildTime": "",
+      "goVersion": "",
+      "platform": ""
+    },
+    "error": {
+      "code": "config.invalid_value",
+      "messageKey": "config.invalid_value",
+      "fields": [
+        {
+          "field": "locale",
+          "code": "i18n.invalid_locale",
+          "messageKey": "i18n.invalid_locale"
+        }
+      ]
+    }
+  }
+}

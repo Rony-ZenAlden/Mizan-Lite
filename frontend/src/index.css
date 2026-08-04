@@ -3,34 +3,131 @@
 @tailwind utilities;
 
 /* ─── Design tokens ───────────────────────────────────────────────────────────
-   Semantic colours as RGB channels so Tailwind can apply alpha. Theme switches by
-   swapping these variables; components reference token-backed utilities only. */
+   Built BEFORE any primitive, because retrofitting a design system is a rewrite
+   (ARCHITECTURE_v1 §31, PHASE_0_FOUNDATION §FE.1). No component may hardcode a
+   colour, radius, shadow, or type size — every one of them is a token here.
+
+   Colours are RGB channels so Tailwind can apply alpha (`bg-primary/10`).
+   Theme switching swaps the variables; nothing re-renders on a class change.
+
+   Every foreground/background pair below is asserted to meet WCAG AA in BOTH
+   themes by tokens.test.ts. Dark-theme contrast is where hand-picked palettes
+   fail, and no reviewer catches it by eye — so it is a test, not a convention.
+
+   SPACING is deliberately NOT re-declared here: Tailwind's default scale is
+   already 4px-based, and inventing a parallel one would give every component
+   two vocabularies for the same idea. Components use Tailwind spacing
+   utilities; the rule is "no arbitrary values", not "a second scale". */
+
 :root {
   --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic";
+
+  /* Radii */
+  --radius-sm: 0.25rem;
   --radius: 0.5rem;
   --radius-lg: 0.75rem;
 
+  /* Type scale — size / line-height pairs, so a component never sets one alone. */
+  --text-xs: 0.75rem;
+  --text-xs-lh: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm-lh: 1.25rem;
+  --text-base: 1rem;
+  --text-base-lh: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg-lh: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl-lh: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl-lh: 2rem;
+
+  /* Focus. One treatment everywhere, always keyboard-visible. */
+  --ring-width: 2px;
+  --ring-offset: 2px;
+
+  /* Elevation — defined per theme: a shadow tuned for light backgrounds reads as
+     a smudge on dark, so the dark theme uses deeper, tighter shadows. */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.18), 0 4px 8px -4px rgb(15 23 42 / 0.08);
+
+  /* Surfaces */
   --color-surface: 255 255 255;
   --color-surface-raised: 248 250 252;
+  --color-surface-sunken: 241 245 249;
+
+  /* Lines */
   --color-border: 226 232 240;
+  --color-border-strong: 100 116 139;
+
+  /* Text */
   --color-text: 15 23 42;
-  --color-text-muted: 100 116 139;
+  --color-text-muted: 71 85 105;
+
+  /* Accent + status. Each has a solid fill, a foreground for text ON that fill,
+     and a subtle tint for banner backgrounds. */
   --color-primary: 37 99 235;
   --color-primary-fg: 255 255 255;
-  --color-danger: 220 38 38;
-  --color-success: 22 163 74;
+  --color-primary-subtle: 239 246 255;
+
+  --color-danger: 185 28 28;
+  --color-danger-fg: 255 255 255;
+  --color-danger-subtle: 254 242 242;
+
+  --color-success: 21 128 61;
+  --color-success-fg: 255 255 255;
+  --color-success-subtle: 240 253 244;
+
+  --color-warning: 180 83 9;
+  --color-warning-fg: 255 255 255;
+  --color-warning-subtle: 255 251 235;
+
+  --color-info: 3 105 161;
+  --color-info-fg: 255 255 255;
+  --color-info-subtle: 240 249 255;
+
+  --color-ring: 37 99 235;
 }
 
 :root[data-theme="dark"] {
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.40);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.50), 0 2px 4px -2px rgb(0 0 0 / 0.40);
+  --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.60), 0 4px 8px -4px rgb(0 0 0 / 0.45);
+
   --color-surface: 15 23 42;
   --color-surface-raised: 30 41 59;
+  --color-surface-sunken: 2 6 23;
+
   --color-border: 51 65 85;
+  --color-border-strong: 148 163 184;
+
   --color-text: 241 245 249;
   --color-text-muted: 148 163 184;
-  --color-primary: 59 130 246;
-  --color-primary-fg: 255 255 255;
+
+  /* On dark, the accent fills are LIGHTER and carry dark text. A saturated
+     mid-blue with white text sits at ~3.7:1 — below AA for body text — which is
+     exactly the trap the contrast gate exists to catch. */
+  --color-primary: 96 165 250;
+  --color-primary-fg: 15 23 42;
+  --color-primary-subtle: 30 41 59;
+
   --color-danger: 248 113 113;
+  --color-danger-fg: 15 23 42;
+  --color-danger-subtle: 42 24 28;
+
   --color-success: 74 222 128;
+  --color-success-fg: 15 23 42;
+  --color-success-subtle: 16 42 28;
+
+  --color-warning: 251 191 36;
+  --color-warning-fg: 15 23 42;
+  --color-warning-subtle: 45 34 12;
+
+  --color-info: 56 189 248;
+  --color-info-fg: 15 23 42;
+  --color-info-subtle: 12 36 52;
+
+  --color-ring: 96 165 250;
 }
 
 html,
@@ -50,4 +147,14 @@ body {
 /* Arabic needs slightly more vertical breathing room at the same size. */
 :root[lang="ar"] body {
   line-height: 1.75;
+}
+
+/* One focus treatment for the whole application. Never removed, only restyled —
+   an invisible focus ring makes the app unusable by keyboard, and a POS is a
+   keyboard-first surface (§31). */
+@layer base {
+  :focus-visible {
+    outline: var(--ring-width) solid rgb(var(--color-ring));
+    outline-offset: var(--ring-offset);
+  }
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 
-	"github.com/mizan-erp/mizan/internal/bootstrap"
+	"github.com/mizan-erp/mizan/internal/api/bindings"
 	"github.com/mizan-erp/mizan/internal/platform/paths"
 )
 
@@ -27,28 +27,22 @@ func main() {
 
 	resolved, err := paths.Resolve("Mizan")
 	if err != nil {
+		// The ONE failure that still exits without a window, because it happens before Wails
+		// starts and there is genuinely nothing to draw on. Every other startup failure now
+		// reaches the boot screen (Step 0.11 D2). Keeping a second, untestable "show an error
+		// with no UI toolkit" path would be worse than this honest exit.
 		fatal(ctx, "could not prepare the data directory", err)
 	}
 
-	// The graph is built BEFORE the window opens. A migration that takes a backup and runs an
-	// integrity check must finish before anything can be clicked; opening the UI first would
-	// mean rendering a shell over a database that might be about to be restored.
+	// The bindings are constructed BEFORE the graph and handed to Wails empty.
 	//
-	// The cost is that a long migration shows no window. Step 0.4 emits Progress events for
-	// exactly this, and wiring them to a splash screen belongs with the frontend shell in
-	// Step 0.11 — it needs a window to draw on, which is precisely what does not exist yet.
-	built, err := bootstrap.Start(ctx, bootstrap.Options{
-		Paths:          resolved,
-		StartScheduler: true,
-	})
-	if err != nil {
-		// A real error dialog needs a UI toolkit that is not running yet. Logging and a
-		// non-zero exit is the honest Phase-0 answer; Step 0.11 gives this somewhere to be
-		// shown properly.
-		fatal(ctx, "mizan could not start", err)
-	}
-
-	app := NewApp(built)
+	// Wails binds a fixed set at Run time, so the window cannot open before the bindings
+	// exist — but the window must open before the graph is built, or a long migration has
+	// nowhere to show progress and a failed start has nowhere to show an error. Façades
+	// resolve that: they are declared now and attached when boot succeeds, and every
+	// graph-backed method returns a typed not-ready error until then (§2.3).
+	set := bindings.New()
+	shell := NewShell(set, resolved)
 
 	if err := wails.Run(&options.App{
 		Title:     "Mizan ERP",
@@ -59,16 +53,13 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup:  app.startup,
-		OnShutdown: app.shutdown,
-		Bind:       append([]any{app}, built.Bindings...),
+		OnStartup:  shell.startup,
+		OnShutdown: shell.shutdown,
+		Bind:       set.All(),
 	}); err != nil {
-		// Wails failed after the graph was built, so tear it down rather than leaking the
-		// database handle and the running scheduler.
-		if shutdownErr := built.Shutdown(ctx); shutdownErr != nil {
-			slog.WarnContext(ctx, "shutdown after a failed start reported errors",
-				slog.Any("error", shutdownErr))
-		}
+		// Wails itself failed. Tear down whatever the boot goroutine managed to build rather
+		// than leaking the database handle and the running scheduler.
+		shell.abandon(ctx)
 		fatal(ctx, "mizan failed to start", err)
 	}
 }

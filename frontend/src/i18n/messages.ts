@@ -32,6 +32,35 @@ export const MESSAGES: Record<Locale, Record<string, string>> = {
 };
 
 /**
+ * The locale to use before the backend can be asked.
+ *
+ * The boot screen renders while the object graph is still being built, so `ui.locale` is not
+ * readable yet — the Config binding is guarded until boot completes. The OS language is the
+ * best available signal at that moment, and on a genuine first launch it is also the RIGHT
+ * one: no preference has been stored, and a Syrian shop opening Mizan for the first time
+ * should not be greeted in English while it migrates.
+ *
+ * Once boot succeeds, PreferencesProvider replaces this with the stored setting.
+ */
+export function initialLocale(): Locale {
+  const tag = typeof navigator !== "undefined" ? navigator.language : "";
+  const language = tag.split("-")[0]?.toLowerCase();
+  return language && language in MESSAGES ? (language as Locale) : "en";
+}
+
+/**
+ * The locale currently applied to the document.
+ *
+ * Read from <html lang> rather than from React context so that components which cannot depend
+ * on the provider — the error boundary, which may be catching the provider's own failure —
+ * still render translated text.
+ */
+export function documentLocale(): Locale {
+  const lang = typeof document !== "undefined" ? document.documentElement.lang : "";
+  return lang in MESSAGES ? (lang as Locale) : "en";
+}
+
+/**
  * Resolves a key for a locale, falling back through `en` and finally to the key itself.
  *
  * Returning the key rather than an empty string matches the Go resolver: a visible

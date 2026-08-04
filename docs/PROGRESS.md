@@ -52,6 +52,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_12_PHASE_0_DOD_REVIEW.md` | **Phase 0 Definition-of-Done review** — the ten criteria, evidence, and the two gaps. |
 | `docs/architecture/PHASE_1_CORE_DATA.md` | **Phase 1 detailed design** — org, identity, RBAC, the policy mechanism, audit, setup. |
 | `docs/architecture/STEP_1_1_ORG_AND_RULES.md` | Step 1.1: module-isolation + no-sql rules, and the org module. |
+| `docs/architecture/STEP_1_2_IDENTITY.md` | Step 1.2: Argon2id credentials, users, password policy, `Authenticator`. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -109,8 +110,8 @@ and D7 synchronous in-transaction audit).
 | Step | Scope | Status |
 |---|---|---|
 | **1.1** | `module-isolation` + `no-sql` rules; org module (company/branch/warehouse/fiscal) | ✅ committed |
-| **1.2** | Identity: credentials (Argon2id), `Authenticator` port, users | ⬜ next — design first |
-| **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ⬜ |
+| **1.2** | Identity: credentials (Argon2id), `Authenticator` port, users | ✅ committed |
+| **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ⬜ next — design first |
 | **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ⬜ |
 | **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ⬜ |
 | **1.6** | Field-level redaction | ⬜ |
@@ -428,6 +429,33 @@ Two jobs together, deliberately: **the rules land before the imports they forbid
   `currencies(code)`), and the composition root hands them over deliberately reversed.
 - 16 new tests; mutation-verified on the one-company invariant and fiscal tiling.
 
+### Step 1.2 — Identity: credentials & users
+The first step whose defects are *security* defects — several are invisible in testing because
+the system behaves correctly right up until someone attacks it.
+- **Argon2id** in `platform/crypto`, at OWASP's 19 MiB / 2-pass setting (chosen over 46 MiB /
+  1-pass because a POS switches users constantly on a shop's hardware). `golang.org/x/crypto`
+  was **already an indirect dependency** — promoting it added nothing and resolves offline.
+- **One PHC string** carries the salt and every parameter (D2). The phase design's separate
+  `params_json` was dropped as a second copy of one fact — 0.4 rejected goose over that, and
+  0.7 D2 refused it for job state.
+- **The timing drill is the test that matters.** Removing the constant-work verification for an
+  unknown username: *"returned in 27.5µs against 15.028917ms for a known one"* — a 545×
+  oracle for enumerating accounts, with the system returning the correct answer either way.
+- **Every authentication failure is the same error** — unknown user, wrong password, inactive
+  account. Anything else is a username oracle.
+- **Rehash on login** when stored parameters fall below policy: the mechanism that makes
+  §13.1's "raise the cost without invalidating passwords" real rather than aspirational.
+- **Password policy follows NIST SP 800-63B** (D3): 12 characters, **no forced rotation**, no
+  composition rules, 5-password history. Rotation produces `Summer2026!` → `Summer2027!`; the
+  default is what a well-run system does, and an auditor's requirement is one setting away.
+  Minimum length is floored at 8 in the domain — a setting is not a licence to disable
+  security (§CFG.5).
+- **The leak drill asserts on marshalled JSON**, not struct fields. Credentials live in their
+  own table so no ordinary user query *can* return one.
+- **Identity ships the first `contract` package**; it reaches org through a one-method port it
+  declares itself, so org owes identity nothing.
+- 25 new tests; mutation-verified on constant-work verification and history enforcement.
+
 ---
 
 ## 7. Repository map (as built)
@@ -455,6 +483,8 @@ Mizan ERP/
 │   ├── platform/modules/               # the Module contract every business module implements
 │   ├── modules/currency/               # first business module (own migrations, domain, infra)
 │   ├── modules/org/                    # company, branches, warehouses, fiscal calendar
+│   ├── modules/identity/               # users, credentials, password policy, contract
+│   ├── platform/crypto/                # Argon2id password hashing
 │   ├── platform/paths/                 # OS app-data locations
 │   ├── platform/ui/                    # presentation preferences (ui.theme)
 │   ├── api/envelope/, api/appctx/      # result envelope + per-request context
@@ -490,8 +520,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.2 — Identity** (credentials, Argon2id, the `Authenticator` port).
-  **Design first, await approval** per the protocol.
+- **Immediate next: Step 1.3 — Sessions, lockout, login attempts** (migration `0006`), plus
+  `appctx` reading a real session. **Design first, await approval** per the protocol.
+- **Open, needed by 1.3:** session idle/absolute timeouts. Proposed 30 min idle, 12 h
+  absolute, "stay signed in" off by default — a shop floor may want very different values.
 - **Closed in Step 1.1:** REPO.3 rule 2 (`module-isolation`) and rule 7 (restated as `no-sql`)
   are both enforced and verified by planting. **All seven REPO.3 rules now hold.**
 - **One manual launch** to visually confirm the shell before Phase 1 UI work.
@@ -516,6 +548,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.2: identity — Argon2id credentials and users
 (pending) Phase 1 Step 1.1: architecture rules + the org module
 (pending) Phase 0 Step 0.12: Definition-of-Done review — Phase 0 complete
 (pending) Phase 0 Step 0.11: frontend foundation + bindings wrapper

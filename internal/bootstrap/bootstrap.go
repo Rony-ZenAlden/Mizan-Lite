@@ -24,6 +24,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -101,6 +102,7 @@ type App struct {
 	Scheduler *jobs.Scheduler
 	Currency  *currency.Service
 	Org       *org.Service
+	Identity  *identity.Service
 	Modules   []modules.Module
 	// Bindings are the structs handed to Wails.
 	Bindings []any
@@ -153,9 +155,10 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// after the schema exists.
 	currencyModule := currency.NewModule(nil)
 	orgModule := org.NewModule(nil)
+	identityModule := identity.NewModule(nil)
 
 	// 4. Migrate — before anything else reads a table.
-	if err = app.runMigrations(ctx, currencyModule, orgModule); err != nil {
+	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -217,8 +220,14 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	currencyModule = currency.NewModule(app.Currency)
 	app.Org = org.NewService(db, opts.Clock)
 	orgModule = org.NewModule(app.Org)
+	// Identity takes org's service through the one-method Organisation port it declares
+	// itself — no import of org from identity, and the wiring is visible here.
+	app.Identity = identity.NewService(db, app.Org, opts.Clock)
+	identityModule = identity.NewModule(app.Identity)
 
-	ordered, err := modules.Order([]modules.Module{orgModule, currencyModule})
+	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
+	// identity depends on org, which depends on currency.
+	ordered, err := modules.Order([]modules.Module{identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

@@ -196,6 +196,19 @@ func (s *Service) Company(ctx context.Context) (domain.Company, error) {
 	return s.repos.Company(ctx)
 }
 
+// CurrentCompanyID returns the acting company's identifier.
+//
+// Satisfies the one-method `Organisation` port that the identity module declares at its own
+// point of use (Go convention). Identity therefore needs no import of org's package and org
+// owes identity nothing — the dependency is a single method, named by the consumer.
+func (s *Service) CurrentCompanyID(ctx context.Context) (id.ID, error) {
+	company, err := s.repos.Company(ctx)
+	if err != nil {
+		return "", err
+	}
+	return company.ID, nil
+}
+
 // Branches lists the company's branches, the default first.
 func (s *Service) Branches(ctx context.Context) ([]domain.Branch, error) {
 	company, err := s.repos.Company(ctx)

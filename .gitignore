@@ -18,6 +18,17 @@ coverage.html
 frontend/dist/
 frontend/node_modules/
 frontend/wailsjs/
+# `wails build` caches the hash of package.json to decide whether to reinstall.
+frontend/package.json.md5
+
+# Stock Wails scaffolding, regenerated on demand by `wails build`: the placeholder
+# logo and a templated Info.plist. Ignored rather than committed because tracking
+# the default Wails logo would read as a deliberate branding choice it is not.
+# Phase 10 (polish / installers) is where the real icon and a customised Info.plist
+# become tracked assets — REMOVE THESE TWO LINES THEN, or the customisation will be
+# silently ignored.
+/build/appicon.png
+/build/darwin/
 
 # Node
 node_modules/

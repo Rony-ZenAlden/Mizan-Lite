@@ -49,6 +49,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_9_CURRENCY.md` | Currency module, rate types, redenomination, and the corrected rate uniqueness. |
 | `docs/architecture/STEP_0_10_COMPOSITION_ROOT.md` | Composition root, startup ordering, the error taxonomy, and shutdown. |
 | `docs/architecture/STEP_0_11_FRONTEND_FOUNDATION.md` | Frontend foundation: the bindings wrapper, boot inversion, tokens, primitives, shell. |
+| `docs/architecture/STEP_0_12_PHASE_0_DOD_REVIEW.md` | **Phase 0 Definition-of-Done review** — the ten criteria, evidence, and the two gaps. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -96,7 +97,7 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.9** | Currency module (schema `0003`, repos, converter, seeds) | ✅ committed |
 | **0.10** | Composition root wiring the full graph + graceful shutdown | ✅ committed |
 | **0.11** | Frontend foundation: bindings wrapper, boot inversion, tokens, primitives, shell | ✅ committed |
-| **0.12** | Phase 0 Definition-of-Done review | ⬜ next |
+| **0.12** | Phase 0 Definition-of-Done review | ✅ committed — **Phase 0 COMPLETE** |
 
 ---
 
@@ -359,6 +360,32 @@ been leaking since 0.10.
 - **121 frontend tests + 23 binding subtests**, `-race` clean; envelope 100%, bindings 89.2%.
   Five mutation drills, including the shipped bug reproduced exactly.
 
+### Step 0.12 — Phase 0 Definition-of-Done review
+A review, not a build. Ten criteria, each backed by a **live run of the packaged app** or a
+**named test** — nothing asserted from reading code.
+- **The end-to-end gap 0.11 flagged is closed.** `make tools` installed wails v2.13.0;
+  `make build` produced `mizan.app`; it was launched against an empty data directory and
+  migrated a fresh database. `mizan window ready` logs **before** any migration line — 0.11's
+  boot inversion (D2) working on real hardware, previously provable only by unit test. Second
+  boot applied no migrations (the idempotent fast path).
+- **DoD 5 live**: 43 job runs across dispatch (5s) and heartbeat (60s); stopped, left down
+  ~3 minutes, restarted → `run_once` collapsed three missed heartbeats into **exactly one**.
+- **DoD 9 live**: after shutdown, **0** runs left `running`, 47 succeeded, and `mizan.db-wal`
+  at **0 bytes** — the checkpoint ran. Drain → flush → checkpoint → close, observed.
+- **Two honest gaps, written down rather than smoothed over:**
+  1. **Two of REPO.3's seven lint rules are not enforced.** `module-isolation` (rule 2) is
+     documented as planned and is vacuously true today with one module — it must land early in
+     Phase 1, when a second module makes it both possible and necessary. Rule 7 ("no raw SQL
+     outside infra") was written before `platform/*` packages owned tables; its *intent* holds
+     (no SQL in domain/app/api) but the wording needs restating. No rule is being violated:
+     `time.Now()` outside `kernel/clock` and float arithmetic both have **zero** occurrences.
+  2. **Nobody has visually confirmed the rendered shell.** macOS screen-recording permission
+     was declined, so rendering rests on a live WebKit content process plus 121 component tests
+     (including both-direction RTL renders) — not on anyone having looked. One manual launch
+     closes it.
+- **312 Go tests + 121 frontend tests**, `-race` clean, `make ci` green.
+- **Verdict: Phase 0 is complete.** Phase 1 (org, identity + RBAC, settings, audit) can begin.
+
 ---
 
 ## 7. Repository map (as built)
@@ -420,10 +447,13 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next:** Step 0.12 — the Phase 0 Definition-of-Done review. Items 1, 5 and 8
-  are closed by 0.11; item 1 wants a real `wails dev` run, which needs the `wails` CLI
-  (`make tools`) — the Go and frontend halves are proven separately but have not yet been run
-  **together** in a window on this machine.
+- **Immediate next: Phase 1 — Core data** (org: company/branch/warehouse; identity + RBAC;
+  settings; feature flags; audit). Nothing can be built safely without auth + audit.
+  **Design first, await approval** per the protocol.
+- **Early in Phase 1, not late:** enforce REPO.3 rule 2 (`module-isolation`) — it becomes both
+  possible and necessary with the second module, and it is the rule that stops an ERP's modules
+  quietly fusing. Restate rule 7 as "no SQL in domain/app/api". See `STEP_0_12` §5.
+- **One manual launch** to visually confirm the shell before Phase 1 UI work.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —
@@ -445,6 +475,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 0 Step 0.12: Definition-of-Done review — Phase 0 complete
 (pending) Phase 0 Step 0.11: frontend foundation + bindings wrapper
 5ac657c  Phase 0 Step 0.10: composition root + full graph wiring
 a4cd7ff  Phase 0 Step 0.9: currency module

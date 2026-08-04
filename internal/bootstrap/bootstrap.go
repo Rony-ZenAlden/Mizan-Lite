@@ -24,6 +24,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
@@ -99,6 +100,7 @@ type App struct {
 	Dispatch  *outbox.Dispatcher
 	Scheduler *jobs.Scheduler
 	Currency  *currency.Service
+	Org       *org.Service
 	Modules   []modules.Module
 	// Bindings are the structs handed to Wails.
 	Bindings []any
@@ -147,12 +149,13 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	}
 	app.DB = db
 
-	// The currency module is constructed early only to obtain its migrations; its service is
-	// built after the schema exists.
+	// Modules are constructed early only to obtain their migrations; their services are built
+	// after the schema exists.
 	currencyModule := currency.NewModule(nil)
+	orgModule := org.NewModule(nil)
 
 	// 4. Migrate — before anything else reads a table.
-	if err = app.runMigrations(ctx, currencyModule); err != nil {
+	if err = app.runMigrations(ctx, currencyModule, orgModule); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -207,10 +210,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Scheduler = scheduler
 
 	// 10. Modules.
+	//
+	// Nothing is provisioned here (Step 1.1, D1): a fresh install has no company until the
+	// setup wizard runs, and Start must succeed against exactly that state.
 	app.Currency = currency.NewService(db, opts.Clock, app.Trans)
 	currencyModule = currency.NewModule(app.Currency)
+	app.Org = org.NewService(db, opts.Clock)
+	orgModule = org.NewModule(app.Org)
 
-	ordered, err := modules.Order([]modules.Module{currencyModule})
+	ordered, err := modules.Order([]modules.Module{orgModule, currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

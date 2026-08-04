@@ -22,9 +22,11 @@ type Config struct {
 // Rules holds every supported rule kind. Adding a kind means adding a field here
 // and a builder in the rules package — the loader itself does not change.
 type Rules struct {
-	ImportBoundary ImportBoundaryRule `yaml:"import-boundary"`
-	ForbidCall     ForbidCallRule     `yaml:"forbid-call"`
-	NoFloat        NoFloatRule        `yaml:"no-float"`
+	ImportBoundary  ImportBoundaryRule  `yaml:"import-boundary"`
+	ForbidCall      ForbidCallRule      `yaml:"forbid-call"`
+	NoFloat         NoFloatRule         `yaml:"no-float"`
+	ModuleIsolation ModuleIsolationRule `yaml:"module-isolation"`
+	NoSQL           NoSQLRule           `yaml:"no-sql"`
 }
 
 // ImportBoundaryRule enforces layer/module import boundaries.
@@ -59,6 +61,33 @@ type ForbidCall struct {
 
 // NoFloatRule forbids float32/float64 in the given packages.
 type NoFloatRule struct {
+	Enabled   bool     `yaml:"enabled"`
+	AppliesTo []string `yaml:"applies_to"`
+	Message   string   `yaml:"message"`
+}
+
+// ModuleIsolationRule enforces ARCHITECTURE_v1 §3.2: a module may import another module only
+// through its published `contract` package, never its domain, app, or infra.
+//
+// Despite the "planned whole-program rule" note this project carried for three steps, the rule
+// needs no package graph: the owning module of a file and of each of its imports are both
+// derivable from path prefixes alone.
+type ModuleIsolationRule struct {
+	Enabled bool `yaml:"enabled"`
+	// ModulesRoot is the import-path prefix under which each immediate child is one module,
+	// e.g. "self/internal/modules". The `self` token expands to the Go module path.
+	ModulesRoot string `yaml:"modules_root"`
+	// ContractDir is the sub-package other modules may import. Default "contract".
+	ContractDir string `yaml:"contract_dir"`
+	Message     string `yaml:"message"`
+}
+
+// NoSQLRule forbids SQL string literals in the given packages.
+//
+// REPO.3 rule 7 restated (Step 0.12 §5, Step 1.1 D3): the original wording ("outside infra")
+// predates the platform packages that legitimately own their own tables. The enforceable
+// intent is that domain, app, and api contain no SQL.
+type NoSQLRule struct {
 	Enabled   bool     `yaml:"enabled"`
 	AppliesTo []string `yaml:"applies_to"`
 	Message   string   `yaml:"message"`
@@ -104,4 +133,12 @@ func (c *Config) expand() {
 		rep(call.Exclude)
 	}
 	rep(c.Rules.NoFloat.AppliesTo)
+	rep(c.Rules.NoSQL.AppliesTo)
+
+	mi := &c.Rules.ModuleIsolation
+	mi.ModulesRoot = strings.ReplaceAll(mi.ModulesRoot, "self", c.Module)
+	mi.ModulesRoot = strings.TrimSuffix(mi.ModulesRoot, "/")
+	if mi.ContractDir == "" {
+		mi.ContractDir = "contract"
+	}
 }

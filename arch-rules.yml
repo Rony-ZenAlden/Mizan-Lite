@@ -93,6 +93,37 @@ rules:
         exclude: ["**_test.go", "**/clock/**"]
         message: "do not call time.Now() in domain code — take a kernel/clock.Clock"
 
+  # ── Module isolation (added in Step 1.1) ────────────────────────────────────
+  # ARCHITECTURE_v1 §3.2: a module exports a small `contract` package of interfaces and
+  # DTOs and NEVER its aggregates — "Sales must not be able to construct an
+  # inventory.StockLevel". §3.1 names silent module-to-module coupling as "the single most
+  # common way an ERP becomes unmaintainable".
+  #
+  # Landed in Step 1.1 deliberately, BEFORE Phase 1's three new modules are written: the
+  # cheapest moment to forbid an import is before anyone has written it. It also turned out
+  # not to need the whole-program pass this file assumed for three steps (Step 1.1, D2).
+  module-isolation:
+    enabled: true
+    modules_root: "self/internal/modules"
+    contract_dir: "contract"
+    message: "a module may import another module only through its /contract package (§3.2)"
+
+  # ── No SQL in domain / app / api (added in Step 1.1) ────────────────────────
+  # REPO.3 rule 7, restated. The original wording ("outside infra") predates the platform
+  # packages that legitimately own their own tables, and Step 0.12 found it unenforceable as
+  # written. The enforceable intent: business rules and the API boundary must not know how
+  # anything is stored (§5.1, §5.3, §5.4).
+  #
+  # A tripwire, not a proof — concatenated SQL evades a literal scan. domain-purity is the
+  # structural defence for domain packages; this covers app and api too.
+  no-sql:
+    enabled: true
+    applies_to:
+      - "self/internal/modules/*/domain/**"
+      - "self/internal/modules/*/app/**"
+      - "self/internal/api/**"
+    message: "SQL belongs to infra/platform — domain, app, and api must not contain it"
+
   # ── No floating-point in money/domain ───────────────────────────────────────
   no-float:
     enabled: true
@@ -104,7 +135,7 @@ rules:
 # ── Planned rule kinds (documented seams, added later without redesign) ────────
 # The following require a whole-program package-graph pass (tools/archlint -graph).
 # They are listed here as intent; each becomes one registered rule when implemented:
-#   - module-isolation      : a module may import another module only via its /contract
+#   (module-isolation graduated to a real rule in Step 1.1 — it needed no graph pass)
 #   - max-dependency-depth  : cap the import-chain depth of any package
 #   - domain-tests-required : every domain package must have a _test.go
 #   - no-package-cycles     : (Go forbids these already at compile time; kept for modules)

@@ -50,6 +50,8 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_0_10_COMPOSITION_ROOT.md` | Composition root, startup ordering, the error taxonomy, and shutdown. |
 | `docs/architecture/STEP_0_11_FRONTEND_FOUNDATION.md` | Frontend foundation: the bindings wrapper, boot inversion, tokens, primitives, shell. |
 | `docs/architecture/STEP_0_12_PHASE_0_DOD_REVIEW.md` | **Phase 0 Definition-of-Done review** — the ten criteria, evidence, and the two gaps. |
+| `docs/architecture/PHASE_1_CORE_DATA.md` | **Phase 1 detailed design** — org, identity, RBAC, the policy mechanism, audit, setup. |
+| `docs/architecture/STEP_1_1_ORG_AND_RULES.md` | Step 1.1: module-isolation + no-sql rules, and the org module. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -98,6 +100,25 @@ The reusable **application kernel** future modules plug into (no business featur
 | **0.10** | Composition root wiring the full graph + graceful shutdown | ✅ committed |
 | **0.11** | Frontend foundation: bindings wrapper, boot inversion, tokens, primitives, shell | ✅ committed |
 | **0.12** | Phase 0 Definition-of-Done review | ✅ committed — **Phase 0 COMPLETE** |
+
+## 5b. Phase 1 — Core Data: step status
+
+Design: `docs/architecture/PHASE_1_CORE_DATA.md` (approved, incl. D6 policy-at-the-boundary
+and D7 synchronous in-transaction audit).
+
+| Step | Scope | Status |
+|---|---|---|
+| **1.1** | `module-isolation` + `no-sql` rules; org module (company/branch/warehouse/fiscal) | ✅ committed |
+| **1.2** | Identity: credentials (Argon2id), `Authenticator` port, users | ⬜ next — design first |
+| **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ⬜ |
+| **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ⬜ |
+| **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ⬜ |
+| **1.6** | Field-level redaction | ⬜ |
+| **1.7** | Audit module (in-transaction, D7) | ⬜ |
+| **1.8** | Country + business profiles, seed-file discovery | ⬜ |
+| **1.9** | Setup wizard backend | ⬜ |
+| **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ |
+| **1.12** | Phase 1 Definition-of-Done review | ⬜ |
 
 ---
 
@@ -386,6 +407,27 @@ A review, not a build. Ten criteria, each backed by a **live run of the packaged
 - **312 Go tests + 121 frontend tests**, `-race` clean, `make ci` green.
 - **Verdict: Phase 0 is complete.** Phase 1 (org, identity + RBAC, settings, audit) can begin.
 
+### Step 1.1 — Architecture rules & the org module
+Two jobs together, deliberately: **the rules land before the imports they forbid are written.**
+- **`module-isolation` enforced at last** (§3.2). Deferred three times on the assumption it
+  needed a whole-program graph pass — it does not: the owning module of a file and of each
+  import are both prefix arithmetic. Its first draft mis-read Go's synthetic `foo_test`
+  packages as a module; it now walks each *file's* imports so `skipPos` exempts test files.
+- **`no-sql`** replaces REPO.3 rule 7, whose wording ("outside infra") predated the platform
+  packages that own tables. Requires **two** SQL tokens, so `"update the display name"` stays
+  legal — a rule that cries wolf gets switched off.
+- **Both verified by planting**, in both directions (violation *and* allowed case).
+- **`modules/org`** — schema `0004`, domain, repositories, `Provision`. Company, branches,
+  warehouses, and a fiscal calendar whose periods are **generated, never hand-entered**: a
+  boundary one day out means a Phase 2 posting belonging to no period or to two.
+- **D1 corrected the phase design.** §SEQ said 1.1 would *seed* a default company; §WIZ.1 says
+  the wizard creates it. Both cannot hold — a seeded placeholder makes the wizard's "no company
+  exists yet" invariant false before it runs. **Nothing is provisioned at boot**; the
+  one-company invariant lives in the service, not only on the binding.
+- **The topological sort finally has something to order**: org depends on currency (FK on
+  `currencies(code)`), and the composition root hands them over deliberately reversed.
+- 16 new tests; mutation-verified on the one-company invariant and fiscal tiling.
+
 ---
 
 ## 7. Repository map (as built)
@@ -412,6 +454,7 @@ Mizan ERP/
 │   ├── platform/i18n/                  # message catalog + user-content translations
 │   ├── platform/modules/               # the Module contract every business module implements
 │   ├── modules/currency/               # first business module (own migrations, domain, infra)
+│   ├── modules/org/                    # company, branches, warehouses, fiscal calendar
 │   ├── platform/paths/                 # OS app-data locations
 │   ├── platform/ui/                    # presentation preferences (ui.theme)
 │   ├── api/envelope/, api/appctx/      # result envelope + per-request context
@@ -447,12 +490,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Phase 1 — Core data** (org: company/branch/warehouse; identity + RBAC;
-  settings; feature flags; audit). Nothing can be built safely without auth + audit.
+- **Immediate next: Step 1.2 — Identity** (credentials, Argon2id, the `Authenticator` port).
   **Design first, await approval** per the protocol.
-- **Early in Phase 1, not late:** enforce REPO.3 rule 2 (`module-isolation`) — it becomes both
-  possible and necessary with the second module, and it is the rule that stops an ERP's modules
-  quietly fusing. Restate rule 7 as "no SQL in domain/app/api". See `STEP_0_12` §5.
+- **Closed in Step 1.1:** REPO.3 rule 2 (`module-isolation`) and rule 7 (restated as `no-sql`)
+  are both enforced and verified by planting. **All seven REPO.3 rules now hold.**
 - **One manual launch** to visually confirm the shell before Phase 1 UI work.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
@@ -475,6 +516,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.1: architecture rules + the org module
 (pending) Phase 0 Step 0.12: Definition-of-Done review — Phase 0 complete
 (pending) Phase 0 Step 0.11: frontend foundation + bindings wrapper
 5ac657c  Phase 0 Step 0.10: composition root + full graph wiring

@@ -57,11 +57,25 @@ func TestStartBuildsAWorkingGraph(t *testing.T) {
 	app := boot(t)
 
 	if app.DB == nil || app.Settings == nil || app.Catalog == nil ||
-		app.Bus == nil || app.Outbox == nil || app.Scheduler == nil || app.Currency == nil {
+		app.Bus == nil || app.Outbox == nil || app.Scheduler == nil ||
+		app.Currency == nil || app.Org == nil {
 		t.Fatalf("graph has nil components: %+v", app)
 	}
-	if len(app.Modules) != 1 || app.Modules[0].Name() != "currency" {
-		t.Errorf("modules = %v, want [currency]", app.Modules)
+
+	// Asserted by PRESENCE, not by exact count.
+	//
+	// This previously read `len(app.Modules) != 1 ... want [currency]` and broke the moment
+	// org arrived — the same brittleness Step 0.6 §11.2 fixed for the migration count, and for
+	// the same reason: a test that must be edited every time the system legitimately grows is
+	// a maintenance tax, not a safety net. Phase 1 adds three more modules.
+	present := map[string]bool{}
+	for _, m := range app.Modules {
+		present[m.Name()] = true
+	}
+	for _, want := range []string{"currency", "org"} {
+		if !present[want] {
+			t.Errorf("module %q is missing from the graph; got %v", want, present)
+		}
 	}
 }
 
@@ -413,5 +427,51 @@ func TestDataDirectoryLayout(t *testing.T) {
 	}
 	if _, err := os.Stat(app.Paths.Backups); err != nil {
 		t.Errorf("backups directory was not created: %v", err)
+	}
+}
+
+// ── Step 1.1: org ───────────────────────────────────────────────────────────────
+
+// TestStartSucceedsOnAnUnprovisionedDatabase pins Step 1.1's D1.
+//
+// A fresh install has NO company until the setup wizard runs, and Start must succeed against
+// exactly that state. If org ever starts seeding a placeholder company at boot, the wizard's
+// "no company exists yet" invariant (§WIZ.1) is false before it ever runs — and this fails.
+func TestStartSucceedsOnAnUnprovisionedDatabase(t *testing.T) {
+	app := boot(t)
+
+	if app.Org == nil {
+		t.Fatal("the org service is not wired into the graph")
+	}
+	provisioned, err := app.Org.IsProvisioned(app.Context())
+	if err != nil {
+		t.Fatalf("IsProvisioned: %v", err)
+	}
+	if provisioned {
+		t.Error("a freshly booted database reports a company; nothing may be provisioned at boot (D1)")
+	}
+}
+
+// TestModulesAreOrderedByDependency is the first real exercise of the topological sort built
+// in Step 0.10: org depends on currency (its FK on currencies(code)), and the composition root
+// deliberately hands the modules in the WRONG order to prove the sort reorders them.
+func TestModulesAreOrderedByDependency(t *testing.T) {
+	app := boot(t)
+
+	var currencyAt, orgAt = -1, -1
+	for i, m := range app.Modules {
+		switch m.Name() {
+		case "currency":
+			currencyAt = i
+		case "org":
+			orgAt = i
+		}
+	}
+	if currencyAt == -1 || orgAt == -1 {
+		t.Fatalf("expected both modules, got %d", len(app.Modules))
+	}
+	if currencyAt > orgAt {
+		t.Errorf("currency is ordered after org (%d > %d); org's schema references currencies(code)",
+			currencyAt, orgAt)
 	}
 }

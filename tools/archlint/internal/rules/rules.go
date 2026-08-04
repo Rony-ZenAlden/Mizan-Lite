@@ -21,11 +21,14 @@ import (
 // AllBuilders is the registry of every architecture rule. Order is irrelevant;
 // each builder self-reports whether it is enabled.
 var AllBuilders = []engine.Builder{
-	ImportBoundary, // layer & module import boundaries
-	ForbidCall,     // forbidden calls scoped by location (panic, os.Exit, fmt.*, time.Now)
-	NoFloat,        // no float32/float64 in money/domain
-	// Planned whole-program rules (see arch-rules.yml): module-isolation,
-	// max-dependency-depth, domain-tests-required.
+	ImportBoundary,  // layer & module import boundaries
+	ForbidCall,      // forbidden calls scoped by location (panic, os.Exit, fmt.*, time.Now)
+	NoFloat,         // no float32/float64 in money/domain
+	ModuleIsolation, // a module may reach another only via its /contract  (Step 1.1)
+	NoSQL,           // no SQL literals in domain/app/api                  (Step 1.1)
+	// Planned whole-program rules (see arch-rules.yml): max-dependency-depth,
+	// domain-tests-required, no-package-cycles. These genuinely need a package graph —
+	// module-isolation did not, which is why it moved up here (Step 1.1, D2).
 }
 
 // msgOr returns msg if non-empty, otherwise fallback.

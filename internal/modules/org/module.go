@@ -4,6 +4,7 @@ import (
 	"embed"
 	"io/fs"
 
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
@@ -72,6 +73,16 @@ func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 // Subscribe registers nothing yet. Org will publish Auditable events once the audit module
 // exists (1.7); publishing to no subscriber now would be the guess 0.6 and 0.9 both declined.
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
+
+// Permissions guard the organisational settings screens (Step 1.11).
+func (m *Module) Permissions() []auth.PermissionDef {
+	return []auth.PermissionDef{
+		{Code: "org.company.edit", Description: "permissions.org.company.edit"},
+		{Code: "org.branch.manage", Description: "permissions.org.branch.manage"},
+		{Code: "org.warehouse.manage", Description: "permissions.org.warehouse.manage"},
+		{Code: "org.fiscal.manage", Description: "permissions.org.fiscal.manage"},
+	}
+}
 
 // Jobs: none.
 func (m *Module) Jobs() []jobs.Registration { return nil }

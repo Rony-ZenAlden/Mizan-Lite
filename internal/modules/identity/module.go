@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"time"
 
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
@@ -62,6 +63,9 @@ func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 // Subscribe registers nothing yet. Identity will publish Auditable events — created, password
 // changed, deactivated — once the audit module exists (1.7).
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
+
+// Permissions are the user, role, and session operations this module protects.
+func (m *Module) Permissions() []auth.PermissionDef { return declaredPermissions() }
 
 // Jobs declares the session sweep — the first job declared by a MODULE rather than by the
 // platform itself (0.7 shipped outbox.dispatch and platform.heartbeat).

@@ -15,15 +15,18 @@ import (
 
 // Stable error codes. They double as i18n keys and are part of the public contract.
 const (
-	CodeInvalidUser        = "identity.invalid_user"
-	CodeInvalidCredentials = "identity.invalid_credentials"
-	CodeUserNotFound       = "identity.user_not_found"
-	CodeUsernameTaken      = "identity.username_taken"
-	CodePasswordTooShort   = "identity.password_too_short"
-	CodePasswordReused     = "identity.password_reused"
-	CodeLastActiveUser     = "identity.last_active_user"
-	CodeSystemUser         = "identity.system_user"
-	CodePasswordRequired   = "identity.password_required"
+	CodeInvalidUser         = "identity.invalid_user"
+	CodeInvalidCredentials  = "identity.invalid_credentials"
+	CodeUserNotFound        = "identity.user_not_found"
+	CodeUsernameTaken       = "identity.username_taken"
+	CodePasswordTooShort    = "identity.password_too_short"
+	CodePasswordReused      = "identity.password_reused"
+	CodeLastActiveUser      = "identity.last_active_user"
+	CodeSystemUser          = "identity.system_user"
+	CodePasswordRequired    = "identity.password_required"
+	CodeInvalidPermission   = "identity.invalid_permission"
+	CodeDuplicatePermission = "identity.duplicate_permission"
+	CodeRoleNotFound        = "identity.role_not_found"
 )
 
 // CredentialPassword and CredentialPIN are the credential kinds.

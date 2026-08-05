@@ -54,6 +54,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_1_ORG_AND_RULES.md` | Step 1.1: module-isolation + no-sql rules, and the org module. |
 | `docs/architecture/STEP_1_2_IDENTITY.md` | Step 1.2: Argon2id credentials, users, password policy, `Authenticator`. |
 | `docs/architecture/STEP_1_3_SESSIONS.md` | Step 1.3: sessions, throttling, the sweep job, and the real AppContext. |
+| `docs/architecture/STEP_1_4_RBAC.md` | Step 1.4: permissions, roles, scope resolution, the real `Authorizer`. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -113,8 +114,8 @@ and D7 synchronous in-transaction audit).
 | **1.1** | `module-isolation` + `no-sql` rules; org module (company/branch/warehouse/fiscal) | ✅ committed |
 | **1.2** | Identity: credentials (Argon2id), `Authenticator` port, users | ✅ committed |
 | **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ✅ committed |
-| **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ⬜ next — design first |
-| **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ⬜ |
+| **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ✅ committed |
+| **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ⬜ next — design first |
 | **1.6** | Field-level redaction | ⬜ |
 | **1.7** | Audit module (in-transaction, D7) | ⬜ |
 | **1.8** | Country + business profiles, seed-file discovery | ⬜ |
@@ -484,6 +485,34 @@ the system behaves correctly right up until someone attacks it.
   settings now resolve at *user* scope, so two people sharing a machine get their own language.
 - 21 new tests; mutation-verified on absolute expiry and throttle clearing.
 
+### Step 1.4 — RBAC: permissions, roles & scope
+Builds the **answer** to "may they?"; Step 1.5 builds the guarantee that anyone asks.
+- **`Module.Permissions()` joins the contract**, closing the item 0.9 D5 deferred. Permissions
+  are code-defined and reconciled at startup, which is what stops the list drifting from what
+  the code actually checks. A duplicate code across modules is fatal; a row nothing declares is
+  marked obsolete and reported.
+- **A mutation drill caught my reasoning, not my code.** D2 justified obsolete-not-delete as
+  "deleting would cascade to role_permissions" — **wrong**: grants reference the code as a plain
+  string, so there is no FK and nothing cascades. The drill proved it by *passing*. The real
+  reason is visibility: the grant survives either way, but only an obsolete row lets an
+  administrator discover a role still grants something the software no longer implements.
+  Test and design both corrected. *A mutation test that passes is telling you the test is wrong.*
+- **The 0.5 archlint rule forced a better design.** Putting the auth types in identity's
+  contract made `platform/modules` import a module, which the rule refused. They now live in
+  `internal/platform/auth`: the **types are platform, the implementation is identity**, so a
+  future sales module asks `auth.Authorizer` and never imports identity.
+- **No superuser bypass.** Administrator holds `*`, resolved by the ordinary path — removing
+  the grant removes the access. A bypass would hide resolution bugs from everyone testing as
+  an admin, which during development is everyone.
+- **Scope from the first implementation** (§14.2), with a table test pinning all nine cases —
+  including that **branch does not cover warehouse**, deferred to Phase 4 where the first
+  warehouse-scoped permission will define it.
+- **Wildcards are grant-side only**: `Can(ctx, "sales.*")` is refused, or one typo unprotects a
+  module.
+- **`config.Authorizer`'s AllowAll stub is gone**, replaced by an adapter calling RBAC at global
+  scope — the settings port stays scope-free because a setting is a company-wide fact.
+- 20 new tests; mutation-verified on obsolete-not-delete and scope enforcement.
+
 ---
 
 ## 7. Repository map (as built)
@@ -513,6 +542,7 @@ Mizan ERP/
 │   ├── modules/org/                    # company, branches, warehouses, fiscal calendar
 │   ├── modules/identity/               # users, credentials, password policy, contract
 │   ├── platform/crypto/                # Argon2id password hashing
+│   ├── platform/auth/                  # permission, scope, Authorizer port
 │   ├── platform/paths/                 # OS app-data locations
 │   ├── platform/ui/                    # presentation preferences (ui.theme)
 │   ├── api/envelope/, api/appctx/      # result envelope + per-request context
@@ -548,8 +578,9 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.4 — RBAC** (permissions sync via `Module.Permissions()`, roles,
-  grants, scope resolution, the real `config.Authorizer`). **Design first, await approval.**
+- **Immediate next: Step 1.5 — the policy mechanism**: policies declared per binding method,
+  validated at startup by reflection over the static binding set, plus the enforcement
+  decorator. This is where `Can` finally gets a caller. **Design first, await approval.**
 - **Built but not yet reached by any production path:** sessions. `Validate` is fully tested
   and nothing calls it — the binding decorator that stamps `appctx.WithActor` is Step 1.5, and
   the login screen is 1.10. Same for `must_change`, carried from 1.2.
@@ -577,6 +608,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.4: RBAC — permissions, roles, and scope
 (pending) Phase 1 Step 1.3: sessions, throttling, and the real AppContext
 (pending) Phase 1 Step 1.2: identity — Argon2id credentials and users
 (pending) Phase 1 Step 1.1: architecture rules + the org module

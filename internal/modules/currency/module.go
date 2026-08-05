@@ -5,6 +5,7 @@ import (
 	"embed"
 	"io/fs"
 
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
@@ -70,6 +71,11 @@ func (m *Module) Metadata() []metadata.SeedSpec {
 // nobody listens to is a guess, and Step 0.6 declined to invent a fake currency event for
 // exactly this reason. The seam is here and costs nothing until it is used.
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
+
+// Permissions: none yet. Currency is reference data every module reads; the operations that
+// need guarding — editing rates, applying a rate batch — arrive with the Phase 5 screens that
+// perform them. Declaring codes now would declare permissions nothing checks.
+func (m *Module) Permissions() []auth.PermissionDef { return nil }
 
 // Jobs: none yet. Scheduled rate fetching arrives with the providers in Phase 5; there is
 // nothing to fetch from while the only rate source is manual entry.

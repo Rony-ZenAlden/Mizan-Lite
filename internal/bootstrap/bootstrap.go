@@ -26,6 +26,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
@@ -171,6 +172,21 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		Clock: opts.Clock, Logger: opts.Logger,
 	})
 
+	// 6b. Org and identity services, constructed EARLY.
+	//
+	// Out of §BOOT's numbered order for one reason: config.Open takes the Authorizer that gates
+	// permissioned settings, and the real one is the identity module. Neither service reads a
+	// setting at CONSTRUCTION — only at call time, through handles that resolve against a bound
+	// context — so building them here is safe, and it is the alternative to handing config a
+	// mutable holder to fill in later, which is exactly the kind of late-bound state §6 warns
+	// against.
+	//
+	// Their MODULES are still assembled at step 10 with everything else.
+	app.Org = org.NewService(db, opts.Clock)
+	// Identity reaches org through the two-method Organisation port it declares itself — no
+	// import of org from identity, and the wiring is visible here.
+	app.Identity = identity.NewService(db, app.Org, opts.Clock)
+
 	// 7. Settings — validate declarations first: a duplicate key is a code defect and must
 	// fail on the developer's machine, not resolve arbitrarily on a customer's (D3).
 	if err = config.Default().Validate(); err != nil {
@@ -181,8 +197,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	settings, err := config.Open(ctx, db, config.Options{
 		Scopes:   appctx.Scopes{},
 		Notifier: config.NewBusNotifier(app.Bus, opts.Logger),
-		Logger:   opts.Logger,
-		Clock:    opts.Clock,
+		// The real RBAC authorizer replaces Step 0.5's AllowAll stub (D8 there, D7 here). The
+		// port is scope-free because a setting is a company-wide fact; the adapter supplies
+		// global scope.
+		Authorizer: identity.NewSettingsAuthorizer(app.Identity),
+		Logger:     opts.Logger,
+		Clock:      opts.Clock,
 	})
 	if err != nil {
 		abandon(db)
@@ -218,11 +238,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// setup wizard runs, and Start must succeed against exactly that state.
 	app.Currency = currency.NewService(db, opts.Clock, app.Trans)
 	currencyModule = currency.NewModule(app.Currency)
-	app.Org = org.NewService(db, opts.Clock)
 	orgModule = org.NewModule(app.Org)
-	// Identity takes org's service through the one-method Organisation port it declares
-	// itself — no import of org from identity, and the wiring is visible here.
-	app.Identity = identity.NewService(db, app.Org, opts.Clock)
 	identityModule = identity.NewModule(app.Identity)
 
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
@@ -249,6 +265,14 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		}
 	}
 	if err := app.registerJobs(ordered); err != nil {
+		abandon(db)
+		return nil, err
+	}
+
+	// 11b. Permission sync (Step 1.4). Permissions are CODE-DEFINED (§14.1): each module says
+	// what it protects and this reconciles the table, which is what stops the permission list
+	// drifting from what the code actually checks.
+	if err := app.syncPermissions(app.Ctx, ordered); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -338,6 +362,32 @@ func (a *App) runMigrations(ctx context.Context, mods ...modules.Module) error {
 			slog.Int("applied", result.Applied),
 			slog.Int64("to_version", result.ToVersion))
 	}
+	return nil
+}
+
+// syncPermissions reconciles the permissions table with what this build declares.
+//
+// A duplicate code across two modules is FATAL — a code defect that must fail on the
+// developer's machine (0.10 D3). A row nothing declares is marked obsolete and REPORTED, never
+// deleted: it is an inert data leftover, and deleting it would cascade to role_permissions and
+// silently change what every role grants.
+func (a *App) syncPermissions(ctx context.Context, mods []modules.Module) error {
+	byModule := make(map[string][]auth.PermissionDef, len(mods))
+	for _, m := range mods {
+		if defs := m.Permissions(); len(defs) > 0 {
+			byModule[m.Name()] = defs
+		}
+	}
+	report, err := a.Identity.SyncPermissions(ctx, byModule)
+	if err != nil {
+		return errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,
+			"the declared permissions are invalid")
+	}
+	if report.Obsolete > 0 {
+		a.log.WarnContext(ctx, "permissions no longer declared by any module were marked obsolete",
+			slog.Int("count", report.Obsolete))
+	}
+	a.log.InfoContext(ctx, "permissions synced", slog.Int("declared", report.Declared))
 	return nil
 }
 

@@ -9,6 +9,7 @@ package modules
 import (
 	"io/fs"
 
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
@@ -56,6 +57,17 @@ type Module interface {
 	// established two distinct mechanisms — synchronous domain events and the durable
 	// outbox — and a module may legitimately use either.
 	Subscribe(bus *eventbus.Bus, integration *outbox.Subscribers) error
+
+	// Permissions are the permissions this module protects (§14.1).
+	//
+	// Deferred by Step 0.9 (D5) because auth.PermissionDef did not exist and declaring a
+	// method returning a type invented on the spot would have been the speculative fiction
+	// 0.6 avoided with placeholder events. It exists now, so the method joins the contract.
+	//
+	// Permissions are CODE-DEFINED and never user-created: the composition root reconciles
+	// them into the table at startup, which is what stops the permission list drifting from
+	// what the code actually checks.
+	Permissions() []auth.PermissionDef
 
 	// Jobs are the module's background tasks (§24).
 	Jobs() []jobs.Registration

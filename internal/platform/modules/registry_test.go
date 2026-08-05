@@ -7,6 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
@@ -30,6 +31,7 @@ func (f fake) Settings() []config.Definition                      { return f.set
 func (f fake) FeatureFlags() []config.FlagDef                     { return f.flags }
 func (f fake) Metadata() []metadata.SeedSpec                      { return nil }
 func (f fake) Jobs() []jobs.Registration                          { return nil }
+func (f fake) Permissions() []auth.PermissionDef                  { return nil }
 func (f fake) Bindings() any                                      { return nil }
 func (f fake) Subscribe(*eventbus.Bus, *outbox.Subscribers) error { return nil }
 

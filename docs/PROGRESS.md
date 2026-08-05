@@ -55,6 +55,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_2_IDENTITY.md` | Step 1.2: Argon2id credentials, users, password policy, `Authenticator`. |
 | `docs/architecture/STEP_1_3_SESSIONS.md` | Step 1.3: sessions, throttling, the sweep job, and the real AppContext. |
 | `docs/architecture/STEP_1_4_RBAC.md` | Step 1.4: permissions, roles, scope resolution, the real `Authorizer`. |
+| `docs/architecture/STEP_1_5_POLICY.md` | Step 1.5: policies per binding, the guard, and the startup coverage check. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -115,8 +116,8 @@ and D7 synchronous in-transaction audit).
 | **1.2** | Identity: credentials (Argon2id), `Authenticator` port, users | ✅ committed |
 | **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ✅ committed |
 | **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ✅ committed |
-| **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ⬜ next — design first |
-| **1.6** | Field-level redaction | ⬜ |
+| **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ✅ committed |
+| **1.6** | Field-level redaction | ⬜ next — design first |
 | **1.7** | Audit module (in-transaction, D7) | ⬜ |
 | **1.8** | Country + business profiles, seed-file discovery | ⬜ |
 | **1.9** | Setup wizard backend | ⬜ |
@@ -513,6 +514,30 @@ Builds the **answer** to "may they?"; Step 1.5 builds the guarantee that anyone 
   scope — the settings port stays scope-free because a setting is a company-wide fact.
 - 20 new tests; mutation-verified on obsolete-not-delete and scope enforcement.
 
+### Step 1.5 — The policy mechanism & enforcement
+Step 1.4 built the **answer** to "may they?"; this builds the guarantee that **anyone asks**.
+- **The guarantee is structural, not declarative (D1).** The phase design proposed declaring a
+  policy per binding method and validating at startup that each has one — which proves a policy
+  is *declared*, not *consulted*. Implementing it showed that was avoidable: every method
+  already reached the graph through `resolve()`, so the **guard became the accessor**. A method
+  that skips it has no database, no services, no context. Not "should not" — *cannot*.
+- **The 0.11 test suite failing was the proof.** Seven assertions broke with
+  *"failed after Attach: identity.session_invalid"* — exactly right: the graph being ready says
+  nothing about who is asking. Split into a refuses-without-session test and a positive one
+  that signs in through a real `Auth.Login`.
+- **One session per process (D2).** A Wails binding has no request object; threading a token
+  through every JS signature would put a credential in every call site. A desktop ERP has one
+  user at the machine, so the process holds the token — and **it never crosses to the frontend**
+  (D3), so it cannot be logged, stored in localStorage, or read by an injected script.
+- **The public surface is three methods**, pinned by a test so widening it is a visible diff.
+  Logout is public so a *just-expired* session can still clear itself; Me is public because
+  "am I signed in?" is asked before the answer is known.
+- **Preferences now resolve at user scope**, closing 0.11 D4's system-scope limitation — two
+  people sharing a machine keep their own language and theme.
+- Mutation-verified: skipping the `Can` call leaked the full job list to a permissionless user;
+  renaming a policy key caught both the uncovered method and the orphaned entry at once.
+- 16 new tests.
+
 ---
 
 ## 7. Repository map (as built)
@@ -546,7 +571,8 @@ Mizan ERP/
 │   ├── platform/paths/                 # OS app-data locations
 │   ├── platform/ui/                    # presentation preferences (ui.theme)
 │   ├── api/envelope/, api/appctx/      # result envelope + per-request context
-│   ├── api/bindings/                   # the static Wails façades (Boot/System/Config/Ops/Money)
+│   ├── api/bindings/                   # static Wails façades + the policy guard
+│   ├── api/policy/                     # what each binding method requires
 │   ├── bootstrap/                      # the composition root
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── locales/{en,ar}/                     # go:embed'd catalogs, shared with the frontend
@@ -578,9 +604,8 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.5 — the policy mechanism**: policies declared per binding method,
-  validated at startup by reflection over the static binding set, plus the enforcement
-  decorator. This is where `Can` finally gets a caller. **Design first, await approval.**
+- **Immediate next: Step 1.6 — field-level redaction** (§14.2): a permission can currently gate
+  a whole method, not a field within its response. **Design first, await approval.**
 - **Built but not yet reached by any production path:** sessions. `Validate` is fully tested
   and nothing calls it — the binding decorator that stamps `appctx.WithActor` is Step 1.5, and
   the login screen is 1.10. Same for `must_change`, carried from 1.2.
@@ -608,6 +633,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.5: the policy mechanism and enforcement
 (pending) Phase 1 Step 1.4: RBAC — permissions, roles, and scope
 (pending) Phase 1 Step 1.3: sessions, throttling, and the real AppContext
 (pending) Phase 1 Step 1.2: identity — Argon2id credentials and users

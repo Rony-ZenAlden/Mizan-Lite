@@ -6,11 +6,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mizan-erp/mizan/internal/api/bindings"
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
+	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
 	"github.com/mizan-erp/mizan/internal/platform/paths"
 	"github.com/mizan-erp/mizan/internal/platform/ui"
@@ -36,6 +39,52 @@ func boot(t *testing.T) *bootstrap.App {
 	}
 	t.Cleanup(func() { _ = app.Shutdown(context.Background()) })
 	return app
+}
+
+// signedIn returns a binding set with an administrator logged in.
+//
+// The full path a real launch takes: provision the company, seed the roles, create the
+// administrator, and sign in through the Auth binding — so the token the guard reads is one
+// Login actually issued.
+func signedIn(t *testing.T) (*bindings.Set, *bootstrap.App) {
+	t.Helper()
+	app := boot(t)
+	ctx := app.Context()
+
+	result, err := app.Org.Provision(ctx, org.ProvisionInput{
+		Company: org.CompanyInput{
+			Code: "MAIN", Name: "Demo", CountryCode: "SY", FunctionalCurrency: "SYP",
+		},
+		Branch:               org.LocationInput{Code: "HQ", Name: "Head Office"},
+		Warehouse:            org.LocationInput{Code: "WH1", Name: "Main"},
+		FiscalYearStartMonth: time.January,
+		FiscalYearStartYear:  2026,
+	})
+	if err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	if err = app.Identity.SeedRoles(ctx, result.CompanyID); err != nil {
+		t.Fatalf("SeedRoles: %v", err)
+	}
+	user, err := app.Identity.CreateUser(ctx, identity.CreateUserInput{
+		CompanyID: result.CompanyID, Username: "admin", DisplayName: "Admin",
+		Password: "a sufficiently long passphrase", IsSystem: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err = app.Identity.AssignRoleByCode(ctx, user.ID, result.CompanyID, "administrator"); err != nil {
+		t.Fatalf("AssignRoleByCode: %v", err)
+	}
+
+	set := bindings.New()
+	set.Attach(app)
+
+	login := set.Auth.Login("admin", "a sufficiently long passphrase", false)
+	if !login.OK {
+		t.Fatalf("Login failed: %+v", login.Error)
+	}
+	return set, app
 }
 
 // probe describes one guarded binding method, so the not-ready rule can be asserted over ALL
@@ -120,7 +169,12 @@ func TestEveryGuardedMethodReportsNotReadyBeforeAttach(t *testing.T) {
 	}
 }
 
-func TestGuardedMethodsWorkAfterAttach(t *testing.T) {
+// TestGuardedMethodsStillNeedASessionAfterAttach.
+//
+// Until Step 1.5 this test asserted that attaching the graph was ENOUGH — every guarded method
+// then succeeded. That is no longer true, and the change is the point of the step: the graph
+// being ready says nothing about who is asking.
+func TestGuardedMethodsStillNeedASessionAfterAttach(t *testing.T) {
 	app := boot(t)
 	set := bindings.New()
 	set.Attach(app)
@@ -128,8 +182,25 @@ func TestGuardedMethodsWorkAfterAttach(t *testing.T) {
 	for _, p := range guardedMethods() {
 		t.Run(p.name, func(t *testing.T) {
 			ok, code := p.call(set)
+			if ok {
+				t.Fatalf("%s succeeded with no session — the surface is unauthenticated", p.name)
+			}
+			if code != "identity.session_invalid" {
+				t.Errorf("%s code = %q, want a session error", p.name, code)
+			}
+		})
+	}
+}
+
+// TestGuardedMethodsWorkForASignedInUser is the positive half.
+func TestGuardedMethodsWorkForASignedInUser(t *testing.T) {
+	set, _ := signedIn(t)
+
+	for _, p := range guardedMethods() {
+		t.Run(p.name, func(t *testing.T) {
+			ok, code := p.call(set)
 			if !ok {
-				t.Fatalf("%s failed after Attach: %s", p.name, code)
+				t.Fatalf("%s failed for a signed-in administrator: %s", p.name, code)
 			}
 		})
 	}
@@ -157,8 +228,12 @@ func TestAttachIsSafeUnderConcurrentCalls(t *testing.T) {
 	set.Attach(app)
 	wg.Wait()
 
-	if r := set.System.Health(); !r.OK {
-		t.Errorf("Health failed after Attach: %+v", r.Error)
+	// Health still needs a session; what this test asserts is that the concurrent Attach did
+	// not tear or panic, and that the façade is functional afterwards.
+	if r := set.System.Health(); r.OK {
+		t.Error("Health succeeded with no session")
+	} else if r.Error.Code != "identity.session_invalid" {
+		t.Errorf("Health after Attach = %q, want a session error", r.Error.Code)
 	}
 }
 
@@ -264,8 +339,8 @@ func TestFailedBootLeavesEveryBindingGuarded(t *testing.T) {
 
 func TestAllReturnsEveryBinding(t *testing.T) {
 	set := bindings.New()
-	if got := len(set.All()); got != 5 {
-		t.Errorf("All() returned %d bindings, want 5 (Boot, System, Config, Ops, Money)", got)
+	if got := len(set.All()); got != 6 {
+		t.Errorf("All() returned %d bindings, want 6 (Boot, System, Auth, Config, Ops, Money)", got)
 	}
 	for i, b := range set.All() {
 		if b == nil {

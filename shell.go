@@ -81,6 +81,18 @@ func (s *Shell) boot(ctx context.Context) {
 	s.app = built
 	s.mu.Unlock()
 
+	// The binding surface must be fully declared before it is usable (Step 1.5).
+	//
+	// Checked here rather than in bootstrap because the SET is the shell's, not the graph's —
+	// and it is fatal: a method reachable from JavaScript with no declared policy is exactly
+	// what §14.3 says must never ship.
+	if err := s.bindings.ValidatePolicies(declaredPermissionCodes(built)); err != nil {
+		s.bindings.Fail(err, "")
+		wailsruntime.EventsEmit(ctx, eventBootFailed)
+		slog.ErrorContext(ctx, "the binding surface is not fully protected", slog.Any("error", err))
+		return
+	}
+
 	s.bindings.Attach(built)
 	wailsruntime.EventsEmit(ctx, eventBootReady)
 	slog.InfoContext(ctx, "mizan ready")
@@ -129,4 +141,16 @@ func backupPathOf(err error) string {
 		return ""
 	}
 	return e.Params["backup"]
+}
+
+// declaredPermissionCodes collects every permission the built modules declare, so the policy
+// check can reject a policy naming one that could never be granted.
+func declaredPermissionCodes(app *bootstrap.App) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range app.Modules {
+		for _, def := range m.Permissions() {
+			out[def.Code] = true
+		}
+	}
+	return out
 }

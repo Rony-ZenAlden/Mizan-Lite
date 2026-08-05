@@ -2,6 +2,8 @@ package bindings
 
 import (
 	"github.com/mizan-erp/mizan/internal/api/envelope"
+	"github.com/mizan-erp/mizan/internal/api/policy"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
 )
 
 // CurrencyDTO is a currency as the frontend sees it.
@@ -17,6 +19,13 @@ type CurrencyDTO struct {
 	SymbolPosition string `json:"symbolPosition"`
 }
 
+// moneyPolicies declares what Money's methods require.
+func moneyPolicies() map[string]policy.Policy {
+	return map[string]policy.Policy{
+		"Currencies": policy.Requires(identity.PermUserView),
+	}
+}
+
 // Money exposes the currency catalogue.
 type Money struct{ graph }
 
@@ -25,11 +34,10 @@ type Money struct{ graph }
 // The end-to-end proof that the graph is genuinely wired: one call through the per-request
 // context, the settings-bound locale, the currency module, and the i18n translation resolver.
 func (m *Money) Currencies() envelope.Result[[]CurrencyDTO] {
-	app, ok := m.resolve()
-	if !ok {
-		return envelope.Fail[[]CurrencyDTO](notReady())
+	ctx, app, err := m.guard("Currencies")
+	if err != nil {
+		return envelope.Fail[[]CurrencyDTO](err)
 	}
-	ctx := app.Context()
 
 	infos, err := app.Currency.List(ctx, false)
 	if err != nil {

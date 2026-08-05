@@ -1,8 +1,11 @@
 {
   "app.bridge_unavailable": "Mizan cannot reach its backend. Please restart the application.",
   "app.call_failed": "That action could not be completed. Please try again.",
+  "app.forbidden": "You do not have permission to do that.",
   "app.malformed_response": "Mizan received an unexpected response from its backend.",
   "app.not_ready": "Mizan is still starting. Please wait a moment.",
+  "app.policy_coverage": "This build of Mizan is misconfigured and cannot start safely.",
+  "app.policy_missing": "This action is not correctly configured. Please contact support.",
   "app.unknown_error": "Something went wrong.",
   "bootstrap.migration_failed": "The database update failed, so Mizan cannot start. Your data is unchanged.",
   "bootstrap.registry_invalid": "This build of Mizan is misconfigured. Please reinstall or contact support.",

@@ -33,6 +33,21 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
         backupPath: "",
       }),
   },
+  Auth: {
+    // Browser dev runs as a signed-in administrator: there is no Go process to hold a session,
+    // and a mock that could not sign in would make every guarded screen unreachable.
+    Login: () =>
+      ok({
+        signedIn: true, userId: "dev", username: "admin", displayName: "Developer",
+        mustChange: false, permissions: ["*"],
+      }),
+    Logout: () => ok(true),
+    Me: () =>
+      ok({
+        signedIn: true, userId: "dev", username: "admin", displayName: "Developer",
+        mustChange: false, permissions: ["*"],
+      }),
+  },
   System: {
     Health: () =>
       ok({

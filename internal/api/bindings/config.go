@@ -3,6 +3,11 @@ package bindings
 import (
 	"context"
 
+	"github.com/mizan-erp/mizan/internal/api/appctx"
+	"github.com/mizan-erp/mizan/internal/api/policy"
+	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
+
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/kernel/locale"
 	"github.com/mizan-erp/mizan/internal/platform/config"
@@ -19,6 +24,19 @@ type PreferencesDTO struct {
 	AvailableLocales []string `json:"availableLocales"`
 }
 
+// configPolicies declares what Config's methods require.
+//
+// Reading and setting your OWN language and theme needs no permission beyond being signed in:
+// they are personal preferences resolved at user scope (1.3 §6), and gating them behind an
+// administrative right would mean a cashier could not read their own screen.
+func configPolicies() map[string]policy.Policy {
+	return map[string]policy.Policy{
+		"Preferences": policy.Requires(identity.PermUserView),
+		"SetLocale":   policy.Requires(identity.PermUserView),
+		"SetTheme":    policy.Requires(identity.PermUserView),
+	}
+}
+
 // Config exposes presentation preferences as settings.
 //
 // Step 0.11 §1.4: the shell used to hold locale in component state, which meant the frontend's
@@ -30,11 +48,11 @@ type Config struct{ graph }
 
 // Preferences returns the resolved locale and theme.
 func (c *Config) Preferences() envelope.Result[PreferencesDTO] {
-	app, ok := c.resolve()
-	if !ok {
-		return envelope.Fail[PreferencesDTO](notReady())
+	ctx, _, err := c.guard("Preferences")
+	if err != nil {
+		return envelope.Fail[PreferencesDTO](err)
 	}
-	return envelope.Ok(c.read(app.Context()))
+	return envelope.Ok(c.read(ctx))
 }
 
 // SetLocale changes the active language and returns the new preferences.
@@ -43,28 +61,29 @@ func (c *Config) Preferences() envelope.Result[PreferencesDTO] {
 // without restart" is the architecture doing what §16.3 designed it for, rather than a
 // frontend trick.
 func (c *Config) SetLocale(value string) envelope.Result[PreferencesDTO] {
-	return c.set(i18n.LocaleSettingKey, value)
+	return c.set("SetLocale", i18n.LocaleSettingKey, value)
 }
 
 // SetTheme changes the colour scheme and returns the new preferences.
 func (c *Config) SetTheme(value string) envelope.Result[PreferencesDTO] {
-	return c.set(ui.ThemeSettingKey, value)
+	return c.set("SetTheme", ui.ThemeSettingKey, value)
 }
 
 // set writes one preference inside a Unit of Work and returns the resolved result.
 //
-// Phase 0 writes at SYSTEM scope because identity does not exist: appctx.Scopes reports no
-// user (0.10 §6.2). Both settings already permit user scope, so Phase 1 changes the scope
-// argument and nothing else — the shell does not change at all.
-func (c *Config) set(key, value string) envelope.Result[PreferencesDTO] {
-	app, ok := c.resolve()
-	if !ok {
-		return envelope.Fail[PreferencesDTO](notReady())
+// Step 0.11 (D4) wrote at SYSTEM scope because identity did not exist and appctx.Scopes
+// reported no user. It now writes at USER scope when there is an actor, which is what makes
+// two people sharing a machine get their own language and theme — and the shell did not change
+// at all, exactly as 0.11 predicted.
+func (c *Config) set(method, key, value string) envelope.Result[PreferencesDTO] {
+	ctx, app, err := c.guard(method)
+	if err != nil {
+		return envelope.Fail[PreferencesDTO](err)
 	}
-	ctx := app.Context()
 
-	err := app.DB.Do(ctx, func(ctx context.Context) error {
-		return app.Settings.Set(ctx, config.ScopeSystem, "", key, value)
+	err = app.DB.Do(ctx, func(ctx context.Context) error {
+		scope, scopeID := preferenceScope(ctx)
+		return app.Settings.Set(ctx, scope, scopeID, key, value)
 	})
 	if err != nil {
 		// A rejected value (an unparseable locale, a theme outside the enum) arrives here as a
@@ -73,13 +92,24 @@ func (c *Config) set(key, value string) envelope.Result[PreferencesDTO] {
 		return envelope.Fail[PreferencesDTO](err)
 	}
 
-	// Read through a FRESH context, not the one the write used.
+	// Read through a FRESH context, not the one the write used — and one that still carries the
+	// actor.
 	//
-	// app.Context() stamps the resolved locale onto the context, and i18n.Active prefers a
-	// stamped non-default locale over the setting. Reusing ctx would therefore echo the
-	// PREVIOUS language back: switching ar→en would return "ar", because "ar" was stamped
-	// before the write and takes precedence over the freshly-stored "en".
-	return envelope.Ok(c.read(app.Context()))
+	// Two distinct reasons, and missing either gives a wrong answer:
+	//
+	//   - app.Context() stamps the resolved locale, and i18n.Active prefers a stamped
+	//     non-default locale over the setting. Reusing ctx would echo the PREVIOUS language:
+	//     switching ar→en returns "ar", because "ar" was stamped before the write.
+	//   - The preference now lives at USER scope, so a context with no actor resolves it at
+	//     system scope and reports whatever the machine default is rather than what this user
+	//     just chose.
+	//
+	// Re-guarding produces both: a fresh context with the actor stamped.
+	fresh, _, err := c.guard(method)
+	if err != nil {
+		return envelope.Fail[PreferencesDTO](err)
+	}
+	return envelope.Ok(c.read(fresh))
 }
 
 // read resolves the current preferences for ctx.
@@ -99,6 +129,17 @@ func (c *Config) read(ctx context.Context) PreferencesDTO {
 		Theme:            ui.Theme.Get(ctx),
 		AvailableLocales: available,
 	}
+}
+
+// preferenceScope decides where a preference is stored.
+//
+// User scope when someone is signed in; system scope otherwise — which is the setup wizard's
+// state, where "the machine's language" is the only meaningful answer.
+func preferenceScope(ctx context.Context) (config.Scope, id.ID) {
+	if actor, ok := appctx.ActorFrom(ctx); ok && !actor.UserID.IsZero() {
+		return config.ScopeUser, actor.UserID
+	}
+	return config.ScopeSystem, ""
 }
 
 // resolvedLocale reports the language the backend will actually use.

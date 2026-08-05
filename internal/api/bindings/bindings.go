@@ -30,6 +30,7 @@ package bindings
 import (
 	"sync"
 
+	"github.com/mizan-erp/mizan/internal/api/policy"
 	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
@@ -53,7 +54,15 @@ func notReady() error {
 type graph struct {
 	mu  sync.RWMutex
 	app *bootstrap.App
+	// policies are the declarations for THIS façade's methods, and session is the window's
+	// current token. Both are set at construction and never change, so guard needs no extra
+	// locking for them.
+	policies map[string]policy.Policy
+	session  *currentSession
 }
+
+// declaredPolicies exposes this façade's declarations to ValidatePolicies.
+func (g *graph) declaredPolicies() map[string]policy.Policy { return g.policies }
 
 func (g *graph) attach(app *bootstrap.App) {
 	g.mu.Lock()
@@ -70,21 +79,30 @@ func (g *graph) resolve() (*bootstrap.App, bool) {
 
 // Set is every binding struct, constructed before the graph exists.
 type Set struct {
-	Boot   *Boot
-	System *System
-	Config *Config
-	Ops    *Ops
-	Money  *Money
+	Boot    *Boot
+	System  *System
+	Config  *Config
+	Ops     *Ops
+	Money   *Money
+	Auth    *Auth
+	session *currentSession
 }
 
 // New constructs the binding set. No database, no graph, no I/O.
 func New() *Set {
+	// One session holder shared by every façade: the window has one signed-in user (D2).
+	session := &currentSession{}
+	mk := func(policies map[string]policy.Policy) graph {
+		return graph{policies: policies, session: session}
+	}
 	return &Set{
-		Boot:   newBoot(),
-		System: &System{},
-		Config: &Config{},
-		Ops:    &Ops{},
-		Money:  &Money{},
+		Boot:    newBoot(),
+		System:  &System{graph: mk(systemPolicies())},
+		Config:  &Config{graph: mk(configPolicies())},
+		Ops:     &Ops{graph: mk(opsPolicies())},
+		Money:   &Money{graph: mk(moneyPolicies())},
+		Auth:    &Auth{graph: mk(authPolicies()), session: session},
+		session: session,
 	}
 }
 
@@ -92,7 +110,7 @@ func New() *Set {
 //
 // The order is stable so the generated JavaScript bindings are stable.
 func (s *Set) All() []any {
-	return []any{s.Boot, s.System, s.Config, s.Ops, s.Money}
+	return []any{s.Boot, s.System, s.Auth, s.Config, s.Ops, s.Money}
 }
 
 // Attach wires the built graph into every façade and marks boot ready.
@@ -103,6 +121,7 @@ func (s *Set) Attach(app *bootstrap.App) {
 	s.Config.attach(app)
 	s.Ops.attach(app)
 	s.Money.attach(app)
+	s.Auth.attach(app)
 	// Ready is set LAST, after every façade can serve. The shell treats "ready" as permission
 	// to mount and immediately calls bindings; marking ready first would open a window in
 	// which those calls fail with not-ready for no reason.

@@ -1,6 +1,8 @@
 package bindings
 
 import (
+	"github.com/mizan-erp/mizan/internal/api/policy"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
@@ -35,6 +37,18 @@ type RunRecordDTO struct {
 	TriggeredBy string `json:"triggeredBy"`
 }
 
+// opsPolicies declares what Ops's methods require.
+//
+// Background-job state is operator information: which jobs exist, when they last ran, what
+// failed. A cashier has no business reading it, and §24.2's point — that invisible background
+// failure is how customers lose backups — is about the OWNER seeing it, not everyone.
+func opsPolicies() map[string]policy.Policy {
+	return map[string]policy.Policy{
+		"Jobs": policy.Requires(identity.PermSessionView),
+		"Runs": policy.Requires(identity.PermSessionView),
+	}
+}
+
 // Ops exposes background-job state for the diagnostics panel.
 //
 // §24.2 is the reason this exists in Phase 0 rather than Phase 9: "invisible background
@@ -44,12 +58,12 @@ type Ops struct{ graph }
 
 // Jobs returns every declared job with its schedule and last outcome.
 func (o *Ops) Jobs() envelope.Result[[]JobStateDTO] {
-	app, ok := o.resolve()
-	if !ok {
-		return envelope.Fail[[]JobStateDTO](notReady())
+	ctx, app, err := o.guard("Jobs")
+	if err != nil {
+		return envelope.Fail[[]JobStateDTO](err)
 	}
 
-	states, err := app.Scheduler.JobStates(app.Context())
+	states, err := app.Scheduler.JobStates(ctx)
 	if err != nil {
 		return envelope.Fail[[]JobStateDTO](err)
 	}
@@ -74,12 +88,12 @@ func (o *Ops) Jobs() envelope.Result[[]JobStateDTO] {
 // wants a permission and a confirmation, and RBAC does not exist until Phase 1. Shipping it
 // unguarded now would mean taking a control away later, which is worse than not having it.
 func (o *Ops) Runs(jobKey string, limit int) envelope.Result[[]RunRecordDTO] {
-	app, ok := o.resolve()
-	if !ok {
-		return envelope.Fail[[]RunRecordDTO](notReady())
+	ctx, app, err := o.guard("Runs")
+	if err != nil {
+		return envelope.Fail[[]RunRecordDTO](err)
 	}
 
-	records, err := app.Scheduler.RecentRuns(app.Context(), jobKey, limit)
+	records, err := app.Scheduler.RecentRuns(ctx, jobKey, limit)
 	if err != nil {
 		return envelope.Fail[[]RunRecordDTO](err)
 	}

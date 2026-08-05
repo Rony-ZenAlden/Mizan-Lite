@@ -51,6 +51,32 @@ export function onBootEvent(callback: () => void): () => void {
   };
 }
 
+// ── Auth ────────────────────────────────────────────────────────────────────────
+
+export interface SessionInfo {
+  signedIn: boolean;
+  userId: string;
+  username: string;
+  displayName: string;
+  mustChange: boolean;
+  /** Cosmetic only — the backend re-checks every call (§14.3). */
+  permissions: string[];
+}
+
+/** Signs in. The session token never crosses this boundary; it lives in the Go process. */
+export function login(username: string, password: string, remember: boolean): Promise<SessionInfo> {
+  return call<SessionInfo>("Auth", "Login", username, password, remember);
+}
+
+export function logout(): Promise<boolean> {
+  return call<boolean>("Auth", "Logout");
+}
+
+/** Asks "am I signed in, and as whom?" — resolves with signedIn:false rather than throwing. */
+export function me(): Promise<SessionInfo> {
+  return call<SessionInfo>("Auth", "Me");
+}
+
 // ── System ──────────────────────────────────────────────────────────────────────
 
 export interface HealthInfo {

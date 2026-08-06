@@ -185,10 +185,10 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// against.
 	//
 	// Their MODULES are still assembled at step 10 with everything else.
-	app.Org = org.NewService(db, opts.Clock)
+	app.Org = org.NewService(db, opts.Clock, app.Bus)
 	// Identity reaches org through the two-method Organisation port it declares itself — no
 	// import of org from identity, and the wiring is visible here.
-	app.Identity = identity.NewService(db, app.Org, opts.Clock)
+	app.Identity = identity.NewService(db, app.Org, opts.Clock, app.Bus)
 
 	// 7. Settings — validate declarations first: a duplicate key is a code defect and must
 	// fail on the developer's machine, not resolve arbitrarily on a customer's (D3).
@@ -243,7 +243,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	currencyModule = currency.NewModule(app.Currency)
 	orgModule = org.NewModule(app.Org)
 	identityModule = identity.NewModule(app.Identity)
-	app.Audit = audit.NewService(db, opts.Clock)
+	app.Audit = audit.NewService(db, opts.Clock, auditActors{})
 	auditModule = audit.NewModule(app.Audit)
 
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:

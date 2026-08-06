@@ -9,6 +9,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/appctx"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/identity/domain"
 	"github.com/mizan-erp/mizan/internal/modules/identity/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
@@ -189,8 +190,23 @@ func (s *Service) RoleGrants(ctx context.Context, roleID id.ID) ([]string, error
 }
 
 // GrantToRole adds a permission to a role.
+//
+// Audited, and audited atomically: a permission change is the single most security-relevant
+// write this module performs, and "someone gained this permission but we cannot say who
+// granted it" is the exact question the trail exists to answer.
 func (s *Service) GrantToRole(ctx context.Context, roleID id.ID, permission string) error {
-	return s.repos.GrantPermission(ctx, roleID, permission)
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		if err := s.repos.GrantPermission(ctx, roleID, permission); err != nil {
+			return err
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionRoleGranted,
+			EntityType:  EntityRole,
+			EntityID:    roleID,
+			EntityLabel: s.roleLabel(ctx, roleID),
+			After:       grantSnapshot{RoleID: roleID, Permission: permission},
+		})
+	})
 }
 
 // RevokeFromRole removes a permission from a role.
@@ -198,17 +214,53 @@ func (s *Service) GrantToRole(ctx context.Context, roleID id.ID, permission stri
 // Named for its object rather than shortened to Revoke: sessions are revoked too, and a
 // call site reading `svc.Revoke(x, y)` should not have to guess which.
 func (s *Service) RevokeFromRole(ctx context.Context, roleID id.ID, permission string) error {
-	return s.repos.RevokePermission(ctx, roleID, permission)
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		if err := s.repos.RevokePermission(ctx, roleID, permission); err != nil {
+			return err
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionRoleRevoked,
+			EntityType:  EntityRole,
+			EntityID:    roleID,
+			EntityLabel: s.roleLabel(ctx, roleID),
+			Before:      grantSnapshot{RoleID: roleID, Permission: permission},
+		})
+	})
 }
 
 // AssignRole gives a user a role within a scope.
 func (s *Service) AssignRole(ctx context.Context, userID, roleID id.ID, scope auth.Scope) error {
-	return s.repos.AssignRole(ctx, userID, roleID, scope)
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		if err := s.repos.AssignRole(ctx, userID, roleID, scope); err != nil {
+			return err
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionRoleAssigned,
+			EntityType:  EntityUser,
+			EntityID:    userID,
+			EntityLabel: s.usernameFor(ctx, userID),
+			After: assignmentSnapshot{
+				UserID: userID, RoleID: roleID, RoleCode: s.roleLabel(ctx, roleID),
+				ScopeKind: string(scope.Kind), ScopeID: scope.ID,
+			},
+		})
+	})
 }
 
 // UnassignRole removes a role from a user.
 func (s *Service) UnassignRole(ctx context.Context, userID, roleID id.ID) error {
-	return s.repos.UnassignRole(ctx, userID, roleID)
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		if err := s.repos.UnassignRole(ctx, userID, roleID); err != nil {
+			return err
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionRoleUnassigned,
+			EntityType:  EntityUser,
+			EntityID:    userID,
+			EntityLabel: s.usernameFor(ctx, userID),
+			Before:      assignmentSnapshot{UserID: userID, RoleID: roleID, RoleCode: s.roleLabel(ctx, roleID)},
+		})
+	})
 }
 
 // AssignRoleByCode is the setup wizard's path: make this user an Administrator.
@@ -220,7 +272,30 @@ func (s *Service) AssignRoleByCode(ctx context.Context, userID, companyID id.ID,
 	if err != nil {
 		return err
 	}
-	return s.repos.AssignRole(ctx, userID, role.ID, auth.Global())
+	return s.AssignRole(ctx, userID, role.ID, auth.Global())
+}
+
+// roleLabel resolves a role's code for an audit entry, best-effort — an entry with no label
+// still answers who did what, which a missing entry does not.
+func (s *Service) roleLabel(ctx context.Context, roleID id.ID) string {
+	roles, err := s.repos.RoleByID(ctx, roleID)
+	if err != nil {
+		return ""
+	}
+	return roles.Code
+}
+
+type grantSnapshot struct {
+	RoleID     id.ID  `json:"roleId"`
+	Permission string `json:"permission"`
+}
+
+type assignmentSnapshot struct {
+	UserID    id.ID  `json:"userId"`
+	RoleID    id.ID  `json:"roleId"`
+	RoleCode  string `json:"roleCode,omitempty"`
+	ScopeKind string `json:"scopeKind,omitempty"`
+	ScopeID   id.ID  `json:"scopeId,omitempty"`
 }
 
 // ── the config.Authorizer adapter ───────────────────────────────────────────────

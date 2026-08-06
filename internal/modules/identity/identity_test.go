@@ -11,12 +11,14 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/identity/domain"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
+	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
 	"github.com/mizan-erp/mizan/migrations"
 )
@@ -36,6 +38,27 @@ func newFixture(t *testing.T) (*identity.Service, *database.Store, id.ID) {
 // be exercised against controlled time rather than by sleeping.
 func newFixtureAt(t *testing.T, clk clock.Clock) (*identity.Service, *database.Store, id.ID) {
 	t.Helper()
+	f := newAuditedFixture(t, clk)
+	return f.identity, f.store, f.companyID
+}
+
+// fixture is the whole wired graph a 1.7 test needs to see.
+type fixture struct {
+	identity  *identity.Service
+	audit     *audit.Service
+	store     *database.Store
+	bus       *eventbus.Bus
+	companyID id.ID
+}
+
+// newAuditedFixture is newFixtureAt with the audit module wired in as well.
+//
+// Every fixture wires it, not just the audit tests. That is the point: the audit write happens
+// inside every identity transaction, so if it can break an ordinary operation, the ordinary
+// tests are the ones that must notice. A fixture that omitted audit would leave the D7 path
+// exercised by two tests instead of forty.
+func newAuditedFixture(t *testing.T, clk clock.Clock) fixture {
+	t.Helper()
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "test.db")
 
@@ -50,6 +73,7 @@ func newFixtureAt(t *testing.T, clk clock.Clock) (*identity.Service, *database.S
 		currency.NewModule(nil).Migrations(),
 		org.NewModule(nil).Migrations(),
 		identity.NewModule(nil).Migrations(),
+		audit.NewModule(nil).Migrations(),
 	)
 	runner, err := migrate.New(store, migrate.Options{FS: merged, DBPath: path, SkipBackup: true})
 	if err != nil {
@@ -69,7 +93,14 @@ func newFixtureAt(t *testing.T, clk clock.Clock) (*identity.Service, *database.S
 		t.Fatalf("seeding currency: %v", err)
 	}
 
-	orgSvc := org.NewService(store, clk)
+	// The real bus with the real subscriber, exactly as the composition root wires it.
+	bus := eventbus.New(eventbus.Options{})
+	auditSvc := audit.NewService(store, clk, testActors{})
+	if err = audit.NewModule(auditSvc).Subscribe(bus, nil); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	orgSvc := org.NewService(store, clk, bus)
 	result, err := orgSvc.Provision(ctx, org.ProvisionInput{
 		Company: org.CompanyInput{
 			Code: "MAIN", Name: "Demo", CountryCode: "SY", FunctionalCurrency: "SYP",
@@ -83,7 +114,38 @@ func newFixtureAt(t *testing.T, clk clock.Clock) (*identity.Service, *database.S
 		t.Fatalf("provision: %v", err)
 	}
 
-	return identity.NewService(store, orgSvc, clk), store, result.CompanyID
+	// Provisioning ITSELF wrote an audit entry — org publishes too, which is worth knowing and
+	// is asserted in org's own tests. Cleared here so these tests can reason about the trail as
+	// a whole ("this operation wrote exactly these entries") rather than about deltas from a
+	// baseline that would drift every time the fixture grows.
+	if _, err = store.Writer(ctx).ExecContext(ctx, `DELETE FROM audit_log`); err != nil {
+		t.Fatalf("resetting the audit trail: %v", err)
+	}
+
+	return fixture{
+		identity:  identity.NewService(store, orgSvc, clk, bus),
+		audit:     auditSvc,
+		store:     store,
+		bus:       bus,
+		companyID: result.CompanyID,
+	}
+}
+
+// testActors is the fixture's stand-in for the composition root's appctx adapter.
+//
+// It reports whoever the test put on the context, so the actor snapshot is exercised end to end
+// rather than always landing in the unattributed branch.
+type testActors struct{}
+
+type actorKey struct{}
+
+func withActor(ctx context.Context, a audit.Actor) context.Context {
+	return context.WithValue(ctx, actorKey{}, a)
+}
+
+func (testActors) Actor(ctx context.Context) (audit.Actor, bool) {
+	a, ok := ctx.Value(actorKey{}).(audit.Actor)
+	return a, ok
 }
 
 // bound returns a context with settings bound, so the password policy resolves.

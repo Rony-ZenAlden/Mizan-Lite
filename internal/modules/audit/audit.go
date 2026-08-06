@@ -1,9 +1,11 @@
 // Package audit owns the append-only audit trail (§15).
 //
-// This step (1.6) builds the schema and the READ path, because field-level redaction needs a
-// response with a field worth gating. Step 1.7 adds the write path: the Auditable domain event
-// and the subscribers that record it INSIDE the business transaction (phase D7), so a change
-// and its audit record commit together or neither does.
+// Entries are recorded INSIDE the transaction of the change that caused them (phase D7): a
+// module publishes an Auditable event on the synchronous domain bus, and the subscriber here
+// writes through the context's executor. Either both commit or neither does, and a failed audit
+// write aborts the business operation.
+//
+// The trail is append-only, enforced by there being no update or delete anywhere in the module.
 package audit
 
 import (
@@ -74,16 +76,28 @@ type Filter struct {
 
 // Service is the audit module's application layer.
 type Service struct {
-	repo *repo
+	repo   *repo
+	actors ActorResolver
 }
 
 // NewService builds the service.
-func NewService(db database.DB, clk clock.Clock) *Service {
+//
+// actors may be nil — a graph with no API layer, as some tests build. An entry is then recorded
+// unattributed rather than not at all: losing the actor is bad, losing the entry is worse.
+func NewService(db database.DB, clk clock.Clock, actors ActorResolver) *Service {
 	if clk == nil {
 		clk = clock.System()
 	}
-	return &Service{repo: newRepo(db, clk)}
+	if actors == nil {
+		actors = noActor{}
+	}
+	return &Service{repo: newRepo(db, clk), actors: actors}
 }
+
+// noActor reports that nobody is acting.
+type noActor struct{}
+
+func (noActor) Actor(context.Context) (Actor, bool) { return Actor{}, false }
 
 // Entries lists audit records, newest first.
 //
@@ -111,9 +125,17 @@ func (m *Module) Service() *Service { return m.svc }
 // Name identifies the module.
 func (m *Module) Name() string { return "audit" }
 
-// DependsOn declares identity: audit rows reference a user, and the read path is gated by
-// permissions identity resolves.
-func (m *Module) DependsOn() []string { return []string{"identity"} }
+// DependsOn is empty.
+//
+// Step 1.6 declared ["identity"], and that was wrong (1.7, D5): audit_log carries NO foreign
+// key to users — deliberately, so a five-year-old entry does not depend on a live identity row
+// (§15.1's snapshots, the same reasoning as 1.1 D4). With no FK there is no migration-ordering
+// constraint, and DependsOn exists for exactly that.
+//
+// Identity IMPORTS audit's contract to publish events, which is the opposite direction and
+// needs no declaration: the event type is resolved at compile time, and every subscription is
+// registered before any of them can fire.
+func (m *Module) DependsOn() []string { return nil }
 
 // Migrations returns the module's schema.
 func (m *Module) Migrations() fs.FS {
@@ -142,10 +164,24 @@ func (m *Module) FeatureFlags() []config.FlagDef { return nil }
 // Metadata: none.
 func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 
-// Subscribe registers nothing YET. The subscribers that write entries land in 1.7, on the
-// synchronous domain bus so an entry commits in the same transaction as the change it records
-// (phase D7).
-func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
+// Subscribe registers the one handler that writes entries.
+//
+// On the SYNCHRONOUS domain bus, not the outbox. §23.1 reserves the outbox for integration
+// events delivered AFTER commit, which is precisely the property phase D7 rejects: an entry
+// that arrives after the change has already committed leaves a window in which the change
+// exists and its record does not.
+//
+// Audit subscribing to other modules' events looks like it breaks §23.1's "domain events are
+// within a module". It does not, and the distinction is worth stating: audit is CROSS-CUTTING
+// INFRASTRUCTURE, like logging. It participates in no business decision and never calls back
+// into a module. Modules publish Auditable; audit is its only subscriber; no module knows audit
+// exists.
+func (m *Module) Subscribe(bus *eventbus.Bus, _ *outbox.Subscribers) error {
+	if m.svc == nil {
+		return nil
+	}
+	return eventbus.Subscribe(bus, "audit.record", m.svc.record)
+}
 
 // Jobs: none. Retention pruning is Phase 9, and it is an audited operation itself.
 func (m *Module) Jobs() []jobs.Registration { return nil }

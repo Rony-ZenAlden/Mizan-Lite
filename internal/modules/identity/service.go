@@ -10,7 +10,9 @@ import (
 	"errors"
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
+	"github.com/mizan-erp/mizan/internal/kernel/event"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/identity/contract"
 	"github.com/mizan-erp/mizan/internal/modules/identity/domain"
 	"github.com/mizan-erp/mizan/internal/modules/identity/infra/sqlite"
@@ -45,12 +47,17 @@ type Service struct {
 	hasher crypto.Hasher
 	org    Organisation
 	clk    clock.Clock
+	bus    event.Publisher
 }
 
 var _ contract.Authenticator = (*Service)(nil)
 
 // NewService builds the service.
-func NewService(db Database, org Organisation, clk clock.Clock) *Service {
+//
+// bus is where audited actions are announced (1.7). It is event.Publisher rather than the
+// concrete bus so this module cannot reach Subscribe: identity raises events; who reacts to
+// them is the composition root's decision.
+func NewService(db Database, org Organisation, clk clock.Clock, bus event.Publisher) *Service {
 	if clk == nil {
 		clk = clock.System()
 	}
@@ -60,6 +67,7 @@ func NewService(db Database, org Organisation, clk clock.Clock) *Service {
 		hasher: crypto.NewArgon2id(crypto.DefaultParams()),
 		org:    org,
 		clk:    clk,
+		bus:    bus,
 	}
 }
 
@@ -230,6 +238,22 @@ func (s *Service) CreateUser(ctx context.Context, in CreateUserInput) (domain.Us
 			return err
 		}
 
+		// INSIDE the transaction, and the error is returned. The user and the record of their
+		// creation commit together or neither does (phase D7).
+		//
+		// Note what the payload does NOT contain: the password, or its hash. `encoded` is in
+		// scope right here, and putting it in an audit row would move a credential into
+		// long-lived readable storage.
+		if err = s.audit(ctx, auditc.Auditable{
+			Action:      ActionUserCreated,
+			EntityType:  EntityUser,
+			EntityID:    user.ID,
+			EntityLabel: user.Username,
+			After:       snapshotUser(user),
+		}); err != nil {
+			return err
+		}
+
 		created = user
 		return nil
 	})
@@ -264,7 +288,20 @@ func (s *Service) SetPassword(ctx context.Context, userID id.ID, password string
 		}); err != nil {
 			return err
 		}
-		return s.repos.AppendPasswordHistory(ctx, userID, encoded, policy.HistoryCount)
+		if err = s.repos.AppendPasswordHistory(ctx, userID, encoded, policy.HistoryCount); err != nil {
+			return err
+		}
+
+		// No Before and no After: the only thing that changed is the secret itself, and the
+		// entry's value is the FACT and the actor, not the content. `Changed` names the field
+		// so the trail stays legible without ever holding a password.
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionPasswordChanged,
+			EntityType:  EntityUser,
+			EntityID:    userID,
+			EntityLabel: s.usernameFor(ctx, userID),
+			Changed:     []string{"password"},
+		})
 	})
 }
 
@@ -328,6 +365,36 @@ func (s *Service) SetUserActive(ctx context.Context, userID id.ID, active bool) 
 				return domain.ErrLastActiveUser()
 			}
 		}
-		return s.repos.SetUserActive(ctx, userID, active)
+		if err = s.repos.SetUserActive(ctx, userID, active); err != nil {
+			return err
+		}
+
+		action := ActionUserDeactivated
+		if active {
+			action = ActionUserActivated
+		}
+		after := user
+		after.IsActive = active
+		return s.audit(ctx, auditc.Auditable{
+			Action:      action,
+			EntityType:  EntityUser,
+			EntityID:    userID,
+			EntityLabel: user.Username,
+			Before:      snapshotUser(user),
+			After:       snapshotUser(after),
+			Changed:     []string{"isActive"},
+		})
 	})
+}
+
+// usernameFor resolves a label for an audit entry, best-effort.
+//
+// Best-effort deliberately: an entry with no label is worth far more than no entry, so a failed
+// lookup degrades the record rather than failing the operation that caused it.
+func (s *Service) usernameFor(ctx context.Context, userID id.ID) string {
+	user, err := s.repos.UserByID(ctx, userID)
+	if err != nil {
+		return ""
+	}
+	return user.Username
 }

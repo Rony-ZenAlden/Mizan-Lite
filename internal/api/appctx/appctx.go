@@ -26,6 +26,11 @@ type Actor struct {
 	CompanyID id.ID
 	BranchID  id.ID
 	Username  string
+	// DisplayName is what the audit trail SNAPSHOTS as actor_name_snapshot (§15.1), so a
+	// five-year-old entry stays readable after the user is renamed or deactivated.
+	DisplayName string
+	// SessionID ties an entry to the sign-in it happened during.
+	SessionID id.ID
 	// Locale is the acting user's stored preference, empty if they have none.
 	Locale string
 }
@@ -38,6 +43,13 @@ type actorKey struct{}
 // login screen run WITHOUT one, which is a legitimate state, not an error.
 func WithActor(ctx context.Context, a Actor) context.Context {
 	return context.WithValue(ctx, actorKey{}, a)
+}
+
+// WithSession records which session a call belongs to, for the audit trail.
+func WithSession(ctx context.Context, sessionID id.ID) context.Context {
+	actor, _ := ActorFrom(ctx)
+	actor.SessionID = sessionID
+	return WithActor(ctx, actor)
 }
 
 // ActorFrom returns the acting principal, if there is one.

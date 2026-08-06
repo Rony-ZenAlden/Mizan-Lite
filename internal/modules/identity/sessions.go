@@ -8,6 +8,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/identity/contract"
 	"github.com/mizan-erp/mizan/internal/modules/identity/domain"
 	"github.com/mizan-erp/mizan/internal/modules/identity/infra/sqlite"
@@ -53,7 +54,7 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 	if err = s.checkThrottle(ctx, companyID, username); err != nil {
 		// Recorded so a throttled burst is visible in the attempt history as itself, rather
 		// than looking like a quiet period.
-		_ = s.recordAttempt(ctx, companyID, username, id.ID(""), false, domain.ReasonThrottled, in.DeviceInfo)
+		s.recordFailure(ctx, companyID, username, id.ID(""), domain.ReasonThrottled, in.DeviceInfo)
 		return LoginResult{}, err
 	}
 
@@ -64,8 +65,8 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 		}
 		// The attempt history is where the distinction Authenticate refuses to expose is
 		// written down. Resolving it costs one read and happens only on failure.
-		_ = s.recordAttempt(ctx, companyID, username, s.userIDFor(ctx, companyID, username),
-			false, s.failureReason(ctx, companyID, username), in.DeviceInfo)
+		s.recordFailure(ctx, companyID, username, s.userIDFor(ctx, companyID, username),
+			s.failureReason(ctx, companyID, username), in.DeviceInfo)
 		return LoginResult{}, authErr
 	}
 
@@ -93,8 +94,23 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 		if insertErr := s.repos.InsertSession(ctx, session); insertErr != nil {
 			return insertErr
 		}
-		return s.recordAttempt(ctx, companyID, username, principal.UserID,
-			true, domain.ReasonOK, in.DeviceInfo)
+		if attemptErr := s.recordAttempt(ctx, companyID, username, principal.UserID,
+			true, domain.ReasonOK, in.DeviceInfo); attemptErr != nil {
+			return attemptErr
+		}
+		// The actor is not on the context yet — the caller is signing IN, so no session has
+		// been validated. Named explicitly here, since deriving it would produce an
+		// unattributed entry for the one action whose whole point is who performed it.
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionLoginSucceeded,
+			EntityType:  EntitySession,
+			EntityID:    session.ID,
+			EntityLabel: principal.Username,
+			After: loginSnapshot{
+				UserID: principal.UserID, Username: principal.Username,
+				BranchID: branchID, Remember: in.Remember, DeviceInfo: in.DeviceInfo,
+			},
+		})
 	})
 	if err != nil {
 		return LoginResult{}, err
@@ -168,12 +184,30 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if err != nil {
 		return err
 	}
-	return s.repos.EndSession(ctx, session.ID, domain.EndLogout, s.clk.Now())
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		if endErr := s.repos.EndSession(ctx, session.ID, domain.EndLogout, s.clk.Now()); endErr != nil {
+			return endErr
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:     ActionLogout,
+			EntityType: EntitySession,
+			EntityID:   session.ID,
+		})
+	})
 }
 
 // Revoke ends someone else's session. Permission-gated in Step 1.5.
 func (s *Service) Revoke(ctx context.Context, sessionID id.ID) error {
-	return s.repos.EndSession(ctx, sessionID, domain.EndRevoked, s.clk.Now())
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		if err := s.repos.EndSession(ctx, sessionID, domain.EndRevoked, s.clk.Now()); err != nil {
+			return err
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:     ActionSessionRevoked,
+			EntityType: EntitySession,
+			EntityID:   sessionID,
+		})
+	})
 }
 
 // ActiveSessions lists a user's live sessions.
@@ -266,4 +300,53 @@ func (s *Service) failureReason(ctx context.Context, companyID id.ID, username s
 // defaultBranch resolves the branch a session acts in when none was named.
 func (s *Service) defaultBranch(ctx context.Context) (id.ID, error) {
 	return s.org.DefaultBranchID(ctx)
+}
+
+// loginSnapshot is what a sign-in looks like in an audit payload. The token is absent, and
+// deliberately so: it is a live credential, and an audit row is long-lived readable storage.
+type loginSnapshot struct {
+	UserID     id.ID  `json:"userId,omitempty"`
+	Username   string `json:"username"`
+	BranchID   id.ID  `json:"branchId,omitempty"`
+	Remember   bool   `json:"remember,omitempty"`
+	DeviceInfo string `json:"deviceInfo,omitempty"`
+}
+
+// recordFailure writes the attempt row and its audit entry, together.
+//
+// A failed login has no business change to abort, so "atomic with the change" would be vacuous
+// — but the attempt row IS a write, and the same guarantee applies to it: the attempt and its
+// audit entry commit together (1.7 §4.4).
+//
+// Errors are swallowed HERE and only here, which needs justifying since the rest of the module
+// treats a failed audit write as fatal. The alternative is worse in a specific way: a database
+// hiccup while recording a bad password would turn "wrong password" into "internal error", and
+// the honest answer to the caller is still that their credentials were wrong. The failure is
+// also self-limiting — the login already failed, so nothing incorrect can be committed on the
+// strength of a missing record.
+func (s *Service) recordFailure(
+	ctx context.Context, companyID id.ID, username string, userID id.ID, reason, device string,
+) {
+	_ = s.db.Do(ctx, func(ctx context.Context) error {
+		if err := s.recordAttempt(ctx, companyID, username, userID, false, reason, device); err != nil {
+			return err
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionLoginFailed,
+			EntityType:  EntitySession,
+			EntityLabel: username,
+			// The reason IS recorded, unlike the error returned to the caller, which is
+			// identical for every failure so as not to be a username oracle (service.go). An
+			// administrator reading the trail is entitled to the distinction; whoever is at
+			// the login screen is not.
+			After: failureSnapshot{Username: username, UserID: userID, Reason: reason, DeviceInfo: device},
+		})
+	})
+}
+
+type failureSnapshot struct {
+	Username   string `json:"username"`
+	UserID     id.ID  `json:"userId,omitempty"`
+	Reason     string `json:"reason"`
+	DeviceInfo string `json:"deviceInfo,omitempty"`
 }

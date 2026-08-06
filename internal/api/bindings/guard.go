@@ -107,6 +107,9 @@ func (g *graph) guard(method string) (context.Context, *bootstrap.App, error) {
 	// Stamping the actor is what makes settings resolve at USER scope (1.3 §6) and what Can
 	// reads to find the grants. It must happen before the authorization check.
 	ctx = withActor(ctx, principal, session.BranchID)
+	// The session id is carried separately: withActor is shared with Auth.Me, which resolves a
+	// principal without necessarily being inside a guarded call.
+	ctx = appctx.WithSession(ctx, session.ID)
 
 	if !app.Identity.Can(ctx, p.Permission, scopeFor(p, session.BranchID)) {
 		return nil, nil, errs.Permission(CodeForbidden,
@@ -133,9 +136,10 @@ func scopeFor(p policy.Policy, branchID id.ID) auth.Scope {
 // so the two cannot drift about what an actor is.
 func withActor(ctx context.Context, p contract.Principal, branchID id.ID) context.Context {
 	return appctx.WithActor(ctx, appctx.Actor{
-		UserID:    p.UserID,
-		CompanyID: p.CompanyID,
-		BranchID:  branchID,
-		Username:  p.Username,
+		UserID:      p.UserID,
+		CompanyID:   p.CompanyID,
+		BranchID:    branchID,
+		Username:    p.Username,
+		DisplayName: p.DisplayName,
 	})
 }

@@ -21,11 +21,11 @@ const defaultLimit = 100
 // maxLimit caps what a caller may ask for.
 const maxLimit = 1000
 
-// repo reads the audit log.
+// repo reads and appends to the audit log.
 //
-// Note what is absent: any Insert, Update, or Delete. The write path arrives in 1.7; update and
-// delete never do. Append-only (§15.1) is enforced by there being no method, which is stronger
-// than a convention and visible in one glance at this file.
+// Note what is absent: any Update or Delete. Insert arrived in 1.7; the other two never will.
+// Append-only (§15.1) is enforced by there being no method, which is stronger than a convention
+// and visible in one glance at this file.
 type repo struct {
 	db  database.DB
 	clk clock.Clock
@@ -121,4 +121,43 @@ func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 func (r *repo) wrap(err error, what string) error {
 	return errs.Wrap(r.db.Dialect().TranslateError(err), errs.CategoryInternal,
 		CodeReadFailed, what)
+}
+
+// insert appends one entry, using the executor from the CONTEXT.
+//
+// db.Writer(ctx) is the live transaction when the caller is inside a Unit of Work (0.3 §3.2),
+// which is the entire atomicity guarantee of phase D7: the entry lands in the same transaction
+// as the change that caused it, so they commit together or not at all.
+//
+// Taking a connection of its own here — rather than the context's — would silently break that
+// and leave audit rows for changes that rolled back.
+func (r *repo) insert(ctx context.Context, e Entry) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		INSERT INTO audit_log (
+			id, occurred_at, actor_user_id, actor_name_snapshot, branch_id, session_id,
+			correlation_id, action, entity_type, entity_id, entity_label_snapshot,
+			before_json, after_json, changed_fields, source, device_info, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		string(e.ID), clock.Format(e.OccurredAt),
+		nullable(string(e.ActorUserID)), nullable(e.ActorName),
+		nullable(string(e.BranchID)), nullable(string(e.SessionID)),
+		nullable(string(e.Correlation)),
+		e.Action, nullable(e.EntityType), nullable(string(e.EntityID)), nullable(e.EntityLabel),
+		nullable(e.BeforeJSON), nullable(e.AfterJSON), nullable(e.ChangedFields),
+		e.Source, nullable(e.DeviceInfo), clock.Format(r.clk.Now()))
+	if err != nil {
+		return errs.Wrap(r.db.Dialect().TranslateError(err), errs.CategoryInternal,
+			CodeWriteFailed, "the audit entry could not be recorded")
+	}
+	return nil
+}
+
+// nullable maps "" to NULL, so an absent value is stored as absent rather than as an empty
+// string every later query would have to treat as a third case. It is also what keeps "no
+// before state" distinguishable from a payload that is literally null.
+func nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

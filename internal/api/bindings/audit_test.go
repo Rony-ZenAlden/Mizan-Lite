@@ -6,36 +6,58 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mizan-erp/mizan/internal/api/appctx"
 	"github.com/mizan-erp/mizan/internal/api/bindings"
 	"github.com/mizan-erp/mizan/internal/bootstrap"
-	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
+	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 )
 
-// seedAuditEntry writes one row directly.
+// seededEntity is the entity type the redaction tests file their fixtures under.
 //
-// Directly, because the WRITE path is Step 1.7 — this step is about whether the READ path
-// redacts, and inventing a writer here would be building 1.7 badly and early.
-func seedAuditEntry(t *testing.T, app *bootstrap.App, before, after string) id.ID {
-	t.Helper()
-	ctx := app.Context()
-	entryID, _ := id.New()
-	now := clock.Format(clock.System().Now())
+// A type of their own, so a query can pick them out from the entries the fixture's own
+// provisioning and sign-in now write (1.7). Filtering rather than counting: the trail is a
+// shared, growing surface, and a test that assumes it holds only its own rows breaks the next
+// time anything upstream starts auditing — which is exactly what happened here.
+const seededEntity = "test.payload"
 
-	_, err := app.DB.Writer(ctx).ExecContext(ctx, `
-		INSERT INTO audit_log (
-			id, occurred_at, actor_user_id, actor_name_snapshot, action,
-			entity_type, entity_id, entity_label_snapshot,
-			before_json, after_json, changed_fields, source, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ui', ?)`,
-		string(entryID), now, "", "Alice Example", "identity.user.password_changed",
-		"user", string(entryID), "alice",
-		before, after, `["salary"]`, now)
+// seedAuditEntry writes one row through the REAL write path (1.7).
+//
+// Step 1.6 wrote it with raw SQL because no write path existed. Now one does, and going through
+// it means these tests exercise the subscriber, the actor snapshot, and the transaction — a
+// fixture built by hand would keep passing after the real path broke.
+//
+// The payload is invented (a salary change) because the property under test is redaction, and
+// a value nobody should see needs to be a value worth not seeing.
+func seedAuditEntry(t *testing.T, app *bootstrap.App, before, after string) {
+	t.Helper()
+
+	// Stamped exactly as the 1.5 guard stamps it, which also exercises the composition root's
+	// ActorResolver adapter: the snapshot below is only correct if that adapter reads the
+	// context the guard writes.
+	actorID, err := id.New()
+	if err != nil {
+		t.Fatalf("id: %v", err)
+	}
+	ctx := appctx.WithActor(app.Context(), appctx.Actor{
+		UserID: actorID, DisplayName: "Alice Example",
+	})
+
+	err = app.DB.Do(ctx, func(ctx context.Context) error {
+		return app.Bus.Publish(ctx, auditc.Auditable{
+			Action:      "identity.user.password_changed",
+			EntityType:  seededEntity,
+			EntityLabel: "alice",
+			Before:      json.RawMessage(before),
+			After:       json.RawMessage(after),
+			Changed:     []string{"salary"},
+			Source:      auditc.SourceUI,
+		})
+	})
 	if err != nil {
 		t.Fatalf("seeding an audit entry: %v", err)
 	}
-	return entryID
 }
 
 // stripPayloadPermission removes audit.entry.view_payload from every role, leaving the list
@@ -81,7 +103,7 @@ func TestRestrictedPayloadKeysAreAbsentNotBlank(t *testing.T) {
 	seedAuditEntry(t, app, `{"salary":50000}`, `{"salary":75000}`)
 	stripPayloadPermission(t, app)
 
-	result := set.Audit.Entries(bindings.AuditFilterDTO{})
+	result := set.Audit.Entries(bindings.AuditFilterDTO{EntityType: seededEntity})
 	if !result.OK {
 		t.Fatalf("Entries failed: %+v", result.Error)
 	}
@@ -126,7 +148,7 @@ func TestPayloadIsPresentWithThePermission(t *testing.T) {
 	set, app := signedIn(t) // the administrator holds "*"
 	seedAuditEntry(t, app, `{"salary":50000}`, `{"salary":75000}`)
 
-	result := set.Audit.Entries(bindings.AuditFilterDTO{})
+	result := set.Audit.Entries(bindings.AuditFilterDTO{EntityType: seededEntity})
 	if !result.OK {
 		t.Fatalf("Entries failed: %+v", result.Error)
 	}
@@ -201,7 +223,7 @@ func TestEntriesAreNewestFirst(t *testing.T) {
 	seedAuditEntry(t, app, `{"n":1}`, `{"n":1}`)
 	seedAuditEntry(t, app, `{"n":2}`, `{"n":2}`)
 
-	result := set.Audit.Entries(bindings.AuditFilterDTO{})
+	result := set.Audit.Entries(bindings.AuditFilterDTO{EntityType: seededEntity})
 	if !result.OK || len(result.Data) != 2 {
 		t.Fatalf("entries = %+v", result)
 	}

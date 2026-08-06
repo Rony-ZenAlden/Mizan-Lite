@@ -20,6 +20,19 @@ type Event interface {
 	AggregateID() id.ID
 }
 
+// Publisher raises an event.
+//
+// Declared HERE, in the kernel, rather than by each module that publishes: a narrow port
+// repeated four times is four chances for the shapes to drift, and the shape is not negotiable
+// — it is exactly what platform/eventbus.Bus already does.
+//
+// Modules depend on THIS, never on *eventbus.Bus. The point is not testability (a fake bus is
+// no easier than a real one); it is that a module must not be able to reach the bus's
+// Subscribe. A module raises events; deciding who reacts is the composition root's job.
+type Publisher interface {
+	Publish(ctx context.Context, e Event) error
+}
+
 // Envelope is the transport form shared by the in-process bus and the outbox, so promoting a
 // domain event to an integration event later does not change its shape.
 type Envelope struct {

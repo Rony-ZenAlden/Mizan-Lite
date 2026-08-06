@@ -9,10 +9,12 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/org/domain"
 	"github.com/mizan-erp/mizan/internal/platform/database"
+	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
 	"github.com/mizan-erp/mizan/migrations"
 )
@@ -45,6 +47,7 @@ func newService(t *testing.T) (*org.Service, *database.Store) {
 		migrations.SQLite(),
 		currency.NewModule(nil).Migrations(),
 		org.NewModule(nil).Migrations(),
+		audit.NewModule(nil).Migrations(),
 	)
 	runner, err := migrate.New(store, migrate.Options{
 		FS: merged, DBPath: path, SkipBackup: true,
@@ -55,8 +58,23 @@ func newService(t *testing.T) (*org.Service, *database.Store) {
 	if _, err = runner.Up(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	return org.NewService(store, clock.System()), store
+	// The audit subscriber is wired into EVERY org test, not just the audit ones: it writes
+	// inside each of this module's transactions, so a fault there must surface as a failure of
+	// the ordinary operation, which is exactly what D7 promises.
+	bus := eventbus.New(eventbus.Options{})
+	auditSvc = audit.NewService(store, clock.System(), nil)
+	if err = audit.NewModule(auditSvc).Subscribe(bus, nil); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	return org.NewService(store, clock.System(), bus), store
 }
+
+// auditSvc is the trail the current test's fixture writes to.
+//
+// A package-level variable rather than another return value: newService has a dozen call sites
+// and only the audit tests care. Tests within a package run sequentially unless they call
+// t.Parallel(), and none here does.
+var auditSvc *audit.Service
 
 func seedCurrency(t *testing.T, store *database.Store, code string) {
 	t.Helper()

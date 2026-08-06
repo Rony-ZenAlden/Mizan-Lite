@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-04**. Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-06**. Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -57,6 +57,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_4_RBAC.md` | Step 1.4: permissions, roles, scope resolution, the real `Authorizer`. |
 | `docs/architecture/STEP_1_5_POLICY.md` | Step 1.5: policies per binding, the guard, and the startup coverage check. |
 | `docs/architecture/STEP_1_6_REDACTION.md` | Step 1.6: field-level redaction and the audit read path. |
+| `docs/architecture/STEP_1_7_AUDIT_WRITE.md` | Step 1.7: the `Auditable` event, in-transaction subscribers, atomicity. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -119,8 +120,8 @@ and D7 synchronous in-transaction audit).
 | **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ✅ committed |
 | **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ✅ committed |
 | **1.6** | Field-level redaction (+ audit schema & read path) | ✅ committed |
-| **1.7** | Audit WRITE path: `Auditable` events, in-transaction subscribers (D7) | ⬜ next — design first |
-| **1.8** | Country + business profiles, seed-file discovery | ⬜ |
+| **1.7** | Audit WRITE path: `Auditable` events, in-transaction subscribers (D7) | ✅ committed |
+| **1.8** | Country + business profiles, seed-file discovery | ⬜ next — design first |
 | **1.9** | Setup wizard backend | ⬜ |
 | **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ |
 | **1.12** | Phase 1 Definition-of-Done review | ⬜ |
@@ -563,6 +564,33 @@ A permission can now gate a **field within a response**, not just a whole method
   assert by presence — a test that counts a growing collection is a maintenance tax.
 - 12 new Go tests, 2 new frontend tests (123 total).
 
+### Step 1.7 — The audit write path
+An audited change and its audit record now **commit together or not at all** (phase D7).
+- **Atomicity is inherited, not implemented.** A module publishes `Auditable` on the synchronous
+  bus; the subscriber writes through `db.Writer(ctx)`, which inside a Unit of Work *is* the live
+  transaction. Three Phase-0 guarantees compose and this step wrote almost no machinery of its
+  own — which is what a foundation is for.
+- **A failed audit write aborts the operation (D3).** Stated as a cost, not hidden: a shop that
+  cannot record what it is doing should stop, not continue silently. The abort drill drops the
+  audit table and asserts the old password still authenticates.
+- **A service with no publisher fails at the first audited write**, rather than recording
+  nothing quietly. An empty trail is a missing trail.
+- **Every identity and org test now wires the audit subscriber**, not just the audit tests — the
+  write happens inside all of those transactions, so ~40 tests exercise the D7 path instead of
+  two. The §1.2 "an unused seam is an untested seam" lesson, applied in advance.
+- **Payloads are hand-written projections**; the argon2 encoding and the session token are both
+  in scope at publish sites and both asserted absent from the trail.
+- `audit.DependsOn` corrected to **none** (D5): 1.6 declared `["identity"]`, but `audit_log`
+  carries no foreign key to `users` — deliberately, so history survives a deleted account.
+- Mutation-verified twice. Writing on a connection of its own **deadlocked** the rollback drill
+  rather than merely failing it (SQLite has one writer) — that mistake cannot be shipped.
+  Swallowing the subscriber error failed both abort drills.
+- A count-based test broke for the **fourth** time and was rewritten to filter, not count.
+- **Known gap, carried:** nothing forces a module to publish. A new write path that forgets
+  leaves a silent hole, and it is not catchable by the enumeration trick that made 1.5's
+  guarantee structural.
+- 14 new Go tests.
+
 ---
 
 ## 7. Repository map (as built)
@@ -631,9 +659,11 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.7 — the audit WRITE path**: the `Auditable` domain event and the
-  subscribers that record it INSIDE the business transaction (phase D7), so a change and its
-  audit record commit together or neither does. **Design first, await approval.**
+- **Immediate next: Step 1.8 — country and business profiles**, plus seed-file discovery.
+  **Design first, await approval.**
+- **Nothing forces a module to publish `Auditable`** (1.7 §6). A new write path that forgets
+  leaves a silent hole in the trail. The mitigations that would work are a review checklist item
+  now and a per-module "state changes publish" test later; neither is built.
 - **Built but not yet reached by any production path:** sessions. `Validate` is fully tested
   and nothing calls it — the binding decorator that stamps `appctx.WithActor` is Step 1.5, and
   the login screen is 1.10. Same for `must_change`, carried from 1.2.
@@ -661,6 +691,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.7: audit write path — in-transaction subscribers
 (pending) Phase 1 Step 1.6: field-level redaction and the audit read path
 (pending) Phase 1 Step 1.5: the policy mechanism and enforcement
 (pending) Phase 1 Step 1.4: RBAC — permissions, roles, and scope

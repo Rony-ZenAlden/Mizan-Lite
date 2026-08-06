@@ -151,6 +151,27 @@ func (r *Repos) RoleByCode(ctx context.Context, companyID id.ID, code string) (R
 	return role, nil
 }
 
+// RoleByID finds a role by its identifier, for the audit label.
+func (r *Repos) RoleByID(ctx context.Context, roleID id.ID) (Role, error) {
+	var (
+		role           Role
+		description    any
+		system, active int
+	)
+	err := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT id, company_id, code, name, description, is_system, is_active
+		  FROM roles WHERE id = ?`, string(roleID)).
+		Scan(&role.ID, &role.CompanyID, &role.Code, &role.Name, &description, &system, &active)
+	if err != nil {
+		return Role{}, err // sql.ErrNoRows passes through
+	}
+	if s, ok := description.(string); ok {
+		role.Description = s
+	}
+	role.IsSystem, role.IsActive = system == 1, active == 1
+	return role, nil
+}
+
 // Roles lists a company's roles.
 func (r *Repos) Roles(ctx context.Context, companyID id.ID) ([]Role, error) {
 	rows, err := r.db.Reader(ctx).QueryContext(ctx, `

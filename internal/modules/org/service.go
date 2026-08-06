@@ -12,7 +12,9 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/kernel/event"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/org/domain"
 	"github.com/mizan-erp/mizan/internal/modules/org/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -34,14 +36,46 @@ type Service struct {
 	db    Database
 	repos *sqlite.Repos
 	clk   clock.Clock
+	bus   event.Publisher
 }
 
 // NewService builds the service.
-func NewService(db Database, clk clock.Clock) *Service {
+//
+// bus is where audited actions are announced (1.7); event.Publisher rather than the concrete
+// bus so this module cannot reach Subscribe.
+func NewService(db Database, clk clock.Clock, bus event.Publisher) *Service {
 	if clk == nil {
 		clk = clock.System()
 	}
-	return &Service{db: db, repos: sqlite.New(db, clk), clk: clk}
+	return &Service{db: db, repos: sqlite.New(db, clk), clk: clk, bus: bus}
+}
+
+// The actions this module records (§15.3). Stable: renaming one orphans its history.
+const (
+	ActionCompanyProvisioned  = "org.company.provisioned"
+	ActionBranchActivated     = "org.branch.activated"
+	ActionBranchDeactivated   = "org.branch.deactivated"
+	ActionWarehouseActivated  = "org.warehouse.activated"
+	ActionWarehouseDeactivate = "org.warehouse.deactivated"
+
+	EntityCompany   = "org.company"
+	EntityBranch    = "org.branch"
+	EntityWarehouse = "org.warehouse"
+)
+
+// CodePublisherMissing reports a service built without an event publisher.
+const CodePublisherMissing = "org.publisher_missing"
+
+// audit publishes an Auditable event inside the caller's transaction (phase D7).
+//
+// The error is returned, never discarded: `_ =` here would quietly downgrade the atomicity
+// guarantee to best-effort logging.
+func (s *Service) audit(ctx context.Context, a auditc.Auditable) error {
+	if s.bus == nil {
+		return errs.Internal(CodePublisherMissing,
+			"the org service was built without an event publisher")
+	}
+	return s.bus.Publish(ctx, a)
 }
 
 // ── provisioning ────────────────────────────────────────────────────────────────
@@ -181,7 +215,22 @@ func (s *Service) Provision(ctx context.Context, in ProvisionInput) (ProvisionRe
 			WarehouseID:  warehouseID,
 			FiscalYearID: fy.ID,
 		}
-		return nil
+
+		// The FIRST entry in the trail, and the one with no actor: the setup wizard runs
+		// before any user exists, so the subscriber records it as `system`. An unattributed
+		// entry is honest here; a fabricated one would not be.
+		return s.audit(ctx, auditc.Auditable{
+			Action:      ActionCompanyProvisioned,
+			EntityType:  EntityCompany,
+			EntityID:    companyID,
+			EntityLabel: company.Name,
+			After: provisionSnapshot{
+				CompanyCode: company.Code, CompanyName: company.Name,
+				CountryCode: company.CountryCode, Currency: company.FunctionalCurrency,
+				BranchCode: branch.Code, WarehouseCode: warehouse.Code,
+				FiscalYearCode: fy.Code,
+			},
+		})
 	})
 	if err != nil {
 		return ProvisionResult{}, err
@@ -277,7 +326,20 @@ func (s *Service) SetBranchActive(ctx context.Context, branchID id.ID, active bo
 				return domain.ErrLastActiveBranch()
 			}
 		}
-		return s.repos.SetBranchActive(ctx, branchID, active)
+		if err := s.repos.SetBranchActive(ctx, branchID, active); err != nil {
+			return err
+		}
+		action := ActionBranchDeactivated
+		if active {
+			action = ActionBranchActivated
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:     action,
+			EntityType: EntityBranch,
+			EntityID:   branchID,
+			After:      activeSnapshot{IsActive: active},
+			Changed:    []string{"isActive"},
+		})
 	})
 }
 
@@ -293,6 +355,35 @@ func (s *Service) SetWarehouseActive(ctx context.Context, warehouseID id.ID, bra
 				return domain.ErrLastActiveWarehouse()
 			}
 		}
-		return s.repos.SetWarehouseActive(ctx, warehouseID, active)
+		if err := s.repos.SetWarehouseActive(ctx, warehouseID, active); err != nil {
+			return err
+		}
+		action := ActionWarehouseDeactivate
+		if active {
+			action = ActionWarehouseActivated
+		}
+		return s.audit(ctx, auditc.Auditable{
+			Action:     action,
+			EntityType: EntityWarehouse,
+			EntityID:   warehouseID,
+			After:      activeSnapshot{IsActive: active},
+			Changed:    []string{"isActive"},
+		})
 	})
+}
+
+// provisionSnapshot is what setting up an installation looks like in the trail: the shape of
+// the organisation that was created, not the whole of four domain types.
+type provisionSnapshot struct {
+	CompanyCode    string `json:"companyCode"`
+	CompanyName    string `json:"companyName"`
+	CountryCode    string `json:"countryCode"`
+	Currency       string `json:"currency"`
+	BranchCode     string `json:"branchCode"`
+	WarehouseCode  string `json:"warehouseCode"`
+	FiscalYearCode string `json:"fiscalYearCode"`
+}
+
+type activeSnapshot struct {
+	IsActive bool `json:"isActive"`
 }

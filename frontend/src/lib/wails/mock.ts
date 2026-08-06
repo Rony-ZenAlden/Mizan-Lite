@@ -100,6 +100,22 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
         },
       ]),
   },
+  Audit: {
+    Entries: () =>
+      ok([
+        {
+          id: "audit-1", occurredAt: "2026-08-06T09:00:00.000Z",
+          actorUserId: "dev", actorName: "Developer", correlationId: "corr-1",
+          action: "identity.user.password_changed", entityType: "user",
+          entityId: "user-1", entityLabel: "alice", source: "ui",
+          // Present here because the browser-dev mock runs as an administrator. A user without
+          // audit.entry.view_payload receives these keys ABSENT, not blank.
+          beforeJson: '{"example":"before"}',
+          afterJson: '{"example":"after"}',
+          changedFields: '["example"]',
+        },
+      ]),
+  },
   Money: {
     Currencies: () =>
       ok([

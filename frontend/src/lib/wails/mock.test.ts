@@ -35,6 +35,7 @@ describe("the browser-dev mock", () => {
       ["Ops", "Jobs"],
       ["Ops", "Runs"],
       ["Money", "Currencies"],
+      ["Audit", "Entries"],
     ] as const) {
       const result = (await mockInvoke(struct, method)!()) as Result<unknown>;
       expect(Array.isArray(result.data), `${struct}.${method}`).toBe(true);

@@ -144,6 +144,60 @@ export function runs(jobKey: string, limit: number): Promise<RunRecord[]> {
   return call<RunRecord[]>("Ops", "Runs", jobKey, limit);
 }
 
+// ── Audit ───────────────────────────────────────────────────────────────────────
+
+export interface AuditEntry {
+  id: string;
+  occurredAt: string;
+  actorUserId: string;
+  /** A snapshot taken when the entry was written, so old records stay readable. */
+  actorName: string;
+  correlationId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityLabel: string;
+  source: string;
+
+  /**
+   * The before/after payload, gated by `audit.entry.view_payload`.
+   *
+   * OPTIONAL, and that is the contract: the key is ABSENT — not blank — when the signed-in user
+   * may not see it. `undefined` therefore means "you may not see this", which is a different
+   * fact from an entry that genuinely had no before-state, and the UI must render them
+   * differently.
+   */
+  beforeJson?: string;
+  afterJson?: string;
+  changedFields?: string;
+}
+
+export interface AuditFilter {
+  entityType?: string;
+  entityId?: string;
+  actorId?: string;
+  limit?: number;
+}
+
+export function auditEntries(filter: AuditFilter = {}): Promise<AuditEntry[]> {
+  return call<AuditEntry[]>("Audit", "Entries", {
+    entityType: filter.entityType ?? "",
+    entityId: filter.entityId ?? "",
+    actorId: filter.actorId ?? "",
+    limit: filter.limit ?? 0,
+  });
+}
+
+/**
+ * Whether the payload was withheld rather than empty.
+ *
+ * A helper rather than an inline `=== undefined` at each call site, so every screen renders the
+ * distinction the same way — and so the reasoning lives in one place.
+ */
+export function payloadHidden(entry: AuditEntry): boolean {
+  return entry.beforeJson === undefined && entry.afterJson === undefined;
+}
+
 // ── Money ───────────────────────────────────────────────────────────────────────
 
 export interface Currency {

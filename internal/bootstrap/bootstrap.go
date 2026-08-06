@@ -23,6 +23,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/appctx"
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
@@ -104,6 +105,7 @@ type App struct {
 	Currency  *currency.Service
 	Org       *org.Service
 	Identity  *identity.Service
+	Audit     *audit.Service
 	Modules   []modules.Module
 	// Bindings are the structs handed to Wails.
 	Bindings []any
@@ -157,9 +159,10 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	currencyModule := currency.NewModule(nil)
 	orgModule := org.NewModule(nil)
 	identityModule := identity.NewModule(nil)
+	auditModule := audit.NewModule(nil)
 
 	// 4. Migrate — before anything else reads a table.
-	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule); err != nil {
+	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule, auditModule); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -240,10 +243,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	currencyModule = currency.NewModule(app.Currency)
 	orgModule = org.NewModule(app.Org)
 	identityModule = identity.NewModule(app.Identity)
+	app.Audit = audit.NewService(db, opts.Clock)
+	auditModule = audit.NewModule(app.Audit)
 
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
-	ordered, err := modules.Order([]modules.Module{identityModule, orgModule, currencyModule})
+	ordered, err := modules.Order([]modules.Module{auditModule, identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

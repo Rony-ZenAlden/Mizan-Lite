@@ -8,7 +8,7 @@ import {
   call,
   isBindingError,
 } from "./call";
-import { health } from "./index";
+import { auditEntries, health, payloadHidden } from "./index";
 import { installMethod as installBridge } from "./testing";
 import { MESSAGES } from "@/i18n/messages";
 import fixture from "./__fixtures__/envelope.contract.json";
@@ -139,6 +139,51 @@ describe("cross-language contract", () => {
     const err = (await call("X", "Y").catch((e: unknown) => e)) as BindingError;
     expect(err.code).toBe("database.internal");
     expect(JSON.stringify(fixture.untypedFailure)).not.toContain("some internal go text");
+  });
+});
+
+describe("audit payload redaction", () => {
+  // The Go side omits the key entirely when the caller lacks audit.entry.view_payload
+  // (Step 1.6, D1). This asserts the TypeScript layer treats absence as its own state rather
+  // than coercing it to an empty string — the whole point is that "you may not see this" and
+  // "there was nothing here" stay distinguishable.
+  it("reports a withheld payload as hidden, not empty", async () => {
+    installBridge("Audit", "Entries", () =>
+      Promise.resolve({
+        ok: true,
+        data: [
+          {
+            id: "a", occurredAt: "", actorUserId: "", actorName: "Alice",
+            correlationId: "", action: "x", entityType: "", entityId: "",
+            entityLabel: "", source: "ui",
+            // beforeJson / afterJson deliberately absent.
+          },
+        ],
+      }),
+    );
+
+    const [entry] = await auditEntries();
+    expect(entry!.beforeJson).toBeUndefined();
+    expect(payloadHidden(entry!)).toBe(true);
+  });
+
+  it("reports a present payload as visible", async () => {
+    installBridge("Audit", "Entries", () =>
+      Promise.resolve({
+        ok: true,
+        data: [
+          {
+            id: "a", occurredAt: "", actorUserId: "", actorName: "Alice",
+            correlationId: "", action: "x", entityType: "", entityId: "",
+            entityLabel: "", source: "ui",
+            beforeJson: "{}", afterJson: "{}", changedFields: "[]",
+          },
+        ],
+      }),
+    );
+
+    const [entry] = await auditEntries();
+    expect(payloadHidden(entry!)).toBe(false);
   });
 });
 

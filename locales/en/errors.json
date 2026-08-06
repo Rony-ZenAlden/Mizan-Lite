@@ -7,6 +7,7 @@
   "app.policy_coverage": "This build of Mizan is misconfigured and cannot start safely.",
   "app.policy_missing": "This action is not correctly configured. Please contact support.",
   "app.unknown_error": "Something went wrong.",
+  "audit.read_failed": "The audit trail could not be read.",
   "bootstrap.migration_failed": "The database update failed, so Mizan cannot start. Your data is unchanged.",
   "bootstrap.registry_invalid": "This build of Mizan is misconfigured. Please reinstall or contact support.",
   "bootstrap.startup_failed": "Mizan could not start.",

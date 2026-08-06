@@ -6,14 +6,26 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/api/bindings"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
+	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/platform/auth"
 )
 
 // allPermissions is what the built modules declare, as the shell collects it at boot.
 func allPermissions() map[string]bool {
 	out := map[string]bool{}
-	for _, def := range identity.NewModule(nil).Permissions() {
-		out[def.Code] = true
+	// Every module that declares permissions, as the shell collects them at boot. A policy may
+	// only name a permission some module actually declares — otherwise it could never be
+	// granted and the method would be permanently unreachable.
+	for _, defs := range [][]auth.PermissionDef{
+		identity.NewModule(nil).Permissions(),
+		org.NewModule(nil).Permissions(),
+		audit.NewModule(nil).Permissions(),
+	} {
+		for _, def := range defs {
+			out[def.Code] = true
+		}
 	}
 	return out
 }

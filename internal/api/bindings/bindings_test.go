@@ -3,6 +3,7 @@ package bindings_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -339,8 +340,22 @@ func TestFailedBootLeavesEveryBindingGuarded(t *testing.T) {
 
 func TestAllReturnsEveryBinding(t *testing.T) {
 	set := bindings.New()
-	if got := len(set.All()); got != 6 {
-		t.Errorf("All() returned %d bindings, want 6 (Boot, System, Auth, Config, Ops, Money)", got)
+	// Asserted by PRESENCE and non-nilness, not by count.
+	//
+	// The count form has now broken twice on legitimate growth (Auth in 1.5, Audit in 1.6) —
+	// the same maintenance tax 0.6 §11.2 removed from the migration test and 1.1 removed from
+	// the module test. What matters is that every declared binding is there and bindable.
+	seen := map[string]bool{}
+	for _, b := range set.All() {
+		if b == nil {
+			t.Fatal("a nil binding was handed to Wails")
+		}
+		seen[reflect.TypeOf(b).Elem().Name()] = true
+	}
+	for _, want := range []string{"Boot", "System", "Auth", "Config", "Ops", "Money", "Audit"} {
+		if !seen[want] {
+			t.Errorf("binding %q is missing from All(); the frontend cannot call it", want)
+		}
 	}
 	for i, b := range set.All() {
 		if b == nil {

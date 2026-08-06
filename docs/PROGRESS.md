@@ -56,6 +56,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_3_SESSIONS.md` | Step 1.3: sessions, throttling, the sweep job, and the real AppContext. |
 | `docs/architecture/STEP_1_4_RBAC.md` | Step 1.4: permissions, roles, scope resolution, the real `Authorizer`. |
 | `docs/architecture/STEP_1_5_POLICY.md` | Step 1.5: policies per binding, the guard, and the startup coverage check. |
+| `docs/architecture/STEP_1_6_REDACTION.md` | Step 1.6: field-level redaction and the audit read path. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -117,8 +118,8 @@ and D7 synchronous in-transaction audit).
 | **1.3** | Sessions, lockout, login attempts; `appctx` reads a real session | ✅ committed |
 | **1.4** | RBAC: permissions sync, roles, grants, scope resolution | ✅ committed |
 | **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ✅ committed |
-| **1.6** | Field-level redaction | ⬜ next — design first |
-| **1.7** | Audit module (in-transaction, D7) | ⬜ |
+| **1.6** | Field-level redaction (+ audit schema & read path) | ✅ committed |
+| **1.7** | Audit WRITE path: `Auditable` events, in-transaction subscribers (D7) | ⬜ next — design first |
 | **1.8** | Country + business profiles, seed-file discovery | ⬜ |
 | **1.9** | Setup wizard backend | ⬜ |
 | **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ |
@@ -538,6 +539,30 @@ Step 1.4 built the **answer** to "may they?"; this builds the guarantee that **a
   renaming a policy key caught both the uncovered method and the orphaned entry at once.
 - 16 new tests.
 
+### Step 1.6 — Field-level redaction
+A permission can now gate a **field within a response**, not just a whole method (§14.2).
+- **Populate only if permitted, never populate-then-blank (D1).** The restricted fields are
+  pointers with `omitempty`, and `redact.Visible` is the only thing that sets them. The property
+  that buys: **forgetting the redaction call hides data rather than leaking it.** A blank-it-out
+  design has the opposite failure mode, where every new code path is another place to forget and
+  forgetting is silent.
+- **Absent, not blank.** A blank `beforeJson` is indistinguishable from an entry that genuinely
+  had no before-state, so the user cannot tell "nothing here" from "something here you may not
+  see" — and only the second sends someone to ask.
+- **The audit schema and read path land here**, because redaction needed a real consumer;
+  writing entries stays in 1.7. Append-only is enforced by there being **no** Update or Delete
+  method, not by a comment.
+- **Manager is seeded with `audit.entry.view` but not `view_payload`** (D4), so the split is
+  live in the default configuration rather than only in a test.
+- **The two gates compose without knowing about each other**: the 1.5 guard decides whether you
+  see the list, redaction decides how much of each row.
+- Mutation-verified twice: removing the check leaked the salary values in full; dropping
+  `omitempty` (keeping the pointer, isolating exactly the absent-vs-blank decision) failed with
+  *"the safe state is not the default, so forgetting the call would LEAK"*.
+- A count-based binding test broke for the **third** time in this codebase and was rewritten to
+  assert by presence — a test that counts a growing collection is a maintenance tax.
+- 12 new Go tests, 2 new frontend tests (123 total).
+
 ---
 
 ## 7. Repository map (as built)
@@ -573,6 +598,8 @@ Mizan ERP/
 │   ├── api/envelope/, api/appctx/      # result envelope + per-request context
 │   ├── api/bindings/                   # static Wails façades + the policy guard
 │   ├── api/policy/                     # what each binding method requires
+│   ├── api/redact/                     # field-level redaction (absent, not blank)
+│   ├── modules/audit/                  # the append-only trail (read path)
 │   ├── bootstrap/                      # the composition root
 │   └── api/ (reserved)  modules/ (reserved)  bootstrap/ (reserved)
 ├── locales/{en,ar}/                     # go:embed'd catalogs, shared with the frontend
@@ -604,8 +631,9 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.6 — field-level redaction** (§14.2): a permission can currently gate
-  a whole method, not a field within its response. **Design first, await approval.**
+- **Immediate next: Step 1.7 — the audit WRITE path**: the `Auditable` domain event and the
+  subscribers that record it INSIDE the business transaction (phase D7), so a change and its
+  audit record commit together or neither does. **Design first, await approval.**
 - **Built but not yet reached by any production path:** sessions. `Validate` is fully tested
   and nothing calls it — the binding decorator that stamps `appctx.WithActor` is Step 1.5, and
   the login screen is 1.10. Same for `must_change`, carried from 1.2.
@@ -633,6 +661,7 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 ## 10. Commit history (Phase 0)
 
 ```
+(pending) Phase 1 Step 1.6: field-level redaction and the audit read path
 (pending) Phase 1 Step 1.5: the policy mechanism and enforcement
 (pending) Phase 1 Step 1.4: RBAC — permissions, roles, and scope
 (pending) Phase 1 Step 1.3: sessions, throttling, and the real AppContext

@@ -58,6 +58,11 @@ func defaultRoles() []roleSeed {
 			Grants: []string{
 				PermUserView, PermUserManage, PermRoleView,
 				PermSessionView, PermSessionRevoke,
+				// The audit LIST but not its payloads (Step 1.6, D4). A manager needs to see
+				// that a price changed; the old price is a different question, and making the
+				// distinction live in the seeded configuration keeps it honest rather than
+				// only exercised by a test.
+				"audit.entry.view",
 			},
 		},
 		{
@@ -78,7 +83,7 @@ func defaultRoles() []roleSeed {
 		{
 			Code: "viewer", Name: "Viewer",
 			Description: "roles.viewer",
-			Grants:      []string{PermUserView, PermRoleView},
+			Grants:      []string{PermUserView, PermRoleView, "audit.entry.view"},
 		},
 	}
 }

@@ -1,0 +1,8 @@
+{
+  "code": "general_retail",
+  "name_key": "business_profile.general_retail",
+  "name": "General retail",
+  "description": "A shop that buys and sells goods, with no trade-specific behaviour. The neutral default: choose it when nothing else fits, and change any individual setting afterwards.",
+  "settings": {},
+  "flags": {}
+}

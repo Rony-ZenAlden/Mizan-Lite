@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-06**. Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-07**. Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -58,6 +58,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_5_POLICY.md` | Step 1.5: policies per binding, the guard, and the startup coverage check. |
 | `docs/architecture/STEP_1_6_REDACTION.md` | Step 1.6: field-level redaction and the audit read path. |
 | `docs/architecture/STEP_1_7_AUDIT_WRITE.md` | Step 1.7: the `Auditable` event, in-transaction subscribers, atomicity. |
+| `docs/architecture/STEP_1_8_PROFILES.md` | Step 1.8: country/business profiles and layered seed-file discovery. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -121,8 +122,8 @@ and D7 synchronous in-transaction audit).
 | **1.5** | The policy mechanism + enforcement decorator + startup coverage check | ✅ committed |
 | **1.6** | Field-level redaction (+ audit schema & read path) | ✅ committed |
 | **1.7** | Audit WRITE path: `Auditable` events, in-transaction subscribers (D7) | ✅ committed |
-| **1.8** | Country + business profiles, seed-file discovery | ⬜ next — design first |
-| **1.9** | Setup wizard backend | ⬜ |
+| **1.8** | Country + business profiles, seed-file discovery | ✅ committed |
+| **1.9** | Setup wizard backend | ⬜ next — design first |
 | **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ |
 | **1.12** | Phase 1 Definition-of-Done review | ⬜ |
 
@@ -591,6 +592,38 @@ An audited change and its audit record now **commit together or not at all** (ph
   guarantee structural.
 - 14 new Go tests.
 
+### Step 1.8 — Country & business profiles, seed-file discovery
+The mechanism §16.4 calls *"the concrete mechanism that satisfies generic ERP through
+configuration, not code"*.
+- **Closes the 0.5 D7 item**, deferred to 0.9, carried again at 0.9 and 0.12. Profiles are the
+  first genuinely file-shaped seed, so this is where the loader gets built — and
+  `Module.Metadata()` needed **no contract change**, the first Phase-0 seam to fit at first use.
+- **Two layers**: what the binary embeds, and `<dataDir>/seeds/`. That second layer is what
+  makes Addendum §C's "adding a country is dropping in a JSON file — no code, no release" true.
+  Overrides are **whole-file**, never merged: a merged document has no legible author.
+- **A broken shipped file is fatal; a broken user file is reported and skipped (D4).** A bug in
+  our build must fail on our machine; a typo in a customer's file must not close their shop.
+- **Country profiles are files, never a stored table (D1)** — read once at setup, then copied
+  into settings. A stored row would be a second answer to "what is this company's date format?",
+  which is exactly the hidden source of truth §C.2 forbids.
+- **Business profiles split into a catalogue table and a bundle file (D2)**: the list is
+  metadata the UI shows; the bundle is a script run once. `Apply` writes at company scope in one
+  audited transaction.
+- **Bundles are validated against the settings registry at LOAD (D5)**, not at apply — the same
+  defect, caught where it is still cheap to fix.
+- **Strict JSON**: an unknown key is reported, never ignored. A silently-ignored key is a value
+  the customer believes they configured and the system never saw.
+- `sy` (per §C.3) plus `sa`, `ae`, `eg`. **No shipped file carries a tax rate or a chart of
+  accounts**, and a test asserts it. The non-registry defaults are unverified and flagged.
+- Both business bundles are **empty on purpose**: no module has yet declared a setting that
+  differs by trade. The mechanism ships; the data fills in Phase 3–5.
+- Mutation-verified twice: making a user-file failure fatal broke the "a bad file must not stop
+  the shop" tests at both levels; dropping `DisallowUnknownFields` broke the strictness test.
+- **A test was passing for the wrong reason** — the settings registry is populated by package
+  `init`, so a focused test declared fewer keys than production and a wrong-type check was never
+  reached. Third occurrence of this pattern in the project.
+- 24 new Go tests.
+
 ---
 
 ## 7. Repository map (as built)
@@ -659,8 +692,13 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.8 — country and business profiles**, plus seed-file discovery.
+- **Immediate next: Step 1.9 — the setup wizard backend** (§WIZ): `Setup.Status` /
+  `Setup.Apply`, public bindings callable only while no company exists, one transaction.
   **Design first, await approval.**
+- **The shipped country defaults are unverified** (1.8 §3.3): date format, first day of week,
+  and pricing currency for `sy`/`sa`/`ae`/`eg`. Each is one line in one file and is shown to the
+  user during setup. Confirm or correct before the first customer install.
+- **Both business bundles are empty** and fill as modules declare trade-specific settings.
 - **Nothing forces a module to publish `Auditable`** (1.7 §6). A new write path that forgets
   leaves a silent hole in the trail. The mitigations that would work are a review checklist item
   now and a per-module "state changes publish" test later; neither is built.

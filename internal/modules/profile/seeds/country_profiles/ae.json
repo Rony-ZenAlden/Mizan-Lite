@@ -1,0 +1,24 @@
+{
+  "country_code": "AE",
+  "name_key": "country.ae",
+  "default_locale": "ar",
+  "supported_locales": ["ar", "en"],
+  "functional_currency_default": "AED",
+  "pricing_currency_default": "AED",
+  "chart_of_accounts_template": null,
+  "tax_profile": null,
+  "fiscal_year_start_month": 1,
+  "date_format": "dd/MM/yyyy",
+  "time_format": "HH:mm",
+  "first_day_of_week": 1,
+  "number_format": {
+    "decimal_separator": ".",
+    "thousand_separator": ",",
+    "digit_grouping": [3],
+    "numeral_system": "western"
+  },
+  "calendar": { "primary": "gregorian", "secondary": "hijri" },
+  "address_format": ["street", "district", "city", "emirate", "country"],
+  "phone_country_code": "+971",
+  "rounding_rule": { "mode": "none", "increment_minor": 0, "stage": "grand_total" }
+}

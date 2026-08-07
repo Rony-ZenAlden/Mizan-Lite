@@ -1,0 +1,24 @@
+{
+  "country_code": "EG",
+  "name_key": "country.eg",
+  "default_locale": "ar",
+  "supported_locales": ["ar", "en"],
+  "functional_currency_default": "EGP",
+  "pricing_currency_default": "EGP",
+  "chart_of_accounts_template": null,
+  "tax_profile": null,
+  "fiscal_year_start_month": 1,
+  "date_format": "dd/MM/yyyy",
+  "time_format": "HH:mm",
+  "first_day_of_week": 0,
+  "number_format": {
+    "decimal_separator": ".",
+    "thousand_separator": ",",
+    "digit_grouping": [3],
+    "numeral_system": "western"
+  },
+  "calendar": { "primary": "gregorian", "secondary": "hijri" },
+  "address_format": ["street", "district", "city", "governorate", "country"],
+  "phone_country_code": "+20",
+  "rounding_rule": { "mode": "none", "increment_minor": 0, "stage": "grand_total" }
+}

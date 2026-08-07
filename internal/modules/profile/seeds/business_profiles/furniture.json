@@ -1,0 +1,8 @@
+{
+  "code": "furniture",
+  "name_key": "business_profile.furniture",
+  "name": "Furniture",
+  "description": "Furniture retail: large items, made-to-order pieces, and delivery. The settings this profile will carry belong to modules that do not exist yet, so it currently applies nothing beyond selecting itself.",
+  "settings": {},
+  "flags": {}
+}

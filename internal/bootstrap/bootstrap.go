@@ -27,6 +27,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/modules/profile"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -106,6 +107,7 @@ type App struct {
 	Org       *org.Service
 	Identity  *identity.Service
 	Audit     *audit.Service
+	Profile   *profile.Service
 	Modules   []modules.Module
 	// Bindings are the structs handed to Wails.
 	Bindings []any
@@ -160,9 +162,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	orgModule := org.NewModule(nil)
 	identityModule := identity.NewModule(nil)
 	auditModule := audit.NewModule(nil)
+	profileModule := profile.NewModule(nil)
 
 	// 4. Migrate — before anything else reads a table.
-	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule, auditModule); err != nil {
+	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule, auditModule,
+		profileModule); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -246,9 +250,30 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Audit = audit.NewService(db, opts.Clock, auditActors{})
 	auditModule = audit.NewModule(app.Audit)
 
+	// Profiles are loaded from FILES, in two layers: what this binary embeds, and whatever the
+	// administrator dropped into the data directory. The second layer is what makes Addendum
+	// §C's "adding a country is dropping in a JSON file — no code, no release" true.
+	//
+	// This returns an error only for a file WE ship (1.8, D4). A customer's broken file is
+	// logged and skipped, because a seed file must not be able to stop a shop from opening.
+	app.Profile, err = profile.NewService(db, profile.Options{
+		UserFS:   profile.UserFS(opts.Paths.Data),
+		Settings: settings,
+		Clock:    opts.Clock,
+		Bus:      app.Bus,
+		Logger:   opts.Logger,
+	})
+	if err != nil {
+		abandon(db)
+		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
+			"loading the country and business profiles")
+	}
+	profileModule = profile.NewModule(app.Profile)
+
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
-	ordered, err := modules.Order([]modules.Module{auditModule, identityModule, orgModule, currencyModule})
+	ordered, err := modules.Order([]modules.Module{
+		auditModule, profileModule, identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

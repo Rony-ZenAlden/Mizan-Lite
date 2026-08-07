@@ -107,6 +107,7 @@ func TestSecondBootIsClean(t *testing.T) {
 	dir := t.TempDir()
 
 	first := bootIn(t, dir)
+	afterOne := countRows(t, first, "currencies")
 	if err := first.Shutdown(context.Background()); err != nil {
 		t.Fatalf("first shutdown: %v", err)
 	}
@@ -118,14 +119,29 @@ func TestSecondBootIsClean(t *testing.T) {
 	}
 
 	// Seeding every boot (D4) must not duplicate rows.
+	//
+	// Compared against the FIRST boot rather than a literal. The literal was 4, and adding
+	// three currencies in Step 1.9 broke this test while the property it guards — idempotency —
+	// was never in question. That is the fifth count-based assertion in this project to break
+	// for a reason unrelated to what it tested.
+	afterTwo := countRows(t, second, "currencies")
+	if afterTwo != afterOne {
+		t.Errorf("currencies = %d after two boots, %d after one — seeding is not idempotent",
+			afterTwo, afterOne)
+	}
+	if afterOne == 0 {
+		t.Error("no currencies were seeded at all")
+	}
+}
+
+func countRows(t *testing.T, app *bootstrap.App, table string) int {
+	t.Helper()
 	var count int
-	if err := second.DB.WriterPool().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM currencies`).Scan(&count); err != nil {
+	if err := app.DB.WriterPool().QueryRowContext(app.Context(),
+		`SELECT COUNT(*) FROM `+table).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 4 {
-		t.Errorf("currencies = %d after two boots, want 4 — seeding is not idempotent", count)
-	}
+	return count
 }
 
 func TestSeedingSelfHealsADeletedSystemRow(t *testing.T) {

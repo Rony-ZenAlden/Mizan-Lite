@@ -57,6 +57,32 @@ func currencySeeds() metadata.SeedSpec {
 					"rounding_mode": round.HalfAwayFromZero.String(),
 				},
 			},
+			// Added in Step 1.9, because Step 1.8's country profiles name them and companies
+			// carry a foreign key to currencies(code): choosing Saudi Arabia in the wizard
+			// would otherwise fail at provisioning with a constraint error. A test now asserts
+			// that every shipped country profile's currencies are seeded, so the next profile
+			// cannot reintroduce the gap.
+			{
+				Code: "SAR", Name: "Saudi Riyal", IsSystem: true, IsActive: &active,
+				Columns: map[string]any{
+					"symbol": "ر.س", "decimal_places": 2, "symbol_position": "after",
+					"rounding_mode": round.HalfAwayFromZero.String(),
+				},
+			},
+			{
+				Code: "AED", Name: "UAE Dirham", IsSystem: true, IsActive: &active,
+				Columns: map[string]any{
+					"symbol": "د.إ", "decimal_places": 2, "symbol_position": "after",
+					"rounding_mode": round.HalfAwayFromZero.String(),
+				},
+			},
+			{
+				Code: "EGP", Name: "Egyptian Pound", IsSystem: true, IsActive: &active,
+				Columns: map[string]any{
+					"symbol": "ج.م", "decimal_places": 2, "symbol_position": "after",
+					"rounding_mode": round.HalfAwayFromZero.String(),
+				},
+			},
 		},
 	}
 }

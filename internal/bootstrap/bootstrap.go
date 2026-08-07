@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/api/appctx"
+	"github.com/mizan-erp/mizan/internal/api/setup"
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
@@ -108,6 +109,7 @@ type App struct {
 	Identity  *identity.Service
 	Audit     *audit.Service
 	Profile   *profile.Service
+	Setup     *setup.Service
 	Modules   []modules.Module
 	// Bindings are the structs handed to Wails.
 	Bindings []any
@@ -269,6 +271,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 			"loading the country and business profiles")
 	}
 	profileModule = profile.NewModule(app.Profile)
+
+	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
+	// transaction, which module-isolation forbids from inside internal/modules — correctly,
+	// because setup owns no entities and is not a domain.
+	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
+		settings, catalog, app.Bus)
 
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.

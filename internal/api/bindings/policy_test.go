@@ -76,6 +76,13 @@ func TestPublicMethodsArePinned(t *testing.T) {
 		"Auth.Login":  true, // must be reachable by an unauthenticated caller
 		"Auth.Logout": true, // a JUST-expired session must still be able to clear itself
 		"Auth.Me":     true, // "am I signed in?" is asked before the answer is known
+
+		// The bootstrap paradox (§WIZ.1): no user exists, so nothing about first-run setup can
+		// be permissioned. Both are Public, and Apply carries a SECOND gate on top —
+		// setupGuard refuses once a company exists, which TestSetupIsUnreachableAfterSetup
+		// pins. Public here means "no session", not "no rule".
+		"Setup.Status": true,
+		"Setup.Apply":  true,
 	}
 
 	got := bindings.PublicMethodsForTest(bindings.New())

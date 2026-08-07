@@ -86,6 +86,7 @@ type Set struct {
 	Money   *Money
 	Auth    *Auth
 	Audit   *Audit
+	Setup   *Setup
 	session *currentSession
 }
 
@@ -103,6 +104,7 @@ func New() *Set {
 		Ops:     &Ops{graph: mk(opsPolicies())},
 		Money:   &Money{graph: mk(moneyPolicies())},
 		Audit:   &Audit{graph: mk(auditPolicies())},
+		Setup:   &Setup{graph: mk(setupPolicies())},
 		Auth:    &Auth{graph: mk(authPolicies()), session: session},
 		session: session,
 	}
@@ -112,7 +114,7 @@ func New() *Set {
 //
 // The order is stable so the generated JavaScript bindings are stable.
 func (s *Set) All() []any {
-	return []any{s.Boot, s.System, s.Auth, s.Config, s.Ops, s.Money, s.Audit}
+	return []any{s.Boot, s.System, s.Setup, s.Auth, s.Config, s.Ops, s.Money, s.Audit}
 }
 
 // Attach wires the built graph into every façade and marks boot ready.
@@ -125,6 +127,7 @@ func (s *Set) Attach(app *bootstrap.App) {
 	s.Money.attach(app)
 	s.Auth.attach(app)
 	s.Audit.attach(app)
+	s.Setup.attach(app)
 	// Ready is set LAST, after every façade can serve. The shell treats "ready" as permission
 	// to mount and immediately calls bindings; marking ready first would open a window in
 	// which those calls fail with not-ready for no reason.

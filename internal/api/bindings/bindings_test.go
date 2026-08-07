@@ -3,6 +3,8 @@ package bindings_test
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -22,10 +24,26 @@ import (
 
 // ── harness ─────────────────────────────────────────────────────────────────────
 
-func boot(t *testing.T) *bootstrap.App {
+func boot(t *testing.T) *bootstrap.App { return bootWithSeeds(t, nil) }
+
+// bootWithSeeds boots an app, first writing any given files into the data directory.
+//
+// The files go where a customer's would (1.8's overlay layer), so a test fixture and a
+// customer's own profile take exactly the same path into the system.
+func bootWithSeeds(t *testing.T, files map[string]string) *bootstrap.App {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv(paths.EnvOverride, dir)
+
+	for name, body := range files {
+		full := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("seed dir: %v", err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatalf("seed file: %v", err)
+		}
+	}
 
 	resolved, err := paths.Resolve("Mizan")
 	if err != nil {

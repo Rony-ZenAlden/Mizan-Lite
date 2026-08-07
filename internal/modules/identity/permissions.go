@@ -45,10 +45,16 @@ type roleSeed struct {
 // that will matter (Cashier selling, Stock Keeper adjusting) get their grants when the modules
 // that define those permissions exist. Seeding a Cashier with imagined sales permissions would
 // be seeding codes nothing declares — which the sync would immediately mark obsolete.
+// RoleAdministrator is the code the setup wizard assigns to the first user.
+//
+// Exported because the wizard names it and a string literal in two packages is a rename waiting
+// to break one of them silently.
+const RoleAdministrator = "administrator"
+
 func defaultRoles() []roleSeed {
 	return []roleSeed{
 		{
-			Code: "administrator", Name: "Administrator",
+			Code: RoleAdministrator, Name: "Administrator",
 			Description: "roles.administrator",
 			Grants:      []string{auth.Wildcard},
 		},

@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-07**. Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-07** (Step 1.9). Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -59,6 +59,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_6_REDACTION.md` | Step 1.6: field-level redaction and the audit read path. |
 | `docs/architecture/STEP_1_7_AUDIT_WRITE.md` | Step 1.7: the `Auditable` event, in-transaction subscribers, atomicity. |
 | `docs/architecture/STEP_1_8_PROFILES.md` | Step 1.8: country/business profiles and layered seed-file discovery. |
+| `docs/architecture/STEP_1_9_SETUP_WIZARD.md` | Step 1.9: the setup wizard backend and its structural gate. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -123,8 +124,8 @@ and D7 synchronous in-transaction audit).
 | **1.6** | Field-level redaction (+ audit schema & read path) | ✅ committed |
 | **1.7** | Audit WRITE path: `Auditable` events, in-transaction subscribers (D7) | ✅ committed |
 | **1.8** | Country + business profiles, seed-file discovery | ✅ committed |
-| **1.9** | Setup wizard backend | ⬜ next — design first |
-| **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ |
+| **1.9** | Setup wizard backend | ✅ committed |
+| **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ next — design first |
 | **1.12** | Phase 1 Definition-of-Done review | ⬜ |
 
 ---
@@ -624,6 +625,38 @@ configuration, not code"*.
   reached. Third occurrence of this pattern in the project.
 - 24 new Go tests.
 
+### Step 1.9 — The setup wizard backend
+§WIZ's answer to the bootstrap paradox, built: no user exists, so setup bindings are **public
+and callable only while no company does**.
+- **`internal/api/setup`, not a module.** Setup composes org, identity, profile, and currency in
+  one transaction, which `module-isolation` forbids from inside `internal/modules` — correctly,
+  because setup owns no entities and is not a domain.
+- **`setupGuard` is the accessor**, applying the 1.5 D1 trick one level in: a mutating Setup
+  method that skips it has no graph. Forgetting produces a method that does nothing, not one
+  that creates administrators unauthenticated.
+- **One transaction.** A failure leaves **no company at all** — recoverable by running the
+  wizard again — rather than a company with no administrator, which no screen can repair.
+- **`Status` stays callable forever and answers less afterwards**; `Apply` refuses forever.
+- **The business profile applies before the user's explicit choices**, so the person beats the
+  trade's default.
+- **Apply does not sign the user in** (D6): the login that follows proves the credential before
+  the wizard closes. No default password ships, and a test tries five common ones.
+- **Setup's audit entries record `system`** with no actor. Fabricating an attribution would
+  imply decisions nobody made.
+- **Closes a defect Step 1.8 shipped**: `sa`/`ae`/`eg` named SAR/AED/EGP, which currency never
+  seeded, and companies carry an FK to `currencies(code)`. Choosing Saudi Arabia would have
+  failed mid-transaction. Now seeded, and **the wizard is run once per shipped country** in test.
+- **The first mutation drill changed the design.** Removing `setupGuard` broke nothing, because
+  a third redundant check inside `setup.Apply` caught the call instead — a guard whose removal
+  is invisible has already stopped working. The redundant check was deleted; the drill now fails
+  correctly on the error code, which is what distinguishes the layers.
+- **A test that proved nothing**, again (fourth time): the ordering test used an empty bundle, so
+  it would have passed under either order. Its fixture now drops a real bundle through 1.8's
+  overlay layer.
+- **A fifth count-based test broke** (`currencies == 4`) and was rewritten to compare boots,
+  which is what idempotency actually means.
+- 20 new Go tests.
+
 ---
 
 ## 7. Repository map (as built)
@@ -692,9 +725,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.9 — the setup wizard backend** (§WIZ): `Setup.Status` /
-  `Setup.Apply`, public bindings callable only while no company exists, one transaction.
-  **Design first, await approval.**
+- **Immediate next: Steps 1.10–1.11 — the frontend**: router, auth gates, the login screen, the
+  setup wizard screens, and the first admin screens. **Design first, await approval.**
+- **`Apply` needs `settings.Reload`** after its transaction, because the cache was loaded before
+  the rows were written. First real occurrence of the case 0.5 flagged.
 - **The shipped country defaults are unverified** (1.8 §3.3): date format, first day of week,
   and pricing currency for `sy`/`sa`/`ae`/`eg`. Each is one line in one file and is shown to the
   user during setup. Confirm or correct before the first customer install.

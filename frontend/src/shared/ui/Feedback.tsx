@@ -7,12 +7,27 @@ import { cn } from "./cn";
 
 // ── Spinner ─────────────────────────────────────────────────────────────────────
 
-export function Spinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+/**
+ * A busy indicator.
+ *
+ * `label` was added in Step 1.10: a spinner with role="status" and no accessible name announces
+ * that something changed and not what — which is worse than silence, because it interrupts. The
+ * gates were the first callers to need it, and the alternative (a second role="status" wrapper
+ * around it) announced the same thing twice.
+ */
+export function Spinner({
+  size = "md",
+  label,
+}: {
+  size?: "sm" | "md" | "lg";
+  label?: string;
+}) {
   const px = { sm: "h-4 w-4", md: "h-5 w-5", lg: "h-8 w-8" }[size];
   return (
     <span
       role="status"
       aria-live="polite"
+      aria-label={label}
       className={cn("inline-block animate-spin rounded-full border-2 border-border", px)}
       style={{ borderTopColor: "rgb(var(--color-primary))" }}
     />

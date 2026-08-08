@@ -77,6 +77,88 @@ export function me(): Promise<SessionInfo> {
   return call<SessionInfo>("Auth", "Me");
 }
 
+// ── Setup ───────────────────────────────────────────────────────────────────────
+//
+// The wizard. Both methods are Public on the Go side (§WIZ.1's bootstrap paradox): no user
+// exists on a fresh install, so nothing about first-run setup can be permissioned. `Apply`
+// carries a second gate there — it refuses once a company exists, forever.
+
+export interface SetupCountry {
+  code: string;
+  /** A translation key, not a name: the country list is translated like everything else. */
+  nameKey: string;
+  defaultLocale: string;
+  supportedLocales: string[];
+  functionalCurrency: string;
+  pricingCurrency: string;
+  fiscalYearStart: number;
+  dateFormat: string;
+  firstDayOfWeek: number;
+  phoneCode: string;
+}
+
+export interface SetupBusinessProfile {
+  code: string;
+  nameKey: string;
+  name: string;
+  description: string;
+}
+
+export interface SetupCurrency {
+  code: string;
+  name: string;
+  symbol: string;
+}
+
+export interface SetupOptions {
+  countries: SetupCountry[];
+  businessProfiles: SetupBusinessProfile[];
+  currencies: SetupCurrency[];
+  locales: string[];
+}
+
+export interface SetupStatus {
+  required: boolean;
+  /** Present ONLY while setup is required — the backend stops volunteering it afterwards. */
+  options?: SetupOptions;
+}
+
+export interface SetupInput {
+  locale: string;
+  countryCode: string;
+  companyCode: string;
+  companyName: string;
+  legalName: string;
+  taxNumber: string;
+  functionalCurrency: string;
+  pricingCurrency: string;
+  businessProfile: string;
+  fiscalYearStartMonth: number;
+  fiscalYearStartYear: number;
+  branchCode: string;
+  branchName: string;
+  warehouseCode: string;
+  warehouseName: string;
+  adminUsername: string;
+  adminDisplayName: string;
+  adminPassword: string;
+}
+
+export interface SetupResult {
+  companyId: string;
+  branchId: string;
+  warehouseId: string;
+  adminUserId: string;
+}
+
+export function setupStatus(): Promise<SetupStatus> {
+  return call<SetupStatus>("Setup", "Status");
+}
+
+export function applySetup(input: SetupInput): Promise<SetupResult> {
+  return call<SetupResult>("Setup", "Apply", input);
+}
+
 // ── System ──────────────────────────────────────────────────────────────────────
 
 export interface HealthInfo {

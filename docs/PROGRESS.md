@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-07** (Step 1.9). Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-08** (Step 1.10). Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -60,6 +60,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_7_AUDIT_WRITE.md` | Step 1.7: the `Auditable` event, in-transaction subscribers, atomicity. |
 | `docs/architecture/STEP_1_8_PROFILES.md` | Step 1.8: country/business profiles and layered seed-file discovery. |
 | `docs/architecture/STEP_1_9_SETUP_WIZARD.md` | Step 1.9: the setup wizard backend and its structural gate. |
+| `docs/architecture/STEP_1_10_FRONTEND_GATES.md` | Step 1.10: the gate stack, router, login screen, and setup wizard. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -125,7 +126,8 @@ and D7 synchronous in-transaction audit).
 | **1.7** | Audit WRITE path: `Auditable` events, in-transaction subscribers (D7) | ✅ committed |
 | **1.8** | Country + business profiles, seed-file discovery | ✅ committed |
 | **1.9** | Setup wizard backend | ✅ committed |
-| **1.10–1.11** | Frontend: router, gates, login, wizard, admin screens | ⬜ next — design first |
+| **1.10** | Frontend: deps, gates, router, login, setup wizard | ✅ committed |
+| **1.11** | Frontend: users, roles, sessions, audit viewer; permission-aware navigation | ⬜ next — design first |
 | **1.12** | Phase 1 Definition-of-Done review | ⬜ |
 
 ---
@@ -657,6 +659,33 @@ and callable only while no company does**.
   which is what idempotency actually means.
 - 20 new Go tests.
 
+### Step 1.10 — Frontend: gates, router, login, and the wizard
+§FE.1's gate stack, built: **Boot → Setup → Auth → Shell**.
+- **The three deferred dependencies come due** (D9, approved in the phase design): TanStack
+  Query, Zustand, react-router. The 0.11 deferral did its job — each arrives with a consumer.
+- **A gate is a MOUNT BOUNDARY, not a redirect.** Nothing below renders until it resolves, so
+  the shell cannot mount against a database with no company and unmount a tick later.
+- **None of it is security**, and every gate says so at its definition. §14.3 is explicit that
+  the backend is the sole enforcement point, and 1.5 made that structural there.
+- **Sign-out clears the query cache** — the one guarantee here the backend *cannot* provide: a
+  cached answer never reaches a binding, so a shared terminal would show the previous cashier's
+  lists no matter how well the server checks permissions.
+- **Query retries are off.** A binding call is local IPC; a failure will not resolve in 200ms,
+  and retrying turns one clear error into three plus a delay.
+- **The login screen shows the throttle countdown** (§13.1 is "delay, never lock"), and maps
+  `BindingError.fields` onto its inputs — the envelope's per-field failures, carried since 0.11,
+  get their first consumer.
+- **The wizard holds one object across seven steps and submits once**, matching the backend's
+  single transaction, so a rejection costs a click rather than twelve fields. It ends by
+  **signing in**, which proves the account works before the wizard closes.
+- **`mustChange` is an explicit dead end** until 1.11 adds the change-password path. Letting the
+  user through would make the flag a lie exactly when it matters.
+- **§FE.4's question answered: no new primitive was needed.** One was extended — `Spinner`
+  gained an accessible label, found by a test failing on two nested `role="status"` regions.
+- Mutation-verified twice: rendering children under a pending gate broke the mount-boundary
+  test; dropping the cache clear broke the sign-out test.
+- 21 new frontend tests (144 total).
+
 ---
 
 ## 7. Repository map (as built)
@@ -725,8 +754,10 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Steps 1.10–1.11 — the frontend**: router, auth gates, the login screen, the
-  setup wizard screens, and the first admin screens. **Design first, await approval.**
+- **Immediate next: Step 1.11 — the admin screens**: users, roles and grants, sessions, the
+  audit viewer, and permission-aware navigation. **Design first, await approval.**
+- **Change-password for one's own account** does not exist on either side. `mustChange` is a
+  dead end until 1.11 builds it.
 - **`Apply` needs `settings.Reload`** after its transaction, because the cache was loaded before
   the rows were written. First real occurrence of the case 0.5 flagged.
 - **The shipped country defaults are unverified** (1.8 §3.3): date format, first day of week,
@@ -741,7 +772,9 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
   the login screen is 1.10. Same for `must_change`, carried from 1.2.
 - **Closed in Step 1.1:** REPO.3 rule 2 (`module-isolation`) and rule 7 (restated as `no-sql`)
   are both enforced and verified by planting. **All seven REPO.3 rules now hold.**
-- **One manual launch** to visually confirm the shell before Phase 1 UI work.
+- **One manual launch** to visually confirm the app. Carried since 0.12 and now the largest
+  unverified surface in the project: every screen through 1.10 is covered by tests and none has
+  been looked at.
 - **Deferred (tracked):** `sqlc` for read models (0.9+); `kernel/paging` helper; SAVEPOINT-based
   partial rollback (only if needed); the real GitHub/remote integrations (optional, user's call).
 - **Carried from 0.4 (deliberate, not gaps):** module-owned migration FS **merging** (§3.5) —

@@ -48,6 +48,14 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
         mustChange: false, permissions: ["*"],
       }),
   },
+  Setup: {
+    // Browser dev runs against an already-configured installation: the wizard is reachable in
+    // dev by flipping this to true, and leaving it false means every OTHER screen is reachable
+    // without walking seven steps first.
+    Status: () => ok({ required: false }),
+    Apply: () =>
+      ok({ companyId: "dev", branchId: "dev", warehouseId: "dev", adminUserId: "dev" }),
+  },
   System: {
     Health: () =>
       ok({

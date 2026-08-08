@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { usePreferences, useTranslation } from "@/app/providers/PreferencesProvider";
+import { useSession } from "@/app/session/session";
+import { useSignOut } from "@/app/session/useSignOut";
 import { health, type HealthInfo, type ThemePreference } from "@/lib/wails";
 import { JobStatusPanel } from "@/modules/ops/JobStatusPanel";
 import { Button, Select, Tabs, Tooltip } from "@/shared/ui";
@@ -50,11 +52,28 @@ function Sidebar() {
 
 function Header() {
   const { t, locale, availableLocales, setLocale, theme, setTheme } = usePreferences();
+  const session = useSession();
+  const signOut = useSignOut();
 
   return (
     <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-3">
       <h1 className="truncate text-base font-medium text-text">{t("shell.title")}</h1>
       <div className="flex items-center gap-2">
+        {session ? (
+          <>
+            <span className="hidden truncate text-sm text-text-muted sm:inline">
+              {session.displayName || session.username}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => signOut.mutate()}
+              loading={signOut.isPending}
+            >
+              {t("auth.signOut")}
+            </Button>
+          </>
+        ) : null}
         <Select
           value={locale}
           onValueChange={(next) => void setLocale(next as Locale)}

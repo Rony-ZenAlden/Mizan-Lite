@@ -83,6 +83,13 @@ func TestPublicMethodsArePinned(t *testing.T) {
 		// pins. Public here means "no session", not "no rule".
 		"Setup.Status": true,
 		"Setup.Apply":  true,
+
+		// Public means "no PERMISSION required", not "no session required" — the method reads
+		// its subject from the context and takes no user id, so a caller with no session has no
+		// actor and is refused. It is public because the user who most needs it may hold no
+		// permission at all: must_change is typically set on an account created seconds
+		// earlier with no role assigned yet (1.11 D3).
+		"Identity.ChangeMyPassword": true,
 	}
 
 	got := bindings.PublicMethodsForTest(bindings.New())

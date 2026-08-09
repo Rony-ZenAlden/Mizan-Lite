@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-08** (Step 1.10). Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-08** (Step 1.11). Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -61,6 +61,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_8_PROFILES.md` | Step 1.8: country/business profiles and layered seed-file discovery. |
 | `docs/architecture/STEP_1_9_SETUP_WIZARD.md` | Step 1.9: the setup wizard backend and its structural gate. |
 | `docs/architecture/STEP_1_10_FRONTEND_GATES.md` | Step 1.10: the gate stack, router, login screen, and setup wizard. |
+| `docs/architecture/STEP_1_11_ADMIN_SCREENS.md` | Step 1.11: the administration surface and permission-aware navigation. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -127,8 +128,8 @@ and D7 synchronous in-transaction audit).
 | **1.8** | Country + business profiles, seed-file discovery | ✅ committed |
 | **1.9** | Setup wizard backend | ✅ committed |
 | **1.10** | Frontend: deps, gates, router, login, setup wizard | ✅ committed |
-| **1.11** | Frontend: users, roles, sessions, audit viewer; permission-aware navigation | ⬜ next — design first |
-| **1.12** | Phase 1 Definition-of-Done review | ⬜ |
+| **1.11** | Administration: users, roles, sessions, audit viewer; permission-aware navigation | ✅ committed |
+| **1.12** | Phase 1 Definition-of-Done review | ⬜ next |
 
 ---
 
@@ -686,6 +687,37 @@ and callable only while no company does**.
   test; dropping the cache clear broke the sign-out test.
 - 21 new frontend tests (144 total).
 
+### Step 1.11 — Administration: users, roles, sessions, audit
+The step where the six identity permissions declared in 1.4 finally get consumers — five of them
+had none at all.
+- **`SetPassword` had one name and two meanings.** It cleared `must_change` unconditionally,
+  which is right for a self-service change and wrong for the administrator reset that is the
+  only way a screen would call it: an administrator would hand over a password and the flag
+  meant to force its replacement would never fire. Split into `ChangeOwnPassword` (clears the
+  flag, requires the current password) and `ResetPassword` (sets it). The old one **removed**.
+- **`policy.Public()` skipped too much.** The guard's public branch never stamped an actor, so
+  the first public method that needs to know *who is calling* got an empty context. Public means
+  "no permission required", never "pretend nobody is here". **Fourth** early seam to be wrong at
+  first use — the pattern is now a rule: *a seam with no consumer is drafted, not built.*
+- **Two ways to brick an installation, both closed in the SERVICE**: deactivating yourself (the
+  click signs you out and removes the ability to undo it) and removing the last administrator's
+  role (a different rule from last-active-user — you can be the last administrator among five
+  active users).
+- **The `mustChange` dead end 1.10 left is now a door**: the forced state renders the
+  change-password screen instead of an apology.
+- **The role editor reads the synced permission catalogue from the database**, obsolete entries
+  shown rather than hidden.
+- **The audit viewer renders three states** — withheld / empty / present. Collapsing the first
+  two would undo 1.6 entirely: a blank cell cannot be told from a forbidden one.
+- **Navigation and routes are generated from ONE list**, so a screen cannot be reachable without
+  appearing in the menu or vice versa. Both filters are cosmetic and say so.
+- **A latent bug in the query layer**: TanStack Query calls `mutationFn` with a second argument
+  of its own, and passing a binding wrapper by reference would serialise its internal context
+  across the IPC boundary the day a wrapper spreads its arguments. Every mutation now wraps.
+- Mutation-verified twice; the second drill exposed a test passing on a neighbouring rule and
+  the test was strengthened.
+- 8 new frontend tests (152 total), 12 new Go tests.
+
 ---
 
 ## 7. Repository map (as built)
@@ -754,10 +786,13 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.11 — the admin screens**: users, roles and grants, sessions, the
-  audit viewer, and permission-aware navigation. **Design first, await approval.**
-- **Change-password for one's own account** does not exist on either side. `mustChange` is a
-  dead end until 1.11 builds it.
+- **Immediate next: Step 1.12 — the Phase 1 Definition-of-Done review.** That is also where the
+  visual confirmation belongs: twelve screens now exist and none has been rendered on a display.
+- **The audit viewer is not paginated.** It reads a 200-row window with an entity-type filter.
+  §FE.2 called the audit log "the first genuinely paginated read"; it will need to be before a
+  shop has a year of history.
+- **Branch-scoped role assignment has no screen** — every Phase 1 permission is company-wide, so
+  a branch picker would offer a distinction nothing observes. Phase 4.
 - **`Apply` needs `settings.Reload`** after its transaction, because the cache was loaded before
   the rows were written. First real occurrence of the case 0.5 flagged.
 - **The shipped country defaults are unverified** (1.8 §3.3): date format, first day of week,

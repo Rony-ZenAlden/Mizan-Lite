@@ -1,51 +1,88 @@
-import { useEffect, useState } from "react";
+import { NavLink, Route, Routes } from "react-router-dom";
 import { usePreferences, useTranslation } from "@/app/providers/PreferencesProvider";
-import { useSession } from "@/app/session/session";
+import { RequirePermission } from "@/app/session/Can";
+import { useSession, hasPermission } from "@/app/session/session";
 import { useSignOut } from "@/app/session/useSignOut";
-import { health, type HealthInfo, type ThemePreference } from "@/lib/wails";
-import { JobStatusPanel } from "@/modules/ops/JobStatusPanel";
-import { Button, Select, Tabs, Tooltip } from "@/shared/ui";
+import { ROUTES } from "@/app/shell/routes";
+import { type ThemePreference } from "@/lib/wails";
+import { Button, Select, Tooltip } from "@/shared/ui";
 import type { Locale } from "@/i18n/messages";
 
 /**
  * The application shell: sidebar, header, content.
  *
- * A real layout rather than a centred card, because the point of the shell is to be the frame
- * every Phase 1 module drops into. The navigation region is deliberately empty — there are no
- * modules to navigate to yet, and inventing placeholder routes would mean deleting them.
+ * The navigation region was deliberately empty through Phase 0 — there were no modules to
+ * navigate to, and placeholder routes would have been deleted. Step 1.11 fills it from ROUTES,
+ * so the menu and the router are generated from ONE declaration and cannot disagree about what
+ * exists.
  */
 export function AppShell() {
-  const { t } = useTranslation();
-  const [tab, setTab] = useState("system");
-
   return (
     <div className="flex h-full">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
-          <Tabs
-            value={tab}
-            onValueChange={setTab}
-            items={[
-              { value: "system", label: t("shell.nav.system"), content: <SystemPanel /> },
-              { value: "jobs", label: t("shell.nav.jobs"), content: <JobStatusPanel /> },
-            ]}
-          />
+          <Routes>
+            {ROUTES.map((route) => (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={
+                  route.permission ? (
+                    // Belt AND braces, both cosmetic: the menu item is hidden, and the route
+                    // still explains itself if reached another way. Neither is enforcement —
+                    // every binding re-checks on the Go side (§14.3).
+                    <RequirePermission permission={route.permission}>
+                      {route.element}
+                    </RequirePermission>
+                  ) : (
+                    route.element
+                  )
+                }
+              />
+            ))}
+          </Routes>
         </main>
       </div>
     </div>
   );
 }
 
+/**
+ * The navigation menu, filtered by permission (§FE.3).
+ *
+ * COSMETIC. It hides what would fail, so a cashier does not learn to ignore errors by clicking
+ * a menu item that always refuses. It protects nothing.
+ */
 function Sidebar() {
   const { t } = useTranslation();
+  const session = useSession();
+  const permissions = session?.permissions ?? [];
+
+  const visible = ROUTES.filter(
+    (route) => !route.permission || hasPermission(permissions, route.permission),
+  );
+
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-e border-border bg-surface-raised p-4 md:flex">
       <p className="text-lg font-semibold text-text">{t("app.title")}</p>
       <p className="mt-1 text-xs text-text-muted">{t("app.tagline")}</p>
-      {/* Navigation lands with the first module that has a screen (Phase 1). */}
-      <nav className="mt-6 flex flex-col gap-1" aria-label={t("shell.nav.label")} />
+      <nav className="mt-6 flex flex-col gap-1" aria-label={t("shell.nav.label")}>
+        {visible.map((route) => (
+          <NavLink
+            key={route.path}
+            to={route.path}
+            end={route.path === "/"}
+            className={({ isActive }) =>
+              "rounded px-3 py-2 text-sm " +
+              (isActive ? "bg-surface-sunken font-medium text-text" : "text-text-muted")
+            }
+          >
+            {t(route.labelKey)}
+          </NavLink>
+        ))}
+      </nav>
     </aside>
   );
 }
@@ -116,35 +153,5 @@ function ThemeToggle({
         <span aria-hidden="true">{THEME_ICON[theme]}</span>
       </Button>
     </Tooltip>
-  );
-}
-
-/** The health screen — the envelope's first consumer, now reading through the wrapper. */
-function SystemPanel() {
-  const { t } = useTranslation();
-  const [info, setInfo] = useState<HealthInfo | null>(null);
-
-  useEffect(() => {
-    health()
-      .then(setInfo)
-      .catch(() => setInfo(null));
-  }, []);
-
-  return (
-    <dl className="grid max-w-md grid-cols-2 gap-2 text-sm">
-      <Row label={t("shell.version")} value={info?.version} />
-      <Row label={t("shell.platform")} value={info?.platform} />
-      <Row label={t("shell.backend")} value={info?.goVersion} />
-      <Row label={t("shell.commit")} value={info?.commit} />
-    </dl>
-  );
-}
-
-function Row({ label, value }: { label: string; value?: string }) {
-  return (
-    <>
-      <dt className="text-text-muted">{label}</dt>
-      <dd className="font-mono text-text">{value ?? "—"}</dd>
-    </>
   );
 }

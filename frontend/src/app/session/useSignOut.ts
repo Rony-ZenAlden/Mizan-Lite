@@ -26,7 +26,9 @@ export function useSignOut() {
   const clearSession = useSessionStore((state) => state.clear);
 
   return useMutation({
-    mutationFn: logout,
+    // Wrapped, not passed by reference: TanStack Query supplies a second argument of its
+    // own, and a binding wrapper should only ever receive what we decided to send it.
+    mutationFn: () => logout(),
     onSettled: () => {
       clearSession();
       queryClient.clear();

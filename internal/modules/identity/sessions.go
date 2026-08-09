@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
@@ -349,4 +350,55 @@ type failureSnapshot struct {
 	UserID     id.ID  `json:"userId,omitempty"`
 	Reason     string `json:"reason"`
 	DeviceInfo string `json:"deviceInfo,omitempty"`
+}
+
+// ── the sessions screen (1.11) ──────────────────────────────────────────────────
+
+// SessionView is a live session with the person it belongs to.
+//
+// A view rather than domain.Session (1.11 D4): the screen shows WHO beside the device, and
+// domain.Session carries only a user id — the screen would otherwise resolve names itself, one
+// query per row.
+type SessionView struct {
+	ID          id.ID
+	UserID      id.ID
+	Username    string
+	DisplayName string
+	BranchID    id.ID
+	StartedAt   time.Time
+	LastSeen    time.Time
+	DeviceInfo  string
+	// ExpiresAt is the ABSOLUTE expiry, not the idle one: the idle window rolls forward on
+	// every call, so showing it would tell an administrator only that the session is in use.
+	ExpiresAt time.Time
+}
+
+// AllActiveSessions lists every live session in the company.
+//
+// Ordered newest-first. The administrator reading this is usually answering "who is signed in
+// right now?", and the most recent arrival is the most likely subject of that question.
+func (s *Service) AllActiveSessions(ctx context.Context, companyID id.ID) ([]SessionView, error) {
+	users, err := s.repos.Users(ctx, companyID)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []SessionView
+	for _, user := range users {
+		sessions, sessionErr := s.repos.ActiveSessions(ctx, user.ID)
+		if sessionErr != nil {
+			return nil, sessionErr
+		}
+		for _, session := range sessions {
+			out = append(out, SessionView{
+				ID: session.ID, UserID: user.ID,
+				Username: user.Username, DisplayName: user.DisplayName,
+				BranchID: session.BranchID, StartedAt: session.CreatedAt,
+				LastSeen: session.LastSeen, DeviceInfo: session.DeviceInfo,
+				ExpiresAt: session.AbsoluteExpires,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
+	return out, nil
 }

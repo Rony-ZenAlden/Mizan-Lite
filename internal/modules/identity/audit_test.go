@@ -62,8 +62,8 @@ func TestAuditNeverRecordsACredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	if err = f.identity.SetPassword(ctx, user.ID, "another entirely different passphrase"); err != nil {
-		t.Fatalf("SetPassword: %v", err)
+	if err = f.identity.ResetPassword(ctx, user.ID, "another entirely different passphrase"); err != nil {
+		t.Fatalf("ResetPassword: %v", err)
 	}
 
 	for _, entry := range allEntries(t, f) {
@@ -75,7 +75,7 @@ func TestAuditNeverRecordsACredential(t *testing.T) {
 		}
 	}
 
-	changed := onlyEntry(t, f, identity.ActionPasswordChanged)
+	changed := onlyEntry(t, f, identity.ActionPasswordReset)
 	if changed.BeforeJSON != "" || changed.AfterJSON != "" {
 		t.Errorf("password change carries a payload (%q/%q); it should carry only the fact",
 			changed.BeforeJSON, changed.AfterJSON)
@@ -147,8 +147,8 @@ func TestFailedAuditWriteAbortsTheOperation(t *testing.T) {
 	}
 
 	const newPassword = "a completely different passphrase"
-	if err = f.identity.SetPassword(ctx, user.ID, newPassword); err == nil {
-		t.Fatal("SetPassword succeeded although the audit write failed")
+	if err = f.identity.ResetPassword(ctx, user.ID, newPassword); err == nil {
+		t.Fatal("ResetPassword succeeded although the audit write failed")
 	}
 
 	// The real assertion. An error returned while the change committed anyway would be the
@@ -345,7 +345,7 @@ func TestServiceWithoutAPublisherRefusesToWrite(t *testing.T) {
 	f := newAuditedFixture(t, clock.System())
 	ctx := bound(t, f.store)
 
-	unwired := identity.NewService(f.store, stubOrg{f.companyID}, clock.System(), nil)
+	unwired := identity.NewService(f.store, stubOrg{f.companyID}, clock.System(), nil, nil)
 	if _, err := unwired.CreateUser(ctx, identity.CreateUserInput{
 		CompanyID: f.companyID, Username: "amina", DisplayName: "Amina", Password: goodPassword,
 	}); err == nil {

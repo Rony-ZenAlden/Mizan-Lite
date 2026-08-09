@@ -90,7 +90,18 @@ func (g *graph) guard(method string) (context.Context, *bootstrap.App, error) {
 
 	if p.Public {
 		// The setup wizard and the login screen run here. Public is explicit, never a default.
-		return ctx, app, nil
+		//
+		// A session is not REQUIRED, but it is still resolved when one is presented, and the
+		// actor is stamped. Step 1.11 found this the hard way: `ChangeMyPassword` is public
+		// because the user who most needs it may hold no permission at all, and it reads its
+		// subject from the context — which was empty, because this branch used to return
+		// immediately.
+		//
+		// Public means "no PERMISSION required". It never meant "pretend nobody is here", and
+		// the difference only became visible when a public method first needed to know who was
+		// calling. Failures are ignored on purpose: Auth.Logout must work with a token that has
+		// just expired, and Setup runs with none at all.
+		return g.withOptionalActor(ctx, app), app, nil
 	}
 
 	token := g.session.get()
@@ -117,6 +128,25 @@ func (g *graph) guard(method string) (context.Context, *bootstrap.App, error) {
 			WithParam("permission", p.Permission)
 	}
 	return ctx, app, nil
+}
+
+// withOptionalActor stamps the actor when a valid session is presented, and changes nothing
+// when one is not.
+//
+// The token is deliberately NOT cleared on failure. Auth.Logout is public precisely so a dead
+// session can clear itself, and doing it here would take that decision away from the method
+// that owns it.
+func (g *graph) withOptionalActor(ctx context.Context, app *bootstrap.App) context.Context {
+	token := g.session.get()
+	if token == "" {
+		return ctx
+	}
+	principal, session, err := app.Identity.Validate(ctx, token)
+	if err != nil {
+		return ctx
+	}
+	ctx = withActor(ctx, principal, session.BranchID)
+	return appctx.WithSession(ctx, session.ID)
 }
 
 // scopeFor resolves a policy's scope KIND against the session.

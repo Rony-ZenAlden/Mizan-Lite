@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
 import { GateScreen } from "@/app/gates/GateScreen";
-import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { useSessionStore } from "@/app/session/session";
+import { ChangePasswordScreen } from "@/modules/account/ChangePasswordScreen";
 import { LoginScreen } from "@/modules/auth/LoginScreen";
 import { me } from "@/lib/wails";
-import { Alert } from "@/shared/ui";
 
 /** The query key for the current session. Exported so login and logout can invalidate it. */
 export const SESSION_KEY = ["auth", "me"] as const;
@@ -50,27 +49,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 /**
- * The dead end for a user whose password must be changed.
+ * The change-password screen, and nothing else, for a user whose password must be replaced.
  *
- * # Why this is a dead end rather than a pass-through (D6)
+ * # Why this is a dead end rather than a pass-through
  *
  * `must_change` exists for exactly one situation: an administrator set someone's password, so
  * that person is signing in with a credential another human knows. Letting them through
  * "temporarily" would make the flag a lie precisely when it matters.
  *
- * The change-password path is Step 1.11, with the user screens. Until it exists, this screen
- * says so plainly rather than pretending the flag was honoured. A visible, explained dead end
- * is a bug report; a silent pass-through is a security hole nobody notices.
+ * Step 1.10 rendered an explained STOP here, because no change-password path existed on either
+ * side of the boundary. Step 1.11 built one, so the stop became the screen that resolves it —
+ * which is the difference between a dead end and a door.
  */
 function MustChangePassword() {
-  const { t } = useTranslation();
-  return (
-    <div className="flex h-full items-center justify-center p-8">
-      <div className="w-full max-w-lg">
-        <Alert tone="warning" title={t("auth.mustChange.title")}>
-          {t("auth.mustChange.body")}
-        </Alert>
-      </div>
-    </div>
-  );
+  return <ChangePasswordScreen forced />;
 }

@@ -18,6 +18,9 @@ import (
 const (
 	ActionUserCreated     = "identity.user.created"
 	ActionPasswordChanged = "identity.user.password_changed"
+	// Distinct from a self-service change: an administrator now knows this password, which is
+	// a materially different fact for anyone reading the trail later.
+	ActionPasswordReset   = "identity.user.password_reset"
 	ActionUserActivated   = "identity.user.activated"
 	ActionUserDeactivated = "identity.user.deactivated"
 

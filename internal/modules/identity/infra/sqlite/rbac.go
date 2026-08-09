@@ -302,6 +302,43 @@ type Grant struct {
 	Scope auth.Scope
 }
 
+// RolesFor returns the roles assigned to a user.
+//
+// One join rather than a grant list the caller de-duplicates: the administration screens ask
+// "which roles does this person have?", which is a different question from "what may they do?"
+// and deserves its own query rather than a projection of the other one.
+func (r *Repos) RolesFor(ctx context.Context, userID id.ID) ([]Role, error) {
+	rows, err := r.db.Reader(ctx).QueryContext(ctx, `
+		SELECT ro.id, ro.company_id, ro.code, ro.name, ro.description, ro.is_system, ro.is_active
+		  FROM user_roles ur
+		  JOIN roles ro ON ro.id = ur.role_id
+		 WHERE ur.user_id = ?
+		 ORDER BY ro.code`, string(userID))
+	if err != nil {
+		return nil, r.wrap(err, "listing a user's roles")
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Role
+	for rows.Next() {
+		var (
+			role           Role
+			description    any
+			system, active int
+		)
+		if scanErr := rows.Scan(&role.ID, &role.CompanyID, &role.Code, &role.Name,
+			&description, &system, &active); scanErr != nil {
+			return nil, r.wrap(scanErr, "scanning a role")
+		}
+		if d, ok := description.(string); ok {
+			role.Description = d
+		}
+		role.IsSystem, role.IsActive = system == 1, active == 1
+		out = append(out, role)
+	}
+	return out, rows.Err()
+}
+
 // GrantsFor returns every grant a user holds, through their ACTIVE roles.
 //
 // One indexed query joining user_roles → roles → role_permissions. There is deliberately no

@@ -248,8 +248,26 @@ func (s *Service) AssignRole(ctx context.Context, userID, roleID id.ID, scope au
 }
 
 // UnassignRole removes a role from a user.
+//
+// Refuses to remove the LAST administrator's role (1.11 D6). That is a different rule from the
+// last-active-user guard, and the difference is why it exists: you can be the last
+// administrator among five active users, and removing the role would leave five people who can
+// sign in and nobody who can grant a permission, create a user, or repair the mistake.
 func (s *Service) UnassignRole(ctx context.Context, userID, roleID id.ID) error {
 	return s.db.Do(ctx, func(ctx context.Context) error {
+		role, err := s.repos.RoleByID(ctx, roleID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err == nil && role.Code == RoleAdministrator {
+			admins, countErr := s.CountAdministrators(ctx, role.CompanyID)
+			if countErr != nil {
+				return countErr
+			}
+			if admins <= 1 {
+				return domain.ErrLastAdministrator()
+			}
+		}
 		if err := s.repos.UnassignRole(ctx, userID, roleID); err != nil {
 			return err
 		}
@@ -316,4 +334,71 @@ func (a SettingsAuthorizer) Can(ctx context.Context, permission string) bool {
 		return false
 	}
 	return a.svc.Can(ctx, permission, auth.Global())
+}
+
+// ── views for the administration screens (1.11) ─────────────────────────────────
+
+// PermissionView is one row of the synced permission catalogue.
+//
+// Read from the DATABASE, not from declaredPermissions(): the rows are what the startup sync
+// wrote, so the role editor shows exactly what the running build declares — including anything
+// marked obsolete, which is information an administrator needs when a grant stops working
+// after an upgrade.
+type PermissionView struct {
+	Code     string
+	Module   string
+	Obsolete bool
+}
+
+// PermissionCatalogue lists every known permission.
+func (s *Service) PermissionCatalogue(ctx context.Context) ([]PermissionView, error) {
+	rows, err := s.repos.Permissions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PermissionView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, PermissionView{Code: row.Code, Module: row.Module, Obsolete: row.IsObsolete})
+	}
+	return out, nil
+}
+
+// UserRoles lists the roles assigned to a user.
+func (s *Service) UserRoles(ctx context.Context, userID id.ID) ([]sqlite.Role, error) {
+	return s.repos.RolesFor(ctx, userID)
+}
+
+// CountAdministrators reports how many ACTIVE users hold the administrator role.
+//
+// Used by the two rules that stop an installation being bricked (§1.4). Counts active users
+// only: an assignment held by a deactivated account cannot sign in, so it is not protection.
+func (s *Service) CountAdministrators(ctx context.Context, companyID id.ID) (int, error) {
+	role, err := s.repos.RoleByCode(ctx, companyID, RoleAdministrator)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	users, err := s.repos.Users(ctx, companyID)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, user := range users {
+		if !user.IsActive {
+			continue
+		}
+		roles, roleErr := s.repos.RolesFor(ctx, user.ID)
+		if roleErr != nil {
+			return 0, roleErr
+		}
+		for _, assigned := range roles {
+			if assigned.ID == role.ID {
+				count++
+				break
+			}
+		}
+	}
+	return count, nil
 }

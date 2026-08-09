@@ -21,6 +21,8 @@ const (
 	CodeUsernameTaken       = "identity.username_taken"
 	CodePasswordTooShort    = "identity.password_too_short"
 	CodePasswordReused      = "identity.password_reused"
+	CodeLastAdministrator   = "identity.last_administrator"
+	CodeSelfDeactivation    = "identity.self_deactivation"
 	CodeLastActiveUser      = "identity.last_active_user"
 	CodeSystemUser          = "identity.system_user"
 	CodePasswordRequired    = "identity.password_required"
@@ -102,6 +104,30 @@ func ErrInvalidCredentials() error {
 func ErrLastActiveUser() error {
 	return errs.Conflict(CodeLastActiveUser,
 		"the last active user cannot be deactivated")
+}
+
+// ErrSelfDeactivation refuses to switch off the account making the request.
+//
+// Deactivating yourself signs you out on the very next call — Validate ends a session whose
+// user is inactive (1.3) — so the click that does it also removes the ability to undo it. If
+// you were also the last administrator, the installation is closed to everyone.
+//
+// The obvious objection is "an administrator should be able to do what they like". They can:
+// another administrator can deactivate this one. What is refused is the one ordering that has
+// no way back.
+func ErrSelfDeactivation() error {
+	return errs.Conflict(CodeSelfDeactivation,
+		"you cannot deactivate the account you are signed in with")
+}
+
+// ErrLastAdministrator refuses to remove the last route into the system.
+//
+// Distinct from ErrLastActiveUser, and the difference is the whole reason this exists: you can
+// be the last ADMINISTRATOR among five active users. Removing the role leaves five people who
+// can sign in and nobody who can grant a permission, create a user, or repair the mistake.
+func ErrLastAdministrator() error {
+	return errs.Conflict(CodeLastAdministrator,
+		"the last administrator's role cannot be removed")
 }
 
 // ErrSystemUser refuses to delete the setup administrator.

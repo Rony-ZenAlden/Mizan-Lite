@@ -123,7 +123,7 @@ func newAuditedFixture(t *testing.T, clk clock.Clock) fixture {
 	}
 
 	return fixture{
-		identity:  identity.NewService(store, orgSvc, clk, bus),
+		identity:  identity.NewService(store, orgSvc, clk, bus, testActing{}),
 		audit:     auditSvc,
 		store:     store,
 		bus:       bus,
@@ -146,6 +146,18 @@ func withActor(ctx context.Context, a audit.Actor) context.Context {
 func (testActors) Actor(ctx context.Context) (audit.Actor, bool) {
 	a, ok := ctx.Value(actorKey{}).(audit.Actor)
 	return a, ok
+}
+
+// testActing satisfies identity's own narrow port from the same test context, so the rules that
+// ask "is the caller the person being changed?" are exercised rather than always answering no.
+type testActing struct{}
+
+func (testActing) UserID(ctx context.Context) (id.ID, bool) {
+	a, ok := ctx.Value(actorKey{}).(audit.Actor)
+	if !ok || a.UserID.IsZero() {
+		return id.ID(""), false
+	}
+	return a.UserID, true
 }
 
 // bound returns a context with settings bound, so the password policy resolves.
@@ -337,8 +349,8 @@ func TestPolicyAcceptsALongPassphrase(t *testing.T) {
 	}
 }
 
-// TestPasswordReuseIsRejected — mutation check: skip the history check in SetPassword and this
-// fails.
+// TestPasswordReuseIsRejected — mutation check: skip the history check in writePassword and
+// this fails.
 func TestPasswordReuseIsRejected(t *testing.T) {
 	svc, store, companyID := newFixture(t)
 	ctx := bound(t, store)
@@ -346,12 +358,12 @@ func TestPasswordReuseIsRejected(t *testing.T) {
 
 	// Changing to something new is fine.
 	const second = "a different long passphrase"
-	if err := svc.SetPassword(ctx, user.ID, second); err != nil {
-		t.Fatalf("SetPassword: %v", err)
+	if err := svc.ResetPassword(ctx, user.ID, second); err != nil {
+		t.Fatalf("ResetPassword: %v", err)
 	}
 
 	// Going back to the original must be refused.
-	err := svc.SetPassword(ctx, user.ID, goodPassword)
+	err := svc.ResetPassword(ctx, user.ID, goodPassword)
 	if err == nil {
 		t.Fatal("a recently-used password was accepted")
 	}
@@ -365,14 +377,14 @@ func TestPasswordReuseIsRejected(t *testing.T) {
 	}
 }
 
-func TestSetPasswordChangesTheCredential(t *testing.T) {
+func TestResetPasswordChangesTheCredential(t *testing.T) {
 	svc, store, companyID := newFixture(t)
 	ctx := bound(t, store)
 	user := createUser(t, svc, ctx, companyID, "admin", goodPassword)
 
 	const replacement = "an entirely different phrase"
-	if err := svc.SetPassword(ctx, user.ID, replacement); err != nil {
-		t.Fatalf("SetPassword: %v", err)
+	if err := svc.ResetPassword(ctx, user.ID, replacement); err != nil {
+		t.Fatalf("ResetPassword: %v", err)
 	}
 	if _, err := svc.Authenticate(ctx, "admin", goodPassword); err == nil {
 		t.Error("the old password still authenticates")

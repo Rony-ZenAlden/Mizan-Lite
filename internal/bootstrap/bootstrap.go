@@ -194,7 +194,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Org = org.NewService(db, opts.Clock, app.Bus)
 	// Identity reaches org through the two-method Organisation port it declares itself — no
 	// import of org from identity, and the wiring is visible here.
-	app.Identity = identity.NewService(db, app.Org, opts.Clock, app.Bus)
+	app.Identity = identity.NewService(db, app.Org, opts.Clock, app.Bus, identityActors{})
 
 	// 7. Settings — validate declarations first: a duplicate key is a code defect and must
 	// fail on the developer's machine, not resolve arbitrarily on a customer's (D3).

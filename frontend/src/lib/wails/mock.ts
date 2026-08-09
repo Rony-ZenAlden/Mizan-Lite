@@ -56,6 +56,39 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
     Apply: () =>
       ok({ companyId: "dev", branchId: "dev", warehouseId: "dev", adminUserId: "dev" }),
   },
+  Identity: {
+    Users: () =>
+      ok([
+        { id: "dev", username: "admin", displayName: "Developer", email: "", isActive: true, isSystem: true },
+      ]),
+    Roles: () =>
+      ok([
+        { id: "r1", code: "administrator", name: "Administrator", description: "", isSystem: true, isActive: true },
+      ]),
+    Permissions: () => ok([{ code: "identity.user.view", module: "identity", obsolete: false }]),
+    RoleGrants: () => ok(["*"]),
+    UserRoles: () =>
+      ok([
+        { id: "r1", code: "administrator", name: "Administrator", description: "", isSystem: true, isActive: true },
+      ]),
+    Sessions: () =>
+      ok([
+        {
+          id: "s1", userId: "dev", username: "admin", displayName: "Developer",
+          startedAt: "", lastSeen: "", expiresAt: "", deviceInfo: "browser", current: true,
+        },
+      ]),
+    CreateUser: () =>
+      ok({ id: "new", username: "new", displayName: "", email: "", isActive: true, isSystem: false }),
+    SetActive: () => ok(true),
+    ResetPasswordFor: () => ok(true),
+    ChangeMyPassword: () => ok(true),
+    GrantToRole: () => ok(true),
+    RevokeFromRole: () => ok(true),
+    AssignRole: () => ok(true),
+    UnassignRole: () => ok(true),
+    RevokeSession: () => ok(true),
+  },
   System: {
     Health: () =>
       ok({

@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/mizan-erp/mizan/internal/api/appctx"
+	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
 )
 
 // auditActors tells the audit module who is acting.
@@ -34,4 +36,22 @@ func (auditActors) Actor(ctx context.Context) (audit.Actor, bool) {
 		BranchID:    a.BranchID,
 		SessionID:   a.SessionID,
 	}, true
+}
+
+// identityActors tells identity who is acting.
+//
+// A second adapter rather than reusing auditActors: the two modules declare different ports
+// because they need different things — audit wants a name and a branch to snapshot, identity
+// wants only an identifier to compare. Making one satisfy both would mean one of them carrying
+// a field it has no use for, which is shape without meaning.
+type identityActors struct{}
+
+var _ identity.ActingUser = identityActors{}
+
+func (identityActors) UserID(ctx context.Context) (id.ID, bool) {
+	a, ok := appctx.ActorFrom(ctx)
+	if !ok || a.UserID.IsZero() {
+		return id.ID(""), false
+	}
+	return a.UserID, true
 }

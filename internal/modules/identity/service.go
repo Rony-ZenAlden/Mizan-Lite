@@ -40,6 +40,23 @@ type Organisation interface {
 	DefaultBranchID(ctx context.Context) (id.ID, error)
 }
 
+// ActingUser reports who is making the current call, if anyone is.
+//
+// Declared HERE, at the point of use, rather than imported from the API layer: dependencies
+// point inward (§3.1), and a module reaching into internal/api would invert that. The
+// composition root supplies the adapter — the same shape audit uses.
+//
+// One method returning one identifier, because that is all this module needs: the rules that
+// consult it ask "is the caller the person being changed?", never "who are they?".
+type ActingUser interface {
+	UserID(ctx context.Context) (id.ID, bool)
+}
+
+// noActor reports that nobody is acting — the setup wizard, a job, a test harness.
+type noActor struct{}
+
+func (noActor) UserID(context.Context) (id.ID, bool) { return id.ID(""), false }
+
 // Service is the identity module's application layer.
 type Service struct {
 	db     Database
@@ -48,6 +65,7 @@ type Service struct {
 	org    Organisation
 	clk    clock.Clock
 	bus    event.Publisher
+	acting ActingUser
 }
 
 var _ contract.Authenticator = (*Service)(nil)
@@ -57,9 +75,17 @@ var _ contract.Authenticator = (*Service)(nil)
 // bus is where audited actions are announced (1.7). It is event.Publisher rather than the
 // concrete bus so this module cannot reach Subscribe: identity raises events; who reacts to
 // them is the composition root's decision.
-func NewService(db Database, org Organisation, clk clock.Clock, bus event.Publisher) *Service {
+func NewService(
+	db Database, org Organisation, clk clock.Clock, bus event.Publisher, acting ActingUser,
+) *Service {
 	if clk == nil {
 		clk = clock.System()
+	}
+	if acting == nil {
+		// Nobody acting is a legitimate state — the wizard runs before any user exists — and
+		// the rules that consult it are all of the form "refuse when the caller IS the
+		// subject", which nobody can be.
+		acting = noActor{}
 	}
 	return &Service{
 		db:     db,
@@ -68,6 +94,7 @@ func NewService(db Database, org Organisation, clk clock.Clock, bus event.Publis
 		org:    org,
 		clk:    clk,
 		bus:    bus,
+		acting: acting,
 	}
 }
 
@@ -263,45 +290,99 @@ func (s *Service) CreateUser(ctx context.Context, in CreateUserInput) (domain.Us
 	return created, nil
 }
 
-// SetPassword replaces a user's password, enforcing the policy and the reuse history.
-func (s *Service) SetPassword(ctx context.Context, userID id.ID, password string) error {
+// ChangeOwnPassword replaces the acting user's own password.
+//
+// # Why the CURRENT password is required (1.11, D2)
+//
+// The session already proves who is asking, so this looks redundant. It is not. The threat is
+// an UNATTENDED TERMINAL, which is the normal state of a shop counter: a session left open is
+// not consent to change the credential that outlives it.
+//
+// It also stops a stolen session from being converted into permanent access, which is the
+// entire reason a session is revocable.
+//
+// Clears must_change: the user has now chosen a password nobody else has seen.
+func (s *Service) ChangeOwnPassword(ctx context.Context, userID id.ID, current, next string) error {
 	return s.db.Do(ctx, func(ctx context.Context) error {
-		policy, err := s.Policy(ctx)
+		cred, err := s.repos.CredentialFor(ctx, userID, domain.CredentialPassword)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrInvalidCredentials()
+			}
 			return err
 		}
-		if err = policy.Validate(password); err != nil {
-			return err
+		ok, _, verifyErr := s.hasher.Verify(cred.Encoded, current)
+		if verifyErr != nil || !ok {
+			// The same error a bad login gets. There is nothing to gain from a distinct code
+			// here, and a distinct code is one more thing to keep in step with §22.2.
+			return domain.ErrInvalidCredentials()
 		}
+		return s.writePassword(ctx, userID, next, false)
+	})
+}
 
-		if err = s.rejectReuse(ctx, userID, password, policy.HistoryCount); err != nil {
-			return err
-		}
+// ResetPassword sets a password on someone else's behalf.
+//
+// # Why this SETS must_change (1.11, D1)
+//
+// An administrator performing this now knows the user's password. That is precisely the
+// situation must_change exists for, so the flag is set and the user must replace it at their
+// next sign-in.
+//
+// Step 1.4–1.10 had ONE method, `SetPassword`, which cleared the flag unconditionally. It was
+// correct for a self-service change and wrong for exactly this call — an administrator would
+// hand over a password, and the mechanism meant to force its replacement would never fire. One
+// name, two meanings. They are now two names, and the old one was REMOVED outright rather than
+// kept around with a warning — leaving it would leave the wrong default one call site away.
+func (s *Service) ResetPassword(ctx context.Context, userID id.ID, next string) error {
+	return s.db.Do(ctx, func(ctx context.Context) error {
+		return s.writePassword(ctx, userID, next, true)
+	})
+}
 
-		encoded, err := s.hasher.Hash(password)
-		if err != nil {
-			return err
-		}
-		if err = s.repos.SetCredential(ctx, sqlite.Credential{
-			UserID: userID, Type: domain.CredentialPassword,
-			Algorithm: crypto.Algorithm, Encoded: encoded, MustChange: false,
-		}); err != nil {
-			return err
-		}
-		if err = s.repos.AppendPasswordHistory(ctx, userID, encoded, policy.HistoryCount); err != nil {
-			return err
-		}
+// writePassword is the shared body: policy, reuse history, credential, audit.
+//
+// Called only from inside a Unit of Work, so the credential and its audit entry commit together
+// (phase D7).
+func (s *Service) writePassword(ctx context.Context, userID id.ID, password string, mustChange bool) error {
+	policy, err := s.Policy(ctx)
+	if err != nil {
+		return err
+	}
+	if err = policy.Validate(password); err != nil {
+		return err
+	}
+	if err = s.rejectReuse(ctx, userID, password, policy.HistoryCount); err != nil {
+		return err
+	}
 
-		// No Before and no After: the only thing that changed is the secret itself, and the
-		// entry's value is the FACT and the actor, not the content. `Changed` names the field
-		// so the trail stays legible without ever holding a password.
-		return s.audit(ctx, auditc.Auditable{
-			Action:      ActionPasswordChanged,
-			EntityType:  EntityUser,
-			EntityID:    userID,
-			EntityLabel: s.usernameFor(ctx, userID),
-			Changed:     []string{"password"},
-		})
+	encoded, err := s.hasher.Hash(password)
+	if err != nil {
+		return err
+	}
+	if err = s.repos.SetCredential(ctx, sqlite.Credential{
+		UserID: userID, Type: domain.CredentialPassword,
+		Algorithm: crypto.Algorithm, Encoded: encoded, MustChange: mustChange,
+	}); err != nil {
+		return err
+	}
+	if err = s.repos.AppendPasswordHistory(ctx, userID, encoded, policy.HistoryCount); err != nil {
+		return err
+	}
+
+	action := ActionPasswordChanged
+	if mustChange {
+		action = ActionPasswordReset
+	}
+	// No Before and no After: the only thing that changed is the secret itself, and the entry's
+	// value is the FACT and the actor. `Changed` names the field so the trail stays legible
+	// without ever holding a password.
+	return s.audit(ctx, auditc.Auditable{
+		Action:      action,
+		EntityType:  EntityUser,
+		EntityID:    userID,
+		EntityLabel: s.usernameFor(ctx, userID),
+		Changed:     []string{"password"},
 	})
 }
 
@@ -349,7 +430,18 @@ func (s *Service) User(ctx context.Context, userID id.ID) (domain.User, error) {
 	return s.repos.UserByID(ctx, userID)
 }
 
-// SetUserActive switches a user on or off, refusing to switch off the last active one.
+// SetUserActive switches a user on or off.
+//
+// Three refusals, each closing a way to lock everyone out of the installation:
+//   - the last ACTIVE user (1.2)
+//   - the account making the request (1.11 D6) — the click would sign you out and remove the
+//     ability to undo it
+//   - the last ADMINISTRATOR (1.11 D6), which is a different rule: you can be the last
+//     administrator among five active users
+//
+// All three live HERE rather than in a screen. A UI that hides the button is not the
+// guarantee; an importer or a future repair tool calling the service directly must be refused
+// too (§14.3).
 func (s *Service) SetUserActive(ctx context.Context, userID id.ID, active bool) error {
 	return s.db.Do(ctx, func(ctx context.Context) error {
 		user, err := s.repos.UserByID(ctx, userID)
@@ -357,12 +449,22 @@ func (s *Service) SetUserActive(ctx context.Context, userID id.ID, active bool) 
 			return err
 		}
 		if !active {
+			if actorID, ok := s.acting.UserID(ctx); ok && actorID == userID {
+				return domain.ErrSelfDeactivation()
+			}
 			n, countErr := s.repos.CountActiveUsers(ctx, user.CompanyID)
 			if countErr != nil {
 				return countErr
 			}
 			if !domain.CanDeactivate(n) {
 				return domain.ErrLastActiveUser()
+			}
+			admins, adminErr := s.CountAdministrators(ctx, user.CompanyID)
+			if adminErr != nil {
+				return adminErr
+			}
+			if admins <= 1 && s.isAdministrator(ctx, user.ID) {
+				return domain.ErrLastAdministrator()
 			}
 		}
 		if err = s.repos.SetUserActive(ctx, userID, active); err != nil {
@@ -385,6 +487,26 @@ func (s *Service) SetUserActive(ctx context.Context, userID id.ID, active bool) 
 			Changed:     []string{"isActive"},
 		})
 	})
+}
+
+// isAdministrator reports whether a user holds the administrator role.
+//
+// Best-effort false on error: this is one half of a refusal, and failing OPEN here would be the
+// wrong direction — but so would failing an ordinary deactivation because a role lookup
+// hiccuped. The caller only reaches this when there is already at most one administrator, so a
+// false negative costs the last-administrator protection and nothing else, and the
+// last-active-user rule still stands behind it.
+func (s *Service) isAdministrator(ctx context.Context, userID id.ID) bool {
+	roles, err := s.repos.RolesFor(ctx, userID)
+	if err != nil {
+		return false
+	}
+	for _, role := range roles {
+		if role.Code == RoleAdministrator {
+			return true
+		}
+	}
+	return false
 }
 
 // usernameFor resolves a label for an audit entry, best-effort.

@@ -159,6 +159,128 @@ export function applySetup(input: SetupInput): Promise<SetupResult> {
   return call<SetupResult>("Setup", "Apply", input);
 }
 
+// ── Identity (administration) ───────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  isActive: boolean;
+  /** The setup administrator: protected from deletion, not from deactivation. */
+  isSystem: boolean;
+}
+
+export interface Role {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  isSystem: boolean;
+  isActive: boolean;
+}
+
+export interface PermissionEntry {
+  code: string;
+  module: string;
+  /** Declared by an older build and no longer by this one. Shown, not hidden. */
+  obsolete: boolean;
+}
+
+export interface AdminSession {
+  id: string;
+  userId: string;
+  username: string;
+  displayName: string;
+  startedAt: string;
+  lastSeen: string;
+  expiresAt: string;
+  deviceInfo: string;
+  /** The session making the call. Ending it signs you out. */
+  current: boolean;
+}
+
+export interface NewUser {
+  username: string;
+  displayName: string;
+  email: string;
+  password: string;
+  roleCode: string;
+}
+
+export function users(): Promise<User[]> {
+  return call<User[]>("Identity", "Users");
+}
+
+export function createUser(input: NewUser): Promise<User> {
+  return call<User>("Identity", "CreateUser", input);
+}
+
+export function setUserActive(userId: string, active: boolean): Promise<boolean> {
+  return call<boolean>("Identity", "SetActive", userId, active);
+}
+
+export function resetPasswordFor(userId: string, password: string): Promise<boolean> {
+  return call<boolean>("Identity", "ResetPasswordFor", userId, password);
+}
+
+/** Changes the CALLER'S OWN password. No user id: the backend reads it from the session. */
+export function changeMyPassword(current: string, next: string): Promise<boolean> {
+  return call<boolean>("Identity", "ChangeMyPassword", current, next);
+}
+
+export function roles(): Promise<Role[]> {
+  return call<Role[]>("Identity", "Roles");
+}
+
+export function userRoles(userId: string): Promise<Role[]> {
+  return call<Role[]>("Identity", "UserRoles", userId);
+}
+
+export function permissionCatalogue(): Promise<PermissionEntry[]> {
+  return call<PermissionEntry[]>("Identity", "Permissions");
+}
+
+export function roleGrants(roleId: string): Promise<string[]> {
+  return call<string[]>("Identity", "RoleGrants", roleId);
+}
+
+export function grantToRole(roleId: string, permission: string): Promise<boolean> {
+  return call<boolean>("Identity", "GrantToRole", roleId, permission);
+}
+
+export function revokeFromRole(roleId: string, permission: string): Promise<boolean> {
+  return call<boolean>("Identity", "RevokeFromRole", roleId, permission);
+}
+
+export function assignRole(userId: string, roleId: string): Promise<boolean> {
+  return call<boolean>("Identity", "AssignRole", userId, roleId);
+}
+
+export function unassignRole(userId: string, roleId: string): Promise<boolean> {
+  return call<boolean>("Identity", "UnassignRole", userId, roleId);
+}
+
+export function adminSessions(): Promise<AdminSession[]> {
+  return call<AdminSession[]>("Identity", "Sessions");
+}
+
+export function revokeSession(sessionId: string): Promise<boolean> {
+  return call<boolean>("Identity", "RevokeSession", sessionId);
+}
+
+/** The permission codes the administration screens gate on. */
+export const PERMISSIONS = {
+  userView: "identity.user.view",
+  userManage: "identity.user.manage",
+  roleView: "identity.role.view",
+  roleManage: "identity.role.manage",
+  sessionView: "identity.session.view",
+  sessionRevoke: "identity.session.revoke",
+  auditView: "audit.entry.view",
+  auditPayload: "audit.entry.view_payload",
+} as const;
+
 // ── System ──────────────────────────────────────────────────────────────────────
 
 export interface HealthInfo {

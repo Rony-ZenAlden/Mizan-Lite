@@ -46,7 +46,8 @@ export function renderApp(
   {
     locale = "en" as Locale,
     client,
-  }: { locale?: Locale; client?: QueryClient } = {},
+    route = "/",
+  }: { locale?: Locale; client?: QueryClient; route?: string } = {},
 ): AppRenderResult {
   document.documentElement.lang = locale;
   document.documentElement.dir = DIRECTION[locale];
@@ -62,7 +63,10 @@ export function renderApp(
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <TooltipProvider>
-            <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <MemoryRouter
+              initialEntries={[route]}
+              future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+            >
               <PreferencesProvider>{children}</PreferencesProvider>
             </MemoryRouter>
           </TooltipProvider>

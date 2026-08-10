@@ -42,7 +42,7 @@ var migrationFS embed.FS
 
 // The chart templates this build ships. Adding one is adding a file.
 //
-//go:embed seeds/chart_of_accounts/*.json
+//go:embed seeds/chart_of_accounts/*.json seeds/posting_rules/*.json
 var seedFS embed.FS
 
 // Stable error codes. They double as i18n keys and are part of the public contract.
@@ -95,6 +95,7 @@ type Service struct {
 	clk      clock.Clock
 	bus      event.Publisher
 	charts   []Chart
+	ruleSets []RuleSet
 	problems []seeds.Problem
 }
 
@@ -115,10 +116,15 @@ func NewService(db Database, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	ruleSets, ruleProblems, err := loadRuleSets(layers)
+	if err != nil {
+		return nil, err
+	}
+	problems = append(problems, ruleProblems...)
 
 	svc := &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock, bus: opts.Bus,
-		charts: charts, problems: problems,
+		charts: charts, ruleSets: ruleSets, problems: problems,
 	}
 	if opts.Logger != nil {
 		for _, p := range problems {
@@ -361,9 +367,23 @@ func (m *Module) FeatureFlags() []config.FlagDef { return nil }
 // applied once per company, which ApplyChart owns.
 func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 
-// Subscribe registers nothing yet. The Postable subscriber that turns domain events into
-// journal entries lands in 2.5, with the posting rules it evaluates.
-func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
+// Subscribe registers the one handler that turns domain events into journal entries.
+//
+// On the SYNCHRONOUS domain bus, for the reason 1.7 established for the audit trail: a document
+// and its accounting entry must commit together or neither does. An entry produced after commit
+// leaves a window in which a sale exists and its bookkeeping does not — and unlike a missing
+// audit row, a missing journal entry makes the books wrong rather than merely incomplete.
+//
+// Accounting subscribing to other modules' events is the §20.3 design, not a violation of
+// §23.1's "domain events are within a module": accounting is downstream infrastructure. It
+// participates in no business decision and never calls back into a module. Sales publishes
+// Postable; accounting is its only subscriber; sales does not know accounting exists.
+func (m *Module) Subscribe(bus *eventbus.Bus, _ *outbox.Subscribers) error {
+	if m.svc == nil {
+		return nil
+	}
+	return eventbus.Subscribe(bus, "accounting.record", m.svc.onPostable)
+}
 
 // Jobs: the nightly ledger integrity check (§20.5, §20.2).
 //

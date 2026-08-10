@@ -389,3 +389,45 @@ available, run over the whole ledger after the most complex operation it perform
 
 **Found by CI:** the i18n coverage gate refused the build over nine error codes with no
 catalogue entry. Exactly what Step 0.8 built it for.
+
+### Step 2.5 — Posting rules ✅
+
+The architecturally most significant step of the phase: what a document posts is now **a row**,
+not code.
+
+**Built:** migration 0013 (`posting_rules`, `posting_rule_lines`), the `Postable` contract, the
+rule loader and validator, `generic_trading.json` (five rules across four events), the
+evaluator, the bus subscriber, and wizard wiring.
+
+**Decisions taken**
+
+1. **`Postable` carries a flat `Amounts` table, not typed fields.** The publisher decides what
+   it offers; the rule decides what it uses. A module can start supplying a new figure — and an
+   accountant can start posting it — with no change to a contract three modules share.
+2. **A line whose amount resolves to zero is SKIPPED**, which is why `condition_expr` is
+   reserved and unimplemented. "Post tax only when there is tax" and "post cost only when stock
+   is tracked" both fall out of the amount being absent. An expression language would buy the
+   same behaviour plus a parser, and anything powerful enough to need a parser is powerful
+   enough to hide a bug in a customer's books.
+3. **A negative amount is refused.** It would flip the side silently; a credit note is a
+   different event with its own rule, not a sale with a minus sign.
+4. **An event with no rule posts nothing and does not fail.** Refusing would stop the sale
+   rather than the bookkeeping.
+5. **A rule needs at least one debit and one credit**, checked at load. A rule of three debits
+   cannot balance from any input, which makes it dead data discoverable only by a failed sale.
+6. **Event types are matched exactly, with no pattern language.** "Which rule posted this?" is
+   the first question asked when the books look wrong, and a pattern makes the answer a search.
+7. **The rule set shares the chart's code.** The rules name account ROLES and the chart says
+   which account plays each one; a pairing with two names is two things to keep in step.
+
+**Mutation drills**
+
+- *Zero-amount lines are posted* → the absent-amounts test failed — and failed on
+  `accounting.invalid_line: a line of zero has nothing to record`, meaning the ledger aggregate
+  caught it beneath the evaluator. Second time this phase that the domain has been the net.
+- *A rule with one side is accepted* → the lopsided-rule test failed.
+
+**Proved end to end:** publishing `Postable` on the bus inside a transaction posts the books;
+a sale that fails afterwards leaves **no** journal entry; and editing a rule ROW — `mapping:AR`
+to `mapping:BANK` — changes where a sale posts, with no code change. That last test is §20.3's
+promise, executed rather than asserted.

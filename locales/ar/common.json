@@ -34,6 +34,7 @@
   "accounting.entry.reversed": "عكس قيد يومية",
   "accounting.period.closed": "إغلاق فترة محاسبية",
   "accounting.period.reopened": "إعادة فتح فترة محاسبية",
+  "accounting.rules.applied": "إعداد قواعد الترحيل",
   "accounting.year.closed": "إغلاق سنة مالية",
   "action.cancel": "إلغاء",
   "action.changeLanguage": "تغيير اللغة",

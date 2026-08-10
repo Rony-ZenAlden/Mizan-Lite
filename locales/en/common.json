@@ -34,6 +34,7 @@
   "accounting.entry.reversed": "Journal entry reversed",
   "accounting.period.closed": "Accounting period closed",
   "accounting.period.reopened": "Accounting period reopened",
+  "accounting.rules.applied": "Posting rules set up",
   "accounting.year.closed": "Financial year closed",
   "action.cancel": "Cancel",
   "action.changeLanguage": "Change language",

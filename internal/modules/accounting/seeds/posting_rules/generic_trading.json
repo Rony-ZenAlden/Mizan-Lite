@@ -1,0 +1,59 @@
+{
+  "code": "generic_trading",
+  "name": "General trading",
+  "description": "The postings a shop that buys and sells goods makes. Written as data, so a different country or trade is a different file rather than a different build.",
+  "rules": [
+    {
+      "code": "sale_revenue",
+      "event": "sales.invoice.posted",
+      "sequence": 1,
+      "description": "A sale: the customer owes us the total; the net is revenue and the tax is owed to the authority.",
+      "lines": [
+        { "side": "debit",  "account": "mapping:AR",          "amount": "document.total", "memo": "sale" },
+        { "side": "credit", "account": "mapping:SALES",       "amount": "document.net",   "memo": "revenue" },
+        { "side": "credit", "account": "mapping:TAX_PAYABLE", "amount": "document.tax",   "memo": "tax on sale" }
+      ]
+    },
+    {
+      "code": "sale_cost",
+      "event": "sales.invoice.posted",
+      "sequence": 2,
+      "description": "The same sale's cost: goods leave stock and become an expense. A separate rule because it is a separate fact — a shop that does not track stock simply omits the cost amount and this rule posts nothing.",
+      "lines": [
+        { "side": "debit",  "account": "mapping:COGS",      "amount": "document.cost", "memo": "cost of goods sold" },
+        { "side": "credit", "account": "mapping:INVENTORY", "amount": "document.cost", "memo": "stock released" }
+      ]
+    },
+    {
+      "code": "purchase",
+      "event": "purchasing.bill.posted",
+      "sequence": 1,
+      "description": "A purchase: stock arrives, recoverable tax is an asset, and we owe the supplier the total.",
+      "lines": [
+        { "side": "debit",  "account": "mapping:INVENTORY",      "amount": "document.net",   "memo": "stock received" },
+        { "side": "debit",  "account": "mapping:TAX_RECEIVABLE", "amount": "document.tax",   "memo": "recoverable tax" },
+        { "side": "credit", "account": "mapping:AP",             "amount": "document.total", "memo": "supplier" }
+      ]
+    },
+    {
+      "code": "customer_payment",
+      "event": "sales.payment.received",
+      "sequence": 1,
+      "description": "A customer pays: cash rises, what they owe falls.",
+      "lines": [
+        { "side": "debit",  "account": "mapping:CASH", "amount": "document.total", "memo": "payment received" },
+        { "side": "credit", "account": "mapping:AR",   "amount": "document.total", "memo": "settles invoice" }
+      ]
+    },
+    {
+      "code": "supplier_payment",
+      "event": "purchasing.payment.made",
+      "sequence": 1,
+      "description": "We pay a supplier: what we owe falls, cash falls.",
+      "lines": [
+        { "side": "debit",  "account": "mapping:AP",   "amount": "document.total", "memo": "settles bill" },
+        { "side": "credit", "account": "mapping:CASH", "amount": "document.total", "memo": "payment made" }
+      ]
+    }
+  ]
+}

@@ -53,6 +53,9 @@ const (
 // Named here rather than in the wizard's input because there is exactly one shipped template
 // and no user-facing choice yet. When a second ships, this becomes an Input field and the
 // constant goes — which is a smaller change than un-picking a question asked too early.
+// The rule set shares the chart's code deliberately: the rules name account ROLES, and the
+// chart is what says which account plays each one. A pairing that had two names would be two
+// things to keep in step.
 const defaultChart = "generic_trading"
 
 // ActionCompleted is the audited action that ties one setup run together.
@@ -356,6 +359,12 @@ func (s *Service) Apply(ctx context.Context, in Input) (Result, error) {
 		if chartErr := s.accounting.ApplyChart(
 			ctx, provision.CompanyID, defaultChart); chartErr != nil {
 			return chartErr
+		}
+		// And the posting rules that use it. A chart with no rules is a ledger nothing can
+		// post to, which would make the books silently empty rather than visibly broken.
+		if rulesErr := s.accounting.ApplyRules(
+			ctx, provision.CompanyID, defaultChart); rulesErr != nil {
+			return rulesErr
 		}
 
 		// The business profile FIRST, the wizard's explicit choices after (§3.2). The bundle

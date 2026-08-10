@@ -30,6 +30,7 @@ type fixture struct {
 	svc       *accounting.Service
 	audit     *audit.Service
 	store     *database.Store
+	bus       *eventbus.Bus
 	companyID id.ID
 	ctx       context.Context
 }
@@ -99,8 +100,16 @@ func newFixture(t *testing.T, opts accounting.Options) fixture {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	// The accounting subscriber on the same bus, exactly as the composition root wires it — so
+	// a test that publishes goes through the real path rather than calling Record directly.
+	if err = accounting.NewModule(svc).Subscribe(bus, nil); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
 
-	return fixture{svc: svc, audit: auditSvc, store: store, companyID: result.CompanyID, ctx: ctx}
+	return fixture{
+		svc: svc, audit: auditSvc, store: store, bus: bus,
+		companyID: result.CompanyID, ctx: ctx,
+	}
 }
 
 func overlay(files map[string]string) fstest.MapFS {

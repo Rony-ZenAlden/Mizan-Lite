@@ -509,3 +509,138 @@ that exists to catch an unreachable method, and it only surfaced because this st
 binding that used one. Replaced with `bootstrap.DeclaredPermissions()`, the single list both
 production and the test now read. That is the same maintenance trap as the count-based
 assertions, in a different shape.
+
+---
+
+## 7. STEP 2.9 — Phase 2 Definition-of-Done review
+
+> **12 of 12 criteria pass.** `make ci` green: build · archlint · vet · tests+race ·
+> golangci-lint · frontend (159 tests). Checked against evidence — a named test, a file, a
+> command — not against memory of having built it.
+
+### ✅ 1. An unbalanced entry cannot be constructed, cannot be posted, and is caught if it exists
+
+Three guards, and they are not redundant.
+
+| Evidence | |
+|---|---|
+| `TestAnUnbalancedEntryCannotBeConstructed` | `domain.NewEntry` has no valid unbalanced state |
+| `Post` re-checks before writing | the last refusal before rows exist; the only guard left the day somebody builds an `Entry` literal |
+| `TestTheIntegrityCheckFindsAnUnbalancedEntry` | corrupts a posted entry with raw SQL — the case the first two structurally cannot see |
+| Step 2.2 drill | disabling the constructor check let an unbalanced entry be built |
+
+### ✅ 2. A posted entry has no update or delete path; corrections reverse
+
+`grep` for `UpdateEntry`/`DeleteEntry` outside the test that asserts their absence: nothing. The
+repository offers `MarkReversed` and no other mutation.
+
+`TestReversingLeavesTheOriginalExactlyAsPosted` proves the original keeps its number, amounts,
+and lines; only its status changes. `TestTheLedgerHasNoUpdateOrDelete` asserts the *surface*, so
+adding one is a deliberate act somebody argues for.
+
+### ✅ 3. Posting into a closed or locked period is rejected, naming the period
+
+`TestPostingIntoAClosedPeriodIsRefused` (code `accounting.period_closed`),
+`TestPostingOutsideAnyPeriodIsRefused` (code `accounting.no_period`, naming the date), and
+`TestClosingAYearLocksIt`. Step 2.2's drill removed the check and the test failed with *"a
+signed-off month was restated"*.
+
+### ✅ 4. Every posting is produced by a rule row, not by Go code
+
+**`TestChangingARuleRowChangesTheBooks`** edits `mapping:AR` → `mapping:BANK` in the database and
+the same sale posts somewhere else. §20.3's promise, executed rather than asserted.
+
+### ✅ 5. Rebuilt balances equal the maintained ones, asserted by a job
+
+`TestRebuildingAgreesWithWhatWasMaintained`, and — more importantly —
+`TestRebuildingReportsDriftRatherThanSilentlyFixingIt`, because a rebuild that silently repairs
+means a bug is corrected nightly and reported never.
+
+### ✅ 6. A chart of accounts loads from a seed file, and a customer's file overrides it
+
+`TestEveryShippedChartLoads`, `TestAnAccountantsOwnChartLoads`, plus the validation refusals
+(missing role, loop, mismatched type). Third consumer of Step 1.8's layered loader.
+
+### ✅ 7. A tax rate change adds a version; historical documents resolve the old rate
+
+`TestAHistoricalDateResolvesTheHistoricalRate` (four dates across a boundary) and
+`TestChangingARateLeavesHistoryAlone` through the real tables. There is no `UPDATE` of a rate
+anywhere — the one `UPDATE tax_versions` sets `effective_to`, which changes *when* a rate
+applied, never *what* it was.
+
+### ✅ 8. `tax.enabled = false` produces zero tax, no tax postings, and needs no migration to reverse
+
+`TestTaxIsDisabledByDefaultAndSaysSo` and `TestEnablingTaxNeedsNoMigration` — the same fixture,
+same tables, one setting.
+
+### ✅ 9. The eight-level resolution priority is table-tested, and the reason is stored
+
+`TestResolutionPriority`: ten cases covering every level plus the disabled short-circuit.
+`TestAnExemptPartnerIsNotChargedAndTheReasonIsRecorded` proves the certificate reason reaches
+the document.
+
+### ✅ 10. Line taxes sum exactly to the document tax, at both rounding stages
+
+`TestAnInclusivePriceAlwaysReAddsToItself` — every price from 0.01 to 10.00.
+`TestInclusiveComponentsSumExactlyToTheTax` — 2,000 prices, two taxes, largest-remainder
+allocation. The Step 2.6 drill produced `1725` where `1500` is correct, which is the exact
+error the design comment warns about.
+
+### ✅ 11. Every new binding has a declared policy; every audited action writes in-transaction
+
+`TestEveryBindingMethodHasAPolicy` now validates against `bootstrap.DeclaredPermissions()` —
+which this step had to fix, see below. Chart application, posting, reversal, period close, and
+year close all publish `Auditable` inside their own transaction, each with a test.
+
+### ✅ 12. `make ci` green, with the mutation drills each step declared
+
+**Twelve drills across seven steps**, all confirmed:
+
+| Step | Drills |
+|---|---|
+| 2.1 | roll-up accounts stay postable · required mappings unenforced |
+| 2.2 | balance rule off · closed period accepts postings |
+| 2.3 | rebuild repairs silently · balances not maintained |
+| 2.4 | close out of order · year result on the wrong side of equity |
+| 2.5 | zero-amount lines posted · one-sided rule accepted |
+| 2.6–2.7 | inclusive tax multiplied · exemption stops outranking defaults |
+
+### Coverage
+
+| Package | |
+|---|---|
+| `tax/domain` | 88.8% |
+| `accounting` | 79.0% |
+| `tax` | 64.4% |
+
+`accounting/domain` and both `infra/sqlite` packages report 0% because their tests live in the
+package that consumes them — coverage-by-package under-reports where a package is exercised
+through its consumer, which is where these belong.
+
+### What this review found
+
+**The domain caught three errors before the tests did.** In 2.4 the wrong-side year-end result
+failed on `accounting.unbalanced_entry`; in 2.5 zero-amount lines failed on
+`accounting.invalid_line`. The constructor-not-validator decision from 2.2 keeps acting as a net
+beneath the arithmetic above it — which is what an invariant is for.
+
+**CI caught two real defects the tests did not.** The i18n gate refused a build over nine
+missing codes (2.4), and `golangci-lint`'s `nilerr` found the tax repository swallowing *every*
+error on two lookups — so a database fault would have read as "this company charges no tax" and
+"this customer is not exempt". The first is invisible because it matches the shipped
+configuration; the second charges an exempt customer.
+
+**A test was validating against a hardcoded list** of three modules' permissions, so accounting's
+and tax's were missing from the check that exists to catch an unreachable method. Found only
+because 2.8 added a binding that used one. The same maintenance trap as the count-based
+assertions, in a different shape — now one list, read by production and the test.
+
+### Carried into Phase 3
+
+- **`condition_expr` and `dimension_map` are reserved and unimplemented** on posting rules.
+  Per-line dimensions arrive with documents that have lines.
+- **`Postable` carries no line detail.** Deliberate: a flat `Amounts` table serves every rule
+  written so far, and lines get added when a document with lines exists to publish them.
+- **No screens for tax, period close, or manual entries** — §20.6 tiers v1.2–v1.4.
+- **`CreateAccount`** (extending a chart after setup) has no caller and is not built.
+- **Audit paging** (carried from Phase 1) is still unpaginated.

@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-10** (Step 1.13 — packaging; Windows + macOS only). Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-10** (Phase 2 complete — the financial spine). Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -133,6 +133,23 @@ and D7 synchronous in-transaction audit).
 | **1.11** | Administration: users, roles, sessions, audit viewer; permission-aware navigation | ✅ committed |
 | **1.12** | Phase 1 Definition-of-Done review | ✅ committed — 11/12, visual confirmation open |
 | **1.13** | Packaging: icon, versioning, Windows `.exe`/installer + macOS `.dmg` | ✅ committed |
+
+---
+
+## 5c. Phase 2 — Financial Spine: step status
+
+Design: `docs/architecture/PHASE_2_FINANCIAL_SPINE.md`.
+
+| Step | Scope | Status |
+|---|---|---|
+| **2.1** | Chart of accounts, seed-file templates, account mappings | ✅ committed |
+| **2.2** | Journal entries, the balance invariant, the posting service | ✅ committed |
+| **2.3** | Account balances, incremental maintenance, the integrity job | ✅ committed |
+| **2.4** | Period close + year-end closing | ✅ committed |
+| **2.5** | Posting rules — the books are data, not code | ✅ committed |
+| **2.6–2.7** | The tax engine, shipping empty | ✅ committed |
+| **2.8** | Read-only chart + trial balance (§20.6 tier v1.1) | ✅ committed |
+| **2.9** | Phase 2 Definition-of-Done review | ✅ **12/12** |
 
 ---
 

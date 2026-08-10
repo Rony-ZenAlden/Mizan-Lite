@@ -26,6 +26,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/locale"
 	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
+	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	currencydomain "github.com/mizan-erp/mizan/internal/modules/currency/domain"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
@@ -58,6 +59,9 @@ const (
 // things to keep in step.
 const defaultChart = "generic_trading"
 
+// defaultUnits is the shipped set of measures.
+const defaultUnits = "standard"
+
 // ActionCompleted is the audited action that ties one setup run together.
 const ActionCompleted = "setup.completed"
 
@@ -82,9 +86,13 @@ type Service struct {
 	profile    *profile.Service
 	currency   *currency.Service
 	accounting *accounting.Service
+	catalog    *catalog.Service
 	settings   *config.Settings
-	catalog    *i18n.Catalog
-	bus        event.Publisher
+	// messages is the i18n catalogue. Renamed from `catalog` when the catalog MODULE arrived
+	// in 3.1 — two things called "catalog" in one struct is a collision waiting for whoever
+	// reads it next, and "messages" says what it holds.
+	messages *i18n.Catalog
+	bus      event.Publisher
 }
 
 // NewService builds the wizard's service.
@@ -92,13 +100,13 @@ func NewService(
 	db Database,
 	orgSvc *org.Service, identitySvc *identity.Service,
 	profileSvc *profile.Service, currencySvc *currency.Service,
-	accountingSvc *accounting.Service,
-	settings *config.Settings, catalog *i18n.Catalog, bus event.Publisher,
+	accountingSvc *accounting.Service, catalogSvc *catalog.Service,
+	settings *config.Settings, messages *i18n.Catalog, bus event.Publisher,
 ) *Service {
 	return &Service{
 		db: db, org: orgSvc, identity: identitySvc, profile: profileSvc,
-		currency: currencySvc, accounting: accountingSvc,
-		settings: settings, catalog: catalog, bus: bus,
+		currency: currencySvc, accounting: accountingSvc, catalog: catalogSvc,
+		settings: settings, messages: messages, bus: bus,
 	}
 }
 
@@ -168,11 +176,11 @@ type CurrencyOption struct {
 // language with no code change (0.8 §3.2), and the wizard's first screen is a language picker,
 // so a hardcoded list here would be the one place that never learned about it.
 func (s *Service) locales() []string {
-	if s.catalog == nil {
+	if s.messages == nil {
 		return nil
 	}
 	out := make([]string, 0, 2)
-	for _, l := range s.catalog.Locales() {
+	for _, l := range s.messages.Locales() {
 		out = append(out, l.String())
 	}
 	return out
@@ -365,6 +373,11 @@ func (s *Service) Apply(ctx context.Context, in Input) (Result, error) {
 		if rulesErr := s.accounting.ApplyRules(
 			ctx, provision.CompanyID, defaultChart); rulesErr != nil {
 			return rulesErr
+		}
+		// Units of measure. Not company-scoped — a kilogram is a kilogram — but applied here so
+		// a fresh install has the measures a product needs before the first product exists.
+		if unitErr := s.catalog.ApplyUnits(ctx, defaultUnits); unitErr != nil {
+			return unitErr
 		}
 
 		// The business profile FIRST, the wizard's explicit choices after (§3.2). The bundle

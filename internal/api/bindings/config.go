@@ -120,7 +120,7 @@ func (c *Config) read(ctx context.Context) PreferencesDTO {
 	}
 
 	available := make([]string, 0, 2)
-	for _, l := range app.Catalog.Locales() {
+	for _, l := range app.Messages.Locales() {
 		available = append(available, l.String())
 	}
 

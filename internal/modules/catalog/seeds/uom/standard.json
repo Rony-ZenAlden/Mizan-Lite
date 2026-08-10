@@ -1,0 +1,53 @@
+{
+  "code": "standard",
+  "name": "Standard units",
+  "description": "The measures every trade shares: weight, volume, length, area, and a count. A business that needs bushels or board-feet adds a file; nothing here is a jurisdictional or trade-specific claim.",
+  "categories": [
+    {
+      "code": "COUNT",
+      "name": "Count",
+      "name_key": "uom.category.count",
+      "units": [
+        { "code": "PCS", "name": "Piece", "name_key": "uom.pcs", "symbol": "pcs", "factor_nano": 1000000000, "reference": true, "fractional": false, "precision": 1000000, "decimals": 0 },
+        { "code": "DZ", "name": "Dozen", "name_key": "uom.dz", "symbol": "dz", "factor_nano": 12000000000, "fractional": false, "precision": 1000000, "decimals": 0 }
+      ]
+    },
+    {
+      "code": "WEIGHT",
+      "name": "Weight",
+      "name_key": "uom.category.weight",
+      "units": [
+        { "code": "G", "name": "Gram", "name_key": "uom.g", "symbol": "g", "factor_nano": 1000000000, "reference": true, "fractional": true, "precision": 1000, "decimals": 3 },
+        { "code": "KG", "name": "Kilogram", "name_key": "uom.kg", "symbol": "kg", "factor_nano": 1000000000000, "fractional": true, "precision": 1000, "decimals": 3 },
+        { "code": "T", "name": "Tonne", "name_key": "uom.t", "symbol": "t", "factor_nano": 1000000000000000, "fractional": true, "precision": 1000, "decimals": 3 }
+      ]
+    },
+    {
+      "code": "VOLUME",
+      "name": "Volume",
+      "name_key": "uom.category.volume",
+      "units": [
+        { "code": "ML", "name": "Millilitre", "name_key": "uom.ml", "symbol": "ml", "factor_nano": 1000000000, "reference": true, "fractional": true, "precision": 1000, "decimals": 3 },
+        { "code": "L", "name": "Litre", "name_key": "uom.l", "symbol": "L", "factor_nano": 1000000000000, "fractional": true, "precision": 1000, "decimals": 3 }
+      ]
+    },
+    {
+      "code": "LENGTH",
+      "name": "Length",
+      "name_key": "uom.category.length",
+      "units": [
+        { "code": "MM", "name": "Millimetre", "name_key": "uom.mm", "symbol": "mm", "factor_nano": 1000000000, "reference": true, "fractional": true, "precision": 1000, "decimals": 3 },
+        { "code": "CM", "name": "Centimetre", "name_key": "uom.cm", "symbol": "cm", "factor_nano": 10000000000, "fractional": true, "precision": 1000, "decimals": 3 },
+        { "code": "M", "name": "Metre", "name_key": "uom.m", "symbol": "m", "factor_nano": 1000000000000, "fractional": true, "precision": 1000, "decimals": 3 }
+      ]
+    },
+    {
+      "code": "AREA",
+      "name": "Area",
+      "name_key": "uom.category.area",
+      "units": [
+        { "code": "M2", "name": "Square metre", "name_key": "uom.m2", "symbol": "m²", "factor_nano": 1000000000, "reference": true, "fractional": true, "precision": 1000, "decimals": 3 }
+      ]
+    }
+  ]
+}

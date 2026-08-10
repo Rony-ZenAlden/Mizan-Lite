@@ -26,6 +26,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
+	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
@@ -96,10 +97,13 @@ func (o Options) withDefaults() Options {
 // There is deliberately no service locator and no Get(name) method: a component that needs
 // another received it in its constructor. Fields here are for the shell and for tests.
 type App struct {
-	Paths      paths.Paths
-	DB         *database.Store
-	Settings   *config.Settings
-	Catalog    *i18n.Catalog
+	Paths    paths.Paths
+	DB       *database.Store
+	Settings *config.Settings
+	// Messages is the i18n message catalogue. Renamed from Catalog when the catalog MODULE
+	// arrived in 3.1: two fields called Catalog on one struct is a collision waiting for
+	// whoever reads it next.
+	Messages   *i18n.Catalog
 	Trans      *i18n.Translations
 	Bus        *eventbus.Bus
 	Outbox     *outbox.Store
@@ -113,6 +117,7 @@ type App struct {
 	Profile    *profile.Service
 	Accounting *accounting.Service
 	Tax        *tax.Service
+	Catalog    *catalog.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -223,13 +228,13 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Ctx = config.Bind(ctx, settings)
 
 	// 8. i18n.
-	catalog, err := i18n.Load()
+	messages, err := i18n.Load()
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
 			"loading the message catalogs")
 	}
-	app.Catalog = catalog
+	app.Messages = messages
 	app.Trans = i18n.NewTranslations(db, opts.Clock, opts.Logger)
 
 	// 9. Scheduler — constructed, NOT started.
@@ -294,17 +299,32 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Tax = tax.NewService(db, opts.Clock)
 	taxModule := tax.NewModule(app.Tax)
 
+	// Units of measure ride the same layered loader country profiles and charts do, so a trade
+	// that measures in bushels adds a file rather than waiting for a release.
+	app.Catalog, err = catalog.NewService(db, catalog.Options{
+		UserFS: profile.UserFS(opts.Paths.Data),
+		Clock:  opts.Clock,
+		Bus:    app.Bus,
+		Logger: opts.Logger,
+	})
+	if err != nil {
+		abandon(db)
+		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
+			"loading the units of measure")
+	}
+	catalogModule := catalog.NewModule(app.Catalog)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
 	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
-		app.Accounting, settings, catalog, app.Bus)
+		app.Accounting, app.Catalog, settings, app.Messages, app.Bus)
 
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, taxModule, accountingModule, profileModule, identityModule, orgModule,
-		currencyModule})
+		auditModule, catalogModule, taxModule, accountingModule, profileModule,
+		identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

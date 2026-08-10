@@ -919,3 +919,14 @@ b763230  docs: add PROGRESS.md — running status / resume-point
 ebd263d  Phase 0 Step 0.2: numeric kernel (money, quantity, rounding)
 cbd68d3  Phase 0 Step 0.1: repo scaffold, arch-rule framework, Wails shell
 ```
+
+### Step 3.1 — Units of measure ✅
+
+Categories and units with category-safe conversion, per-unit fractional control, and
+entry-time rounding. Shipped `standard` set (count, weight, volume, length, area), each
+category with exactly one reference unit — enforced by a partial unique index, a CHECK, and
+the domain. Catalog module wired into the composition root and applied by the setup wizard.
+
+5 mutation drills; the first passed and corrected the test rather than the code (the kernel
+covered the same refusal, so the test could not see the domain's own check being deleted).
+`make ci` green.

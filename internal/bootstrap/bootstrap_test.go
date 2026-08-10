@@ -56,7 +56,7 @@ func boot(t *testing.T) *bootstrap.App {
 func TestStartBuildsAWorkingGraph(t *testing.T) {
 	app := boot(t)
 
-	if app.DB == nil || app.Settings == nil || app.Catalog == nil ||
+	if app.DB == nil || app.Settings == nil || app.Messages == nil ||
 		app.Bus == nil || app.Outbox == nil || app.Scheduler == nil ||
 		app.Currency == nil || app.Org == nil {
 		t.Fatalf("graph has nil components: %+v", app)

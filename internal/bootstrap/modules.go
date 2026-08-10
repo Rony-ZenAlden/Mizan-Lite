@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
+	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
@@ -37,6 +38,7 @@ func DeclarationModules() []modules.Module {
 		profile.NewModule(nil),
 		accounting.NewModule(nil),
 		tax.NewModule(nil),
+		catalog.NewModule(nil),
 	}
 }
 

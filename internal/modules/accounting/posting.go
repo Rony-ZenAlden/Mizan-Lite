@@ -9,6 +9,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/accounting/domain"
+	"github.com/mizan-erp/mizan/internal/modules/accounting/infra/sqlite"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 )
 
@@ -117,6 +118,14 @@ func (s *Service) Post(ctx context.Context, in PostInput) (domain.Entry, error) 
 
 		if err = s.repos.InsertEntry(ctx, entry); err != nil {
 			return err
+		}
+		// The derived totals commit with the ledger they are derived from. Written afterwards,
+		// outside the transaction, they would drift the moment a posting rolled back — which
+		// is the failure the rebuild job exists to CATCH and a much better one to prevent.
+		for _, line := range entry.Lines {
+			if err = s.repos.ApplyMovement(ctx, entry.CompanyID, entry.PeriodID, line); err != nil {
+				return err
+			}
 		}
 		posted = entry
 
@@ -238,6 +247,11 @@ func (s *Service) Reverse(
 		if err = s.repos.InsertEntry(ctx, reversal); err != nil {
 			return err
 		}
+		for _, line := range reversal.Lines {
+			if err = s.repos.ApplyMovement(ctx, reversal.CompanyID, reversal.PeriodID, line); err != nil {
+				return err
+			}
+		}
 		if err = s.repos.MarkReversed(ctx, original.ID); err != nil {
 			return err
 		}
@@ -291,4 +305,150 @@ func (s *Service) SetPeriodStatus(ctx context.Context, periodID id.ID, status st
 // restore, a repair script, or a future importer does not.
 func (s *Service) CheckIntegrity(ctx context.Context, companyID id.ID) ([]string, error) {
 	return s.repos.UnbalancedEntries(ctx, companyID)
+}
+
+// ── balances (§20.5) ────────────────────────────────────────────────────────────
+
+// TrialBalance reads every account's position as at the end of a period.
+//
+// Read from `account_balances`, never from the ledger: a shop with three years of history has
+// hundreds of thousands of journal lines and about two hundred accounts.
+func (s *Service) TrialBalance(
+	ctx context.Context, companyID, periodID id.ID,
+) ([]sqlite.Balance, error) {
+	return s.repos.TrialBalance(ctx, companyID, periodID)
+}
+
+// RebuildAndVerifyBalances recomputes the balances and asserts they match what was maintained.
+//
+// # Why an assertion and not just a rebuild
+//
+// §20.5 asks for "a rebuild job that recomputes from journal_lines and asserts equality — a
+// cheap, strong correctness check". The assertion is the whole value. A rebuild alone silently
+// repairs, which means a bug in the incremental path is corrected nightly and never reported,
+// and the reports are wrong for exactly one day at a time forever.
+//
+// Comparing FIRST and rebuilding second turns the same work into a defect report.
+//
+// Returns the number of rows that disagreed. Zero is the only good answer.
+func (s *Service) RebuildAndVerifyBalances(ctx context.Context, companyID id.ID) (int, error) {
+	var mismatches int
+
+	err := s.db.Do(ctx, func(ctx context.Context) error {
+		before, err := s.repos.BalanceRows(ctx, companyID)
+		if err != nil {
+			return err
+		}
+		if err = s.repos.RebuildBalances(ctx, companyID); err != nil {
+			return err
+		}
+		after, err := s.repos.BalanceRows(ctx, companyID)
+		if err != nil {
+			return err
+		}
+
+		mismatches = compareBalances(before, after)
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return mismatches, nil
+}
+
+// compareBalances counts rows that differ between two snapshots.
+//
+// Keyed rather than compared positionally: a row present in one snapshot and absent from the
+// other is exactly the kind of drift worth catching, and a positional walk would report every
+// subsequent row as wrong once the two lists went out of step.
+func compareBalances(before, after []sqlite.BalanceSnapshot) int {
+	key := func(b sqlite.BalanceSnapshot) string {
+		return string(b.AccountID) + "|" + string(b.PeriodID) + "|" + string(b.BranchID)
+	}
+
+	old := make(map[string]sqlite.BalanceSnapshot, len(before))
+	for _, row := range before {
+		old[key(row)] = row
+	}
+
+	mismatches := 0
+	for _, row := range after {
+		previous, existed := old[key(row)]
+		if !existed || previous.Debit != row.Debit || previous.Credit != row.Credit {
+			mismatches++
+		}
+		delete(old, key(row))
+	}
+	// Whatever is left was maintained but should not exist at all.
+	return mismatches + len(old)
+}
+
+// CodeLedgerCorrupt is raised when the nightly check finds the books disagreeing with
+// themselves.
+const CodeLedgerCorrupt = "accounting.ledger_corrupt"
+
+// VerifyLedger is the nightly job's body: both integrity checks, over every company.
+//
+// It FAILS rather than repairs when it finds something. A failed job is visible in the run
+// history and on the operations screen; a silent repair is a bug that gets corrected every
+// night and reported never — and the books would be wrong for exactly one day at a time,
+// forever.
+func (s *Service) VerifyLedger(ctx context.Context) error {
+	companies, err := s.repos.CompaniesWithLedgers(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, companyID := range companies {
+		unbalanced, checkErr := s.CheckIntegrity(ctx, companyID)
+		if checkErr != nil {
+			return checkErr
+		}
+		if len(unbalanced) > 0 {
+			return errs.Internal(CodeLedgerCorrupt,
+				"journal entries were found whose debits and credits do not agree").
+				WithParam("entries", joinFirst(unbalanced, 10))
+		}
+
+		mismatches, rebuildErr := s.RebuildAndVerifyBalances(ctx, companyID)
+		if rebuildErr != nil {
+			return rebuildErr
+		}
+		if mismatches > 0 {
+			return errs.Internal(CodeLedgerCorrupt,
+				"the maintained account balances disagree with the ledger they come from").
+				WithParam("rows", itoa(mismatches))
+		}
+	}
+	return nil
+}
+
+// joinFirst names the first few offenders. A job failure that lists four hundred entry numbers
+// is one nobody reads.
+func joinFirst(values []string, limit int) string {
+	if len(values) > limit {
+		values = append(values[:limit:limit], "…")
+	}
+	out := ""
+	for i, value := range values {
+		if i > 0 {
+			out += ", "
+		}
+		out += value
+	}
+	return out
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var digits [20]byte
+	i := len(digits)
+	for n > 0 {
+		i--
+		digits[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(digits[i:])
 }

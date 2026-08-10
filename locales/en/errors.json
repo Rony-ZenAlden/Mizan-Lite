@@ -10,6 +10,7 @@
   "accounting.invalid_account": "The account is not valid.",
   "accounting.invalid_chart": "The chart of accounts is not valid.",
   "accounting.invalid_line": "One of the entry's lines is not valid.",
+  "accounting.ledger_corrupt": "The accounting records do not agree with themselves. Contact support — details are in the job history.",
   "accounting.no_period": "No accounting period covers {date}. Check the date, or extend the financial year.",
   "accounting.parent_not_found": "The parent account does not exist.",
   "accounting.period_closed": "That accounting period is not open for posting.",

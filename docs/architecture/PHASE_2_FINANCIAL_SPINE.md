@@ -200,8 +200,8 @@ must not hardcode.
 |---|---|
 | **2.1** | Accounting module: chart of accounts, seed-file templates, system accounts |
 | **2.2** | Journal entries: the aggregate, the balance invariant, the posting service |
-| **2.3** | Fiscal period control + year-end closing |
-| **2.4** | Account balances, incremental maintenance, the rebuild-and-assert job |
+| **2.3** | Account balances, incremental maintenance, the rebuild-and-assert job |
+| **2.4** | Fiscal period close + year-end closing |
 | **2.5** | Posting rules, account mappings, the `Postable` event and its subscriber |
 | **2.6** | Tax module: schema, versioned rates, groups, exemptions |
 | **2.7** | Tax resolution + calculation, and `tax.enabled = false` as a real state |
@@ -311,3 +311,43 @@ aggregate), the journal repository, and `posting.go` — `Post`, `Reverse`, `Set
 
 **Also proved:** the integrity check catches corruption applied directly with SQL — the case the
 other two guards structurally cannot see.
+
+### Step 2.3 — Account balances and the integrity job ✅
+
+> **Re-ordered.** The plan had period close at 2.3 and balances at 2.4. Year-end closing needs
+> account totals to compute what moves to retained earnings, so the dependency runs the other
+> way. Swapped rather than worked around.
+
+**Built:** migration 0012 (`account_balances`), incremental maintenance inside the posting
+transaction, the trial balance, `RebuildAndVerifyBalances`, and the nightly
+`accounting.ledger_integrity` job.
+
+**Decisions taken**
+
+1. **Movement only — a deviation from §20.5, argued.** §20.5 lists "opening/debit/credit/
+   closing"; this stores only the period's debit and credit and derives the rest. An opening
+   balance is exactly the sum of earlier movements: storing it too means two facts that must
+   agree, maintained by different paths, and the day they disagree the reports are wrong and
+   still add up. **Storing less means less can drift.** The cost is a running sum bounded by the
+   calendar, not by trade volume.
+2. **Balances are maintained INSIDE the posting transaction.** Written afterwards they would
+   drift the moment a posting rolled back — the failure the rebuild job exists to catch, and a
+   far better one to prevent.
+3. **Debit-positive throughout.** A liability with a credit balance reads negative; the sign is
+   converted once at the presentation edge from `normal_balance`. One convention, so a report
+   cannot show revenue upside-down. A correct trial balance therefore sums to **zero**.
+4. **An UPSERT, not read-modify-write.** SQLite's single writer makes the race impossible today;
+   the portable form costs nothing and survives the move to an engine where it is not (§8).
+5. **The job REPORTS rather than repairs.** A rebuild that silently corrects means a bug in the
+   incremental path is fixed nightly and reported never — books wrong for exactly one day at a
+   time, forever. It compares first, rebuilds second, and fails with the offending entry
+   numbers.
+6. **Two balance rows per branched line** — the aggregate and the branch's own — so a branch P&L
+   uses the same query shape rather than a sum over branches that would omit unbranched lines.
+
+**Mutation drills**
+
+- *The rebuild repairs silently instead of reporting* → `TestRebuildingReportsDriftRatherThanSilentlyFixingIt`
+  failed: *"a bug in the incremental path would never be reported"*.
+- *Balances are not maintained on post* → the trial balance and carry-forward tests both failed
+  with every total at zero.

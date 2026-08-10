@@ -142,6 +142,7 @@
   "identity.user.password_reset": "Password reset by an administrator",
   "identity.user.role_assigned": "Role assigned",
   "identity.user.role_unassigned": "Role removed",
+  "jobs.accounting.ledger_integrity": "Check the accounting records",
   "locale.name.ar": "العربية",
   "locale.name.en": "English",
   "month.1": "January",

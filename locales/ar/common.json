@@ -142,6 +142,7 @@
   "identity.user.password_reset": "إعادة تعيين كلمة المرور من قِبل مسؤول",
   "identity.user.role_assigned": "إسناد دور",
   "identity.user.role_unassigned": "إزالة دور",
+  "jobs.accounting.ledger_integrity": "فحص السجلات المحاسبية",
   "locale.name.ar": "العربية",
   "locale.name.en": "English",
   "month.1": "كانون الثاني",

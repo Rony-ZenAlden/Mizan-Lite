@@ -10,6 +10,7 @@
   "accounting.invalid_account": "الحساب غير صالح.",
   "accounting.invalid_chart": "شجرة الحسابات غير صالحة.",
   "accounting.invalid_line": "أحد سطور القيد غير صالح.",
+  "accounting.ledger_corrupt": "السجلات المحاسبية غير متوافقة مع نفسها. تواصل مع الدعم — التفاصيل في سجل المهام.",
   "accounting.no_period": "لا توجد فترة محاسبية تشمل {date}. تحقّق من التاريخ أو مدّد السنة المالية.",
   "accounting.parent_not_found": "الحساب الأب غير موجود.",
   "accounting.period_closed": "الفترة المحاسبية غير مفتوحة للترحيل.",

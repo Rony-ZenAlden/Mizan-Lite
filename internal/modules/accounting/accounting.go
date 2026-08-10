@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
@@ -364,6 +365,31 @@ func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 // journal entries lands in 2.5, with the posting rules it evaluates.
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
 
-// Jobs: none yet. The balance rebuild-and-assert job arrives in 2.4, with the balances it
-// checks.
-func (m *Module) Jobs() []jobs.Registration { return nil }
+// Jobs: the nightly ledger integrity check (§20.5, §20.2).
+//
+// # Why a job and not a startup check
+//
+// Both guarantees it verifies — that every entry balances, and that the maintained totals match
+// a fresh recomputation — protect only the paths that go through the domain. A restore, a
+// repair script, or a future importer meets neither. Those things happen between launches, not
+// during one, so the check has to run on a schedule rather than at boot.
+//
+// It REPORTS rather than repairs. A rebuild that silently corrects would mean a bug in the
+// incremental path is fixed nightly and never reported, and the books are wrong for exactly one
+// day at a time, forever.
+func (m *Module) Jobs() []jobs.Registration {
+	return []jobs.Registration{{
+		Def: jobs.Def{
+			Key: "accounting.ledger_integrity",
+			// Nightly, not hourly: it reads every journal line, and the failures it looks for
+			// are introduced by restores and repairs rather than by ordinary trading.
+			Schedule:    jobs.Every(24 * time.Hour),
+			CatchUp:     jobs.Skip,
+			Timeout:     10 * time.Minute,
+			Description: "jobs.accounting.ledger_integrity",
+		},
+		Handler: func(ctx context.Context, _ jobs.RunContext) error {
+			return m.svc.VerifyLedger(ctx)
+		},
+	}}
+}

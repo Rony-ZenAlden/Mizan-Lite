@@ -6,12 +6,19 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/catalog/domain"
+	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/modules/profile"
+	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
@@ -20,10 +27,11 @@ import (
 )
 
 type fixture struct {
-	svc   *catalog.Service
-	audit *audit.Service
-	store *database.Store
-	ctx   context.Context
+	svc       *catalog.Service
+	audit     *audit.Service
+	store     *database.Store
+	companyID id.ID
+	ctx       context.Context
 }
 
 func newFixture(t *testing.T, opts catalog.Options) fixture {
@@ -37,9 +45,17 @@ func newFixture(t *testing.T, opts catalog.Options) fixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
+	// Products carry a company_id, a tax group, and account overrides, so the fixture runs the
+	// same merged schema the application does rather than a catalog-only subset that would let
+	// a broken foreign key pass here and fail on a real install.
 	merged := migrate.Merge(
 		migrations.SQLite(),
+		currency.NewModule(nil).Migrations(),
+		org.NewModule(nil).Migrations(),
 		audit.NewModule(nil).Migrations(),
+		profile.NewModule(nil).Migrations(),
+		accounting.NewModule(nil).Migrations(),
+		tax.NewModule(nil).Migrations(),
 		catalog.NewModule(nil).Migrations(),
 	)
 	runner, err := migrate.New(store, migrate.Options{FS: merged, DBPath: path, SkipBackup: true})
@@ -50,10 +66,33 @@ func newFixture(t *testing.T, opts catalog.Options) fixture {
 		t.Fatalf("migrate: %v", err)
 	}
 
+	identifier, _ := id.New()
+	now := clock.Format(clock.System().Now())
+	if _, err = store.Writer(ctx).ExecContext(ctx,
+		`INSERT INTO currencies (id, code, name, symbol, decimal_places, created_at, updated_at)
+		 VALUES (?, 'SYP', 'Syrian Pound', 'SYP', 0, ?, ?)`,
+		string(identifier), now, now); err != nil {
+		t.Fatalf("seeding currency: %v", err)
+	}
+
 	bus := eventbus.New(eventbus.Options{})
 	auditSvc := audit.NewService(store, clock.System(), nil)
 	if err = audit.NewModule(auditSvc).Subscribe(bus, nil); err != nil {
 		t.Fatalf("subscribe: %v", err)
+	}
+
+	orgSvc := org.NewService(store, clock.System(), bus)
+	provisioned, err := orgSvc.Provision(ctx, org.ProvisionInput{
+		Company: org.CompanyInput{
+			Code: "MAIN", Name: "Demo", CountryCode: "SY", FunctionalCurrency: "SYP",
+		},
+		Branch:               org.LocationInput{Code: "HQ", Name: "Head Office"},
+		Warehouse:            org.LocationInput{Code: "WH1", Name: "Main"},
+		FiscalYearStartMonth: time.January,
+		FiscalYearStartYear:  2026,
+	})
+	if err != nil {
+		t.Fatalf("provision: %v", err)
 	}
 
 	opts.Bus = bus
@@ -64,7 +103,10 @@ func newFixture(t *testing.T, opts catalog.Options) fixture {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	return fixture{svc: svc, audit: auditSvc, store: store, ctx: ctx}
+	return fixture{
+		svc: svc, audit: auditSvc, store: store,
+		companyID: provisioned.CompanyID, ctx: ctx,
+	}
 }
 
 func overlay(files map[string]string) fstest.MapFS {

@@ -231,3 +231,48 @@ rather than the code.
 **Also caught:** drill 4's first run reported `(cached)` — the mutation had never applied, an
 indentation mismatch in the patch. Every later drill asserts the substitution actually changed
 the file before running the tests.
+
+### Step 3.2 — Categories, products, the default variant, attributes
+
+**Delivered.** `0016_catalog.sql` (seven tables), the product/category/variant/attribute domain,
+the repositories, and the service: `CreateCategory`, `CreateProduct`, `ChangeStockUnit`,
+`CreateAttribute`, `LinkAttribute`, `MarkVariantHistory`.
+
+**D1 — §A.1 is a constructor guarantee, then a transaction guarantee.** `NewProduct` returns
+`(Product, Variant, error)`: there is no code path in the domain that produces a product without
+its default variant. `InsertProduct` then takes both and writes both inside the caller's
+transaction, because the one place the invariant could still break is between two INSERTs.
+
+**D2 — `is_variant_defining` lives on the LINK.** Material defines variants for a sofa and
+describes a screwdriver. Putting the flag on the attribute would force a business selling both
+to define "material" twice, and the whole point of a shared dictionary is that it is shared.
+
+**D3 — a variant-defining attribute must be a `list`.** Generation is a Cartesian product and
+needs a finite set to multiply; "warranty in months" has none. Refused by name, rather than
+producing zero variants and leaving the user to work out why.
+
+**D4 — `combination` is sorted.** `COLOUR:RED|SIZE:L` regardless of the order the attributes came
+back in. Nothing guarantees a stable order from the database, and without the sort generation
+would create a duplicate variant every time it changed.
+
+**D5 — `MarkVariantHistory` exists before anything calls it.** Phase 4 sets the flag on the first
+movement and Phase 5 on the first document line. It is written now because it is what the two
+strongest rules READ — a variant that cannot be deleted, a stock unit that cannot change — and a
+rule whose trigger does not exist yet is a rule no test can exercise. The same reason identity
+declared its `Organisation` port before org existed (1.2).
+
+**Mutation drills — 7 run, all fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | `InsertProduct` stops writing the default variant | 4 tests fail, incl. the whole-table property |
+| 2 | Units-comparable check removed | Domain **and** service tests fail |
+| 3 | Stock-unit lock removed | `…IsLockedOnceStockHasMoved` fails at both levels |
+| 4 | `ux_variant_one_default` weakened to a plain index | `…CannotHaveTwoDefaultVariants` fails |
+| 5 | Default variant becomes deletable | `TestTheDefaultVariantCannotBeDeleted` fails |
+| 6 | Enumerability check removed | Domain and service tests fail |
+| 7 | `Combination` stops sorting | `…IsIndependentOfAttributeOrder` fails |
+
+Drill 1 is the one that matters: it fails `TestNoProductIsEverWithoutAVariant`, which asserts the
+property over the whole table rather than per-product, because the path that breaks §A.1 will be
+one nobody thought to write a specific test for.

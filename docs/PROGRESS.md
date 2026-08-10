@@ -930,3 +930,13 @@ the domain. Catalog module wired into the composition root and applied by the se
 5 mutation drills; the first passed and corrected the test rather than the code (the kernel
 covered the same refusal, so the test could not see the domain's own check being deleted).
 `make ci` green.
+
+### Step 3.2 — Categories, products, the default variant, attributes ✅
+
+Seven tables (0016). Every product is born with its default variant — a constructor that
+cannot return one without the other, then a single transaction that writes both, then a
+partial unique index keeping exactly one default per product. Three units per product, all
+in one category. `is_variant_defining` on the product-attribute link, so material defines
+variants for a sofa and describes a screwdriver.
+
+7 mutation drills, all failing as required. `make ci` green.

@@ -351,3 +351,41 @@ transaction, the trial balance, `RebuildAndVerifyBalances`, and the nightly
   failed: *"a bug in the incremental path would never be reported"*.
 - *Balances are not maintained on post* → the trial balance and carry-forward tests both failed
   with every total at zero.
+
+### Step 2.4 — Period close and year-end closing ✅
+
+**Built:** `close.go` — `ClosePeriod`, `ReopenPeriod`, `CloseYear` — plus the fiscal-calendar
+repository methods and `postWithin`, the single posting body both `Post` and `CloseYear` use.
+
+**Decisions taken**
+
+1. **Closing is in order, and reopening is in reverse order.** A period is closed because
+   somebody reconciled it; closing March with February open means February can still receive
+   postings that change what March was signed off against. Reopening February under a closed
+   March is the same fault from the other end.
+2. **Year-end locks, it does not merely close.** A closed year could be reopened period by
+   period, leaving the closing entry posted against a year that is accepting movement again.
+3. **The closing entry is an ORDINARY journal entry** (§20.4's "normal, reversible"): a real
+   entry with real lines, in the ledger's number sequence, hitting the balances. A special case
+   would be the one thing nobody could undo.
+4. **It balances by construction.** Each revenue and expense account is zeroed by posting the
+   opposite of its balance, and the NET lands on retained earnings — rather than a separately
+   computed result figure that could disagree with the lines above it.
+5. **`Post` and `CloseYear` share one posting body.** The first draft had `CloseYear` re-resolve
+   the period from the date, which it had already established — two lookups that must agree is
+   one more thing that can disagree.
+
+**Mutation drills**
+
+- *Periods may be closed out of order* → `TestAPeriodCannotBeClosedWhileAnEarlierOneIsOpen`
+  failed.
+- *The year-end result posts to the wrong side of equity* → both closing tests failed — and
+  notably they failed on **`accounting.unbalanced_entry`**, meaning the domain invariant caught
+  the error before the assertion did. The constructor is doing its job as a net beneath the
+  arithmetic above it.
+
+**Also proved:** `VerifyLedger` passes over a full year-end close — the strongest single check
+available, run over the whole ledger after the most complex operation it performs.
+
+**Found by CI:** the i18n coverage gate refused the build over nine error codes with no
+catalogue entry. Exactly what Step 0.8 built it for.

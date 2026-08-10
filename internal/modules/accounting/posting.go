@@ -67,65 +67,9 @@ func (s *Service) Post(ctx context.Context, in PostInput) (domain.Entry, error) 
 	var posted domain.Entry
 
 	err := s.db.Do(ctx, func(ctx context.Context) error {
-		period, err := s.repos.PeriodForDate(ctx, in.CompanyID, in.Date)
-		if errors.Is(err, sql.ErrNoRows) {
-			// No fiscal period covers this date. Almost always a date typed wrong by a year, or
-			// a fiscal calendar that has not been extended — both worth naming precisely, since
-			// "posting failed" would send someone looking at the amounts.
-			return errs.Validation(CodeNoPeriod,
-				"no fiscal period covers that date").
-				WithParam("date", in.Date.Format("2006-01-02"))
-		}
+		entry, err := s.postWithin(ctx, in)
 		if err != nil {
 			return err
-		}
-		if period.Status != "open" {
-			return errs.Conflict(CodePeriodClosed,
-				"that fiscal period is not open for posting").
-				WithParam("status", period.Status).
-				WithParam("date", in.Date.Format("2006-01-02"))
-		}
-
-		identifier, err := id.New()
-		if err != nil {
-			return err
-		}
-		entry, err := domain.NewEntry(
-			identifier, in.CompanyID, in.Date, period.ID, in.SourceModule, in.Lines)
-		if err != nil {
-			return err
-		}
-		entry.SourceDocumentType = in.SourceDocumentType
-		entry.SourceDocumentID = in.SourceDocumentID
-		entry.BranchID = in.BranchID
-		entry.Memo = in.Memo
-
-		if err = s.checkAccounts(ctx, entry); err != nil {
-			return err
-		}
-		// The second guard. Redundant by construction today, and the day someone adds a path
-		// that builds an Entry literal instead of calling NewEntry, it is the only one left.
-		if !entry.IsBalanced() {
-			return errs.Validation(domain.CodeUnbalanced, "the entry does not balance")
-		}
-
-		entry.Number, err = s.repos.NextEntryNumber(ctx, in.CompanyID, in.Date.Year())
-		if err != nil {
-			return err
-		}
-		entry.Status = domain.Posted
-		entry.PostedAt = s.clk.Now()
-
-		if err = s.repos.InsertEntry(ctx, entry); err != nil {
-			return err
-		}
-		// The derived totals commit with the ledger they are derived from. Written afterwards,
-		// outside the transaction, they would drift the moment a posting rolled back — which
-		// is the failure the rebuild job exists to CATCH and a much better one to prevent.
-		for _, line := range entry.Lines {
-			if err = s.repos.ApplyMovement(ctx, entry.CompanyID, entry.PeriodID, line); err != nil {
-				return err
-			}
 		}
 		posted = entry
 

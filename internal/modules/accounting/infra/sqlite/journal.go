@@ -277,10 +277,12 @@ func integer(v any) int64 {
 // would be a module-to-module import that `module-isolation` forbids and that would make the
 // two modules' release cycles one.
 type Period struct {
-	ID     id.ID
-	Start  time.Time
-	End    time.Time
-	Status string
+	ID           id.ID
+	FiscalYearID id.ID
+	Sequence     int
+	Start        time.Time
+	End          time.Time
+	Status       string
 }
 
 // PeriodForDate finds the fiscal period a business date falls in.
@@ -382,4 +384,116 @@ func pad(n, width int) string {
 		s = "0" + s
 	}
 	return s
+}
+
+// ── fiscal calendar (§20.4) ─────────────────────────────────────────────────────
+
+// PeriodByID loads one period with its year and sequence.
+func (r *Repos) PeriodByID(ctx context.Context, periodID id.ID) (Period, error) {
+	row := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT p.id, p.start_date, p.end_date, p.status, p.sequence, p.fiscal_year_id
+		  FROM fiscal_periods p WHERE p.id = ?`, string(periodID))
+
+	var (
+		period     Period
+		start, end string
+	)
+	if err := row.Scan(&period.ID, &start, &end, &period.Status,
+		&period.Sequence, &period.FiscalYearID); err != nil {
+		return Period{}, err
+	}
+	period.Start, _ = clock.ParseDate(start)
+	period.End, _ = clock.ParseDate(end)
+	return period, nil
+}
+
+// PeriodsOfYear lists a year's periods in calendar order.
+func (r *Repos) PeriodsOfYear(ctx context.Context, yearID id.ID) ([]Period, error) {
+	rows, err := r.db.Reader(ctx).QueryContext(ctx, `
+		SELECT id, start_date, end_date, status, sequence, fiscal_year_id
+		  FROM fiscal_periods WHERE fiscal_year_id = ? ORDER BY sequence`, string(yearID))
+	if err != nil {
+		return nil, r.wrap(err, "listing fiscal periods")
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Period
+	for rows.Next() {
+		var (
+			period     Period
+			start, end string
+		)
+		if scanErr := rows.Scan(&period.ID, &start, &end, &period.Status,
+			&period.Sequence, &period.FiscalYearID); scanErr != nil {
+			return nil, r.wrap(scanErr, "scanning a fiscal period")
+		}
+		period.Start, _ = clock.ParseDate(start)
+		period.End, _ = clock.ParseDate(end)
+		out = append(out, period)
+	}
+	return out, rows.Err()
+}
+
+// FiscalYear is the little the ledger needs about a year.
+type FiscalYear struct {
+	ID     id.ID
+	Code   string
+	Start  time.Time
+	End    time.Time
+	Status string
+}
+
+// YearByID loads one fiscal year.
+func (r *Repos) YearByID(ctx context.Context, yearID id.ID) (FiscalYear, error) {
+	row := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT id, code, start_date, end_date, status FROM fiscal_years WHERE id = ?`,
+		string(yearID))
+
+	var (
+		year       FiscalYear
+		start, end string
+	)
+	if err := row.Scan(&year.ID, &year.Code, &start, &end, &year.Status); err != nil {
+		return FiscalYear{}, err
+	}
+	year.Start, _ = clock.ParseDate(start)
+	year.End, _ = clock.ParseDate(end)
+	return year, nil
+}
+
+// Years lists a company's fiscal years, newest first.
+func (r *Repos) Years(ctx context.Context, companyID id.ID) ([]FiscalYear, error) {
+	rows, err := r.db.Reader(ctx).QueryContext(ctx, `
+		SELECT id, code, start_date, end_date, status
+		  FROM fiscal_years WHERE company_id = ? ORDER BY start_date DESC`, string(companyID))
+	if err != nil {
+		return nil, r.wrap(err, "listing fiscal years")
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []FiscalYear
+	for rows.Next() {
+		var (
+			year       FiscalYear
+			start, end string
+		)
+		if scanErr := rows.Scan(&year.ID, &year.Code, &start, &end, &year.Status); scanErr != nil {
+			return nil, r.wrap(scanErr, "scanning a fiscal year")
+		}
+		year.Start, _ = clock.ParseDate(start)
+		year.End, _ = clock.ParseDate(end)
+		out = append(out, year)
+	}
+	return out, rows.Err()
+}
+
+// SetYearStatus opens, closes, or locks a fiscal year.
+func (r *Repos) SetYearStatus(ctx context.Context, yearID id.ID, status string) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx,
+		`UPDATE fiscal_years SET status = ?, updated_at = ? WHERE id = ?`,
+		status, r.now(), string(yearID))
+	if err != nil {
+		return r.wrap(err, "changing a fiscal year's status")
+	}
+	return nil
 }

@@ -1,0 +1,46 @@
+{
+  "code": "generic_trading",
+  "name_key": "chart.generic_trading",
+  "name": "General trading",
+  "description": "A minimal double-entry chart for a business that buys and sells goods. Every account the posting layer needs and nothing else — an accountant is expected to extend it, and a customer's own chart in the data directory replaces it entirely.",
+  "accounts": [
+    { "code": "1000", "name": "Assets", "name_key": "account.assets", "type": "asset" },
+    { "code": "1100", "name": "Current assets", "name_key": "account.current_assets", "parent": "1000", "type": "asset", "subtype": "current_asset" },
+    { "code": "1110", "name": "Cash on hand", "name_key": "account.cash", "parent": "1100", "type": "asset", "subtype": "cash", "system": true },
+    { "code": "1120", "name": "Bank", "name_key": "account.bank", "parent": "1100", "type": "asset", "subtype": "bank", "system": true },
+    { "code": "1200", "name": "Accounts receivable", "name_key": "account.receivable", "parent": "1100", "type": "asset", "subtype": "receivable", "system": true },
+    { "code": "1300", "name": "Inventory", "name_key": "account.inventory", "parent": "1100", "type": "asset", "subtype": "inventory", "system": true },
+    { "code": "1400", "name": "Recoverable tax", "name_key": "account.tax_receivable", "parent": "1100", "type": "asset", "subtype": "tax", "system": true },
+
+    { "code": "2000", "name": "Liabilities", "name_key": "account.liabilities", "type": "liability" },
+    { "code": "2100", "name": "Accounts payable", "name_key": "account.payable", "parent": "2000", "type": "liability", "subtype": "payable", "system": true },
+    { "code": "2200", "name": "Tax payable", "name_key": "account.tax_payable", "parent": "2000", "type": "liability", "subtype": "tax", "system": true },
+
+    { "code": "3000", "name": "Equity", "name_key": "account.equity", "type": "equity" },
+    { "code": "3100", "name": "Retained earnings", "name_key": "account.retained_earnings", "parent": "3000", "type": "equity", "subtype": "retained", "system": true },
+    { "code": "3900", "name": "Opening balances", "name_key": "account.opening_balance", "parent": "3000", "type": "equity", "subtype": "opening", "system": true },
+
+    { "code": "4000", "name": "Revenue", "name_key": "account.revenue", "type": "revenue" },
+    { "code": "4100", "name": "Sales", "name_key": "account.sales", "parent": "4000", "type": "revenue", "subtype": "operating_revenue", "system": true },
+
+    { "code": "5000", "name": "Expenses", "name_key": "account.expenses", "type": "expense" },
+    { "code": "5100", "name": "Cost of goods sold", "name_key": "account.cogs", "parent": "5000", "type": "expense", "subtype": "cogs", "system": true },
+    { "code": "5800", "name": "Exchange gain or loss", "name_key": "account.fx_gain_loss", "parent": "5000", "type": "expense", "subtype": "financial", "system": true },
+    { "code": "5900", "name": "Rounding differences", "name_key": "account.rounding", "parent": "5000", "type": "expense", "subtype": "financial", "system": true }
+  ],
+  "mappings": {
+    "CASH": "1110",
+    "BANK": "1120",
+    "AR": "1200",
+    "INVENTORY": "1300",
+    "TAX_RECEIVABLE": "1400",
+    "AP": "2100",
+    "TAX_PAYABLE": "2200",
+    "RETAINED_EARNINGS": "3100",
+    "OPENING_BALANCE": "3900",
+    "SALES": "4100",
+    "COGS": "5100",
+    "FX_GAIN_LOSS": "5800",
+    "ROUNDING_DIFF": "5900"
+  }
+}

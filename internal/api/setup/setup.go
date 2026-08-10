@@ -24,6 +24,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/event"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/kernel/locale"
+	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	currencydomain "github.com/mizan-erp/mizan/internal/modules/currency/domain"
@@ -47,6 +48,13 @@ const (
 	CodeInvalidFiscalYear = "setup.invalid_fiscal_year"
 )
 
+// defaultChart is the chart of accounts a fresh installation gets.
+//
+// Named here rather than in the wizard's input because there is exactly one shipped template
+// and no user-facing choice yet. When a second ships, this becomes an Input field and the
+// constant goes — which is a smaller change than un-picking a question asked too early.
+const defaultChart = "generic_trading"
+
 // ActionCompleted is the audited action that ties one setup run together.
 const ActionCompleted = "setup.completed"
 
@@ -65,14 +73,15 @@ type Database interface {
 // make every future field of the object graph an invisible dependency of setup, and "what does
 // the wizard actually touch?" would stop being answerable from the constructor.
 type Service struct {
-	db       Database
-	org      *org.Service
-	identity *identity.Service
-	profile  *profile.Service
-	currency *currency.Service
-	settings *config.Settings
-	catalog  *i18n.Catalog
-	bus      event.Publisher
+	db         Database
+	org        *org.Service
+	identity   *identity.Service
+	profile    *profile.Service
+	currency   *currency.Service
+	accounting *accounting.Service
+	settings   *config.Settings
+	catalog    *i18n.Catalog
+	bus        event.Publisher
 }
 
 // NewService builds the wizard's service.
@@ -80,11 +89,13 @@ func NewService(
 	db Database,
 	orgSvc *org.Service, identitySvc *identity.Service,
 	profileSvc *profile.Service, currencySvc *currency.Service,
+	accountingSvc *accounting.Service,
 	settings *config.Settings, catalog *i18n.Catalog, bus event.Publisher,
 ) *Service {
 	return &Service{
 		db: db, org: orgSvc, identity: identitySvc, profile: profileSvc,
-		currency: currencySvc, settings: settings, catalog: catalog, bus: bus,
+		currency: currencySvc, accounting: accountingSvc,
+		settings: settings, catalog: catalog, bus: bus,
 	}
 }
 
@@ -331,6 +342,20 @@ func (s *Service) Apply(ctx context.Context, in Input) (Result, error) {
 		if assignErr := s.identity.AssignRoleByCode(
 			ctx, admin.ID, provision.CompanyID, identity.RoleAdministrator); assignErr != nil {
 			return assignErr
+		}
+
+		// The chart of accounts, inside the same transaction as everything else.
+		//
+		// A company without one cannot post anything, and §20's whole premise is that the books
+		// keep themselves from the first release — so a setup that produced a company with no
+		// ledger would produce one that silently records nothing.
+		//
+		// No choice is offered yet: one template ships, and the wizard would be asking a
+		// question with a single answer. The step that offers a chart picker is the one that
+		// ships a second chart.
+		if chartErr := s.accounting.ApplyChart(
+			ctx, provision.CompanyID, defaultChart); chartErr != nil {
+			return chartErr
 		}
 
 		// The business profile FIRST, the wizard's explicit choices after (§3.2). The bundle

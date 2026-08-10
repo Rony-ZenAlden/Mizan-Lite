@@ -24,6 +24,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/setup"
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
@@ -94,23 +95,24 @@ func (o Options) withDefaults() Options {
 // There is deliberately no service locator and no Get(name) method: a component that needs
 // another received it in its constructor. Fields here are for the shell and for tests.
 type App struct {
-	Paths     paths.Paths
-	DB        *database.Store
-	Settings  *config.Settings
-	Catalog   *i18n.Catalog
-	Trans     *i18n.Translations
-	Bus       *eventbus.Bus
-	Outbox    *outbox.Store
-	Subs      *outbox.Subscribers
-	Dispatch  *outbox.Dispatcher
-	Scheduler *jobs.Scheduler
-	Currency  *currency.Service
-	Org       *org.Service
-	Identity  *identity.Service
-	Audit     *audit.Service
-	Profile   *profile.Service
-	Setup     *setup.Service
-	Modules   []modules.Module
+	Paths      paths.Paths
+	DB         *database.Store
+	Settings   *config.Settings
+	Catalog    *i18n.Catalog
+	Trans      *i18n.Translations
+	Bus        *eventbus.Bus
+	Outbox     *outbox.Store
+	Subs       *outbox.Subscribers
+	Dispatch   *outbox.Dispatcher
+	Scheduler  *jobs.Scheduler
+	Currency   *currency.Service
+	Org        *org.Service
+	Identity   *identity.Service
+	Audit      *audit.Service
+	Profile    *profile.Service
+	Accounting *accounting.Service
+	Setup      *setup.Service
+	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
 	// of the graph, and they are assembled statically in internal/api/bindings (0.11 D2). This
 	// field held whatever Module.Bindings() returned, which for two phases was nothing at all
@@ -168,10 +170,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	identityModule := identity.NewModule(nil)
 	auditModule := audit.NewModule(nil)
 	profileModule := profile.NewModule(nil)
+	accountingModule := accounting.NewModule(nil)
 
 	// 4. Migrate — before anything else reads a table.
 	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule, auditModule,
-		profileModule); err != nil {
+		profileModule, accountingModule); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -275,16 +278,31 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	}
 	profileModule = profile.NewModule(app.Profile)
 
+	// The chart of accounts rides the same layered loader country profiles do (1.8), so an
+	// accountant's own chart in the data directory replaces the shipped template.
+	app.Accounting, err = accounting.NewService(db, accounting.Options{
+		UserFS: profile.UserFS(opts.Paths.Data),
+		Clock:  opts.Clock,
+		Bus:    app.Bus,
+		Logger: opts.Logger,
+	})
+	if err != nil {
+		abandon(db)
+		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
+			"loading the charts of accounts")
+	}
+	accountingModule = accounting.NewModule(app.Accounting)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
 	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
-		settings, catalog, app.Bus)
+		app.Accounting, settings, catalog, app.Bus)
 
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, profileModule, identityModule, orgModule, currencyModule})
+		auditModule, accountingModule, profileModule, identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

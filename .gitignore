@@ -1,6 +1,8 @@
 # Binaries & build output (root-anchored so they don't match source dirs like tools/archlint/)
 /bin/
 /build/bin/
+# Release artefacts: .exe, installer, .dmg — built, never committed.
+/dist/
 *.exe
 *.out
 /mizan

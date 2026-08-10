@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-10** (Step 1.12 — Phase 1 complete). Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-10** (Step 1.13 — packaging; Windows + macOS only). Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -63,6 +63,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_10_FRONTEND_GATES.md` | Step 1.10: the gate stack, router, login screen, and setup wizard. |
 | `docs/architecture/STEP_1_11_ADMIN_SCREENS.md` | Step 1.11: the administration surface and permission-aware navigation. |
 | `docs/architecture/STEP_1_12_PHASE_1_DOD_REVIEW.md` | Step 1.12: the Phase 1 DoD review — evidence per criterion. |
+| `docs/architecture/STEP_1_13_PACKAGING.md` | Step 1.13: icon, version scheme, Windows/macOS release pipelines. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -131,6 +132,7 @@ and D7 synchronous in-transaction audit).
 | **1.10** | Frontend: deps, gates, router, login, setup wizard | ✅ committed |
 | **1.11** | Administration: users, roles, sessions, audit viewer; permission-aware navigation | ✅ committed |
 | **1.12** | Phase 1 Definition-of-Done review | ✅ committed — 11/12, visual confirmation open |
+| **1.13** | Packaging: icon, versioning, Windows `.exe`/installer + macOS `.dmg` | ✅ committed |
 
 ---
 
@@ -737,6 +739,28 @@ built it. **11 of 12 criteria pass.**
 - **Open: visual confirmation.** Sixteen screens exist; none has been rendered on a display.
   Not closable by tests — needs one `make dev` run on the reviewer's machine.
 
+### Step 1.13 — Packaging, branding, distribution
+Pulled forward from Phase 10 so the next eight phases ship into a pipeline that already works.
+- **Two platforms, by directive and by evidence: Windows and macOS.** Linux dropped — it is the
+  only one needing cgo and webkit2gtk, and the Wails CLI refuses to cross-compile it by name.
+  Windows cross-builds from this Mac in ~6s because nothing in its path needs cgo (0.3's pure-Go
+  SQLite driver, chosen for the offline constraint, paying off two phases later).
+- **Three artefacts, produced and verified**: `.exe` (16 MB), NSIS `Setup.exe` (8.4 MB),
+  universal `.dmg` (12 MB, `x86_64 arm64`, drag-to-Applications).
+- **The icon is a SCRIPT, not a blob.** A balance scale — *mizan* is Arabic for balance — drawn
+  from ~20 numbers with signed distance fields, written to PNG with nothing but `zlib`, because
+  the machine has no imaging library and this project vendors rather than adds dependencies.
+  No currency symbol: the product assumes no country.
+- **A real version scheme.** `git describe --always` with no tags produced
+  `Mizan ERP 2050917 Setup.exe`; now a build is either `0.1.0` (on a tag) or `0.1.0-dev.<sha>`,
+  and can never be mistaken for a release it is not.
+- **Three defects found by looking at the output**: the icon's cords dangled into the bowls'
+  openings; the bundle was named `mizan.app`; the version was a commit hash.
+- **A signing-order bug caught before it could ship**: the first draft signed the `.app` *after*
+  building the `.dmg` from it — a signature on a bundle nobody ships.
+- **Signing hooks are ready and are no-ops until credentials exist.** The one thing that cannot
+  be done here: certificates need the owner's identity and money.
+
 ---
 
 ## 7. Repository map (as built)
@@ -805,9 +829,13 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Phase 2 — the financial spine.** Awaiting approval, and the first thing it
-  needs is either the first customer's real tax figures and chart of accounts, or confirmation
-  that shipping an empty user-configured tax profile is acceptable (§C.3).
+- **Immediate next: Phase 2 — the financial spine.** Unblocked by directive: v1 ships an
+  **empty, user-configured tax profile** (§C.3's permitted option), so no external accounting
+  data is required to start.
+- **Signing certificates** are the only blocker to a distributable release (1.13 §4): Authenticode
+  for Windows, an Apple Developer ID for macOS. Unsigned builds work for testing.
+- **Auto-update is not designed.** Should be decided before the first customer install —
+  retrofitting an updater onto deployed copies is painful.
 - **The one open Phase 1 item: visual confirmation.** Sixteen screens, none looked at. `make dev`
   on your machine; it is the only DoD criterion tests cannot close.
 - **The audit viewer is not paginated.** It reads a 200-row window with an entity-type filter.

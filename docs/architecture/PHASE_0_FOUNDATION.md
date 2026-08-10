@@ -211,7 +211,7 @@ mizan/
 | Concern | Choice | Note |
 |---|---|---|
 | Go | 1.23+ | generics for the kernel & registries |
-| SQLite driver | `modernc.org/sqlite` (pure Go, **no cgo**) | keeps Windows/macOS/Linux cross-compilation trivial; cgo is a build-and-support tax a desktop app should avoid |
+| SQLite driver | `modernc.org/sqlite` (pure Go, **no cgo**) | keeps Windows cross-compilation from macOS trivial (proved in Step 1.13); cgo is a build-and-support tax a desktop app should avoid |
 | Migrations | `pressly/goose` as a library | §MIG |
 | SQL / read models | `sqlc` (generated) + `database/sql` for aggregates | §8.6 |
 | UUIDv7 | `google/uuid` (v7 support) | §7.4 |

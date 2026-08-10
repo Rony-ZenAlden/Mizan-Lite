@@ -1,6 +1,6 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "mizan",
+  "name": "Mizan ERP",
   "outputfilename": "Mizan ERP",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
@@ -11,6 +11,9 @@
   },
   "info": {
     "productName": "Mizan ERP",
-    "comments": "Mizan… Where Precision Meets Simplicity."
+    "comments": "Mizan… Where Precision Meets Simplicity.",
+    "companyName": "Mizan ERP",
+    "copyright": "© 2026 Mizan ERP",
+    "productVersion": "0.1.0"
   }
 }

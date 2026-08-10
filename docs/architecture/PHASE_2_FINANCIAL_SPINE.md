@@ -203,8 +203,7 @@ must not hardcode.
 | **2.3** | Account balances, incremental maintenance, the rebuild-and-assert job |
 | **2.4** | Fiscal period close + year-end closing |
 | **2.5** | Posting rules, account mappings, the `Postable` event and its subscriber |
-| **2.6** | Tax module: schema, versioned rates, groups, exemptions |
-| **2.7** | Tax resolution + calculation, and `tax.enabled = false` as a real state |
+| **2.6–2.7** | Tax module: schema, versioned rates, groups, exemptions, resolution, calculation, and `tax.enabled = false` as a real state |
 | **2.8** | Read-only UI: chart of accounts + trial balance (§20.6's v1.1 tier) |
 | **2.9** | Phase 2 Definition-of-Done review |
 
@@ -431,3 +430,51 @@ evaluator, the bus subscriber, and wizard wiring.
 a sale that fails afterwards leaves **no** journal entry; and editing a rule ROW — `mapping:AR`
 to `mapping:BANK` — changes where a sale posts, with no code change. That last test is §20.3's
 promise, executed rather than asserted.
+
+### Steps 2.6–2.7 — The tax engine ✅
+
+Built as one step: the schema, the resolution order, and the arithmetic are a single design, and
+splitting them would have meant shipping tables no code read.
+
+**Built:** migration 0014 (six tables), `domain/tax.go` (resolution + calculation), the
+repository, the service, the `tax.enabled` and `tax.rounding_stage` settings, and module wiring.
+
+**It ships with no rates, and that is the deliverable.** §19.1 forbids a rate in code; §C.3
+forbids asserting jurisdictional facts at all. So the complete engine ships and not one rate —
+the eight-level resolution, versioned lookup, inclusive decomposition, compound bases, and the
+disabled state are all built and tested. What is absent is the customer's data.
+
+**Decisions taken**
+
+1. **`tax.enabled` is a SETTING, not a feature flag, and defaults OFF.** A feature flag is about
+   progressive delivery of something the product does (§17); whether a business charges tax is a
+   fact about the business. Off by default because a fresh install has no rates, and an engine
+   turned on with nothing configured would charge zero while implying it had calculated
+   something.
+2. **Zero tax always records WHY** — disabled, exempt, or nothing configured. "Zero with no
+   reason" is indistinguishable from a bug that failed to compute.
+3. **Inclusive prices are decomposed, and the tax is the REMAINDER** (`gross − net`), not a
+   second computation. Computing it independently would let rounding produce a pair that misses
+   the quoted price by a minor unit.
+4. **Rounding uses the CURRENCY's mode**, not a tax-specific one: a tax rounding differently
+   from every other amount in the same document produces totals that do not reconcile.
+5. **A fixed levy in an inclusive group is refused.** It cannot be extracted by ratio, and
+   guessing would produce a net nobody could reproduce.
+6. **There is no UPDATE of a rate.** `ChangeRate` closes the old version's window and inserts a
+   new one — changing WHEN a rate applied, never WHAT it was.
+
+**Mutation drills**
+
+- *Inclusive tax multiplied rather than decomposed* → the test failed with **`tax = 1725, want
+  1500`**, which is exactly the number the design comment warns about.
+- *An exemption no longer beats the defaults* → the priority table failed on that row alone.
+
+**Found by CI:** `golangci-lint`'s `nilerr` caught a real defect — the default-group and
+exemption lookups swallowed *every* error, so a database fault would have read as "this company
+charges no tax" and "this customer is not exempt". The first is invisible because it matches the
+shipped configuration; the second charges an exempt customer. Both now distinguish
+`sql.ErrNoRows` from a genuine failure.
+
+**Exhaustively verified:** for every price from 0.01 to 10.00, an inclusive decomposition
+re-adds to exactly the quoted price; and across 2,000 prices with two taxes, the components sum
+exactly to the extracted tax.

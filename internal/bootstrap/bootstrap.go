@@ -30,6 +30,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
+	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -111,6 +112,7 @@ type App struct {
 	Audit      *audit.Service
 	Profile    *profile.Service
 	Accounting *accounting.Service
+	Tax        *tax.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -171,10 +173,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	auditModule := audit.NewModule(nil)
 	profileModule := profile.NewModule(nil)
 	accountingModule := accounting.NewModule(nil)
+	taxModule := tax.NewModule(nil)
 
 	// 4. Migrate — before anything else reads a table.
 	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule, auditModule,
-		profileModule, accountingModule); err != nil {
+		profileModule, accountingModule, taxModule); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -293,6 +296,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	}
 	accountingModule = accounting.NewModule(app.Accounting)
 
+	// Tax ships with no rates (§19.1, §C.3) and disabled by default (§19.5). The engine is
+	// complete; the data is the customer's.
+	app.Tax = tax.NewService(db, opts.Clock)
+	taxModule = tax.NewModule(app.Tax)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
@@ -302,7 +310,8 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, accountingModule, profileModule, identityModule, orgModule, currencyModule})
+		auditModule, taxModule, accountingModule, profileModule, identityModule, orgModule,
+		currencyModule})
 	if err != nil {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeRegistryInvalid,

@@ -168,5 +168,12 @@
   "setup.unknown_currency": "That currency is not available on this installation.",
   "strategy.duplicate": "Two components are registered under the same name.",
   "strategy.invalid": "A component was registered without a name.",
-  "strategy.unknown": "The required component \"{key}\" is not installed."
+  "strategy.unknown": "The required component \"{key}\" is not installed.",
+  "tax.calculation_failed": "The tax could not be calculated.",
+  "tax.invalid": "The tax is not valid.",
+  "tax.invalid_group": "The tax group is not valid.",
+  "tax.no_rate_in_force": "No tax rate is in force for that date.",
+  "tax.rate_overlap": "Two tax rates cover the same dates.",
+  "tax.storage": "The tax settings could not be read or written.",
+  "tax.unknown_group": "No such tax group."
 }

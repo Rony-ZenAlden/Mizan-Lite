@@ -168,5 +168,12 @@
   "setup.unknown_currency": "هذه العملة غير متاحة في هذا التثبيت.",
   "strategy.duplicate": "تم تسجيل مكوّنين بالاسم نفسه.",
   "strategy.invalid": "تم تسجيل مكوّن بدون اسم.",
-  "strategy.unknown": "المكوّن المطلوب \"{key}\" غير مثبّت."
+  "strategy.unknown": "المكوّن المطلوب \"{key}\" غير مثبّت.",
+  "tax.calculation_failed": "تعذّر احتساب الضريبة.",
+  "tax.invalid": "الضريبة غير صالحة.",
+  "tax.invalid_group": "مجموعة الضرائب غير صالحة.",
+  "tax.no_rate_in_force": "لا توجد نسبة ضريبة سارية في هذا التاريخ.",
+  "tax.rate_overlap": "هناك نسبتا ضريبة تغطيان نفس الفترة.",
+  "tax.storage": "تعذّرت قراءة أو كتابة إعدادات الضرائب.",
+  "tax.unknown_group": "لا توجد مجموعة ضرائب بهذا الرمز."
 }

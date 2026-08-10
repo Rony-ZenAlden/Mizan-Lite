@@ -30,6 +30,8 @@
   "account.tax_receivable": "Recoverable tax",
   "accounting.account.created": "Account created",
   "accounting.chart.applied": "Chart of accounts set up",
+  "accounting.entry.posted": "Journal entry posted",
+  "accounting.entry.reversed": "Journal entry reversed",
   "action.cancel": "Cancel",
   "action.changeLanguage": "Change language",
   "action.retry": "Try again",

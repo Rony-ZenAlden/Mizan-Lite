@@ -272,3 +272,42 @@ wizard so a fresh install gets a ledger.
 
 **Carried:** `CreateAccount` (extending a chart after setup) has no caller yet and is not built
 — it arrives with the screen that needs it, per the rule this project has repeatedly earned.
+
+### Step 2.2 — Journal entries, the balance invariant, the posting service ✅
+
+**Built:** migration 0011 (`journal_entries`, `journal_lines`), `domain/journal.go` (the
+aggregate), the journal repository, and `posting.go` — `Post`, `Reverse`, `SetPeriodStatus`,
+`CheckIntegrity`.
+
+**Decisions taken**
+
+1. **The balance rule is a CONSTRUCTOR, not a validator.** `domain.NewEntry` has no valid state
+   in which debits and credits differ — the same guarantee `money.Money` gives about currencies.
+   A validator is something a caller can forget to run.
+2. **Three guards, and they are not redundant.** The aggregate protects what goes through it;
+   the posting service is the last refusal before rows exist, and is the only one left the day
+   somebody builds an `Entry` literal; `CheckIntegrity` sees entries that met neither — a
+   restore, a repair script, a future importer.
+3. **The repository offers no update and no delete for a posted entry.** `MarkReversed` is the
+   one status change. Append-only enforced by absence, as in the audit module (1.6), and
+   asserted on the service surface so adding one is a deliberate act.
+4. **A reversal is dated on its own date.** Reversing a March entry in May is a May event;
+   back-dating would silently restate a month that may already be closed.
+5. **The period is resolved from the entry's DATE, not from today.** Posting into a closed or
+   locked period is refused, naming it.
+6. **Entry numbers are `MAX+1` inside the transaction.** Safe because SQLite has exactly one
+   writer (0.3). On an engine with real concurrency this becomes §9.4's `number_series` row
+   taken with a locking read — which arrives with the documents that need gapless numbering.
+7. **Every analytical dimension exists from the first release**, although nothing populates most
+   of them. Adding a dimension to a ledger with three years of history means those three years
+   cannot be analysed by it, and that is not recoverable.
+
+**Mutation drills**
+
+- *Balance rule not enforced at construction* → `TestAnUnbalancedEntryCannotBeConstructed`
+  failed.
+- *A closed period accepts postings* → `TestPostingIntoAClosedPeriodIsRefused` failed with
+  *"a signed-off month was restated"*.
+
+**Also proved:** the integrity check catches corruption applied directly with SQL — the case the
+other two guards structurally cannot see.

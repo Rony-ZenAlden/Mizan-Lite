@@ -30,6 +30,8 @@
   "account.tax_receivable": "ضريبة قابلة للاسترداد",
   "accounting.account.created": "إنشاء حساب",
   "accounting.chart.applied": "إعداد شجرة الحسابات",
+  "accounting.entry.posted": "ترحيل قيد يومية",
+  "accounting.entry.reversed": "عكس قيد يومية",
   "action.cancel": "إلغاء",
   "action.changeLanguage": "تغيير اللغة",
   "action.retry": "إعادة المحاولة",

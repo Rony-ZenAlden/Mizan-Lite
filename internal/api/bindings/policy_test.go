@@ -5,29 +5,19 @@ import (
 	"testing"
 
 	"github.com/mizan-erp/mizan/internal/api/bindings"
+	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
-	"github.com/mizan-erp/mizan/internal/modules/audit"
-	"github.com/mizan-erp/mizan/internal/modules/identity"
-	"github.com/mizan-erp/mizan/internal/modules/org"
-	"github.com/mizan-erp/mizan/internal/platform/auth"
 )
 
 // allPermissions is what the built modules declare, as the shell collects it at boot.
+// allPermissions is what THIS BUILD declares, from the one list every module appears in.
+//
+// It used to enumerate three modules by hand, which meant a fourth module's permissions were
+// missing from the very check that exists to catch an unreachable method — and the omission
+// surfaced only when someone added a binding that used one. Step 2.8 replaced it with
+// bootstrap.DeclaredPermissions, which is the same source production validates against.
 func allPermissions() map[string]bool {
-	out := map[string]bool{}
-	// Every module that declares permissions, as the shell collects them at boot. A policy may
-	// only name a permission some module actually declares — otherwise it could never be
-	// granted and the method would be permanently unreachable.
-	for _, defs := range [][]auth.PermissionDef{
-		identity.NewModule(nil).Permissions(),
-		org.NewModule(nil).Permissions(),
-		audit.NewModule(nil).Permissions(),
-	} {
-		for _, def := range defs {
-			out[def.Code] = true
-		}
-	}
-	return out
+	return bootstrap.DeclaredPermissions()
 }
 
 // TestEveryBindingMethodHasAPolicy is §14.3's guarantee, and the reason this step exists.

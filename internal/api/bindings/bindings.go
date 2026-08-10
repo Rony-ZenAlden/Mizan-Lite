@@ -79,16 +79,17 @@ func (g *graph) resolve() (*bootstrap.App, bool) {
 
 // Set is every binding struct, constructed before the graph exists.
 type Set struct {
-	Boot     *Boot
-	System   *System
-	Config   *Config
-	Ops      *Ops
-	Money    *Money
-	Auth     *Auth
-	Audit    *Audit
-	Setup    *Setup
-	Identity *Identity
-	session  *currentSession
+	Boot       *Boot
+	System     *System
+	Config     *Config
+	Ops        *Ops
+	Money      *Money
+	Auth       *Auth
+	Audit      *Audit
+	Setup      *Setup
+	Identity   *Identity
+	Accounting *Accounting
+	session    *currentSession
 	// remember is the "stay signed in" token store. Zero until Attach, because it needs the
 	// data directory and the set is built before the graph exists (0.11 D2).
 	remember rememberedToken
@@ -102,16 +103,17 @@ func New() *Set {
 		return graph{policies: policies, session: session}
 	}
 	return &Set{
-		Boot:     newBoot(),
-		System:   &System{graph: mk(systemPolicies())},
-		Config:   &Config{graph: mk(configPolicies())},
-		Ops:      &Ops{graph: mk(opsPolicies())},
-		Money:    &Money{graph: mk(moneyPolicies())},
-		Audit:    &Audit{graph: mk(auditPolicies())},
-		Setup:    &Setup{graph: mk(setupPolicies())},
-		Identity: &Identity{graph: mk(identityPolicies())},
-		Auth:     &Auth{graph: mk(authPolicies()), session: session},
-		session:  session,
+		Boot:       newBoot(),
+		System:     &System{graph: mk(systemPolicies())},
+		Config:     &Config{graph: mk(configPolicies())},
+		Ops:        &Ops{graph: mk(opsPolicies())},
+		Money:      &Money{graph: mk(moneyPolicies())},
+		Audit:      &Audit{graph: mk(auditPolicies())},
+		Setup:      &Setup{graph: mk(setupPolicies())},
+		Identity:   &Identity{graph: mk(identityPolicies())},
+		Accounting: &Accounting{graph: mk(accountingPolicies())},
+		Auth:       &Auth{graph: mk(authPolicies()), session: session},
+		session:    session,
 	}
 }
 
@@ -119,7 +121,8 @@ func New() *Set {
 //
 // The order is stable so the generated JavaScript bindings are stable.
 func (s *Set) All() []any {
-	return []any{s.Boot, s.System, s.Setup, s.Auth, s.Identity, s.Config, s.Ops, s.Money, s.Audit}
+	return []any{s.Boot, s.System, s.Setup, s.Auth, s.Identity, s.Accounting,
+		s.Config, s.Ops, s.Money, s.Audit}
 }
 
 // Attach wires the built graph into every façade and marks boot ready.
@@ -141,6 +144,7 @@ func (s *Set) Attach(app *bootstrap.App) {
 	s.Audit.attach(app)
 	s.Setup.attach(app)
 	s.Identity.attach(app)
+	s.Accounting.attach(app)
 	// Ready is set LAST, after every façade can serve. The shell treats "ready" as permission
 	// to mount and immediately calls bindings; marking ready first would open a window in
 	// which those calls fail with not-ready for no reason.

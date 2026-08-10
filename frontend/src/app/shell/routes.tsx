@@ -5,6 +5,8 @@ import { RolesScreen } from "@/modules/admin/RolesScreen";
 import { SessionsScreen } from "@/modules/admin/SessionsScreen";
 import { UsersScreen } from "@/modules/admin/UsersScreen";
 import { ChangePasswordScreen } from "@/modules/account/ChangePasswordScreen";
+import { ChartScreen } from "@/modules/accounting/ChartScreen";
+import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
 
 /**
@@ -57,6 +59,18 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.audit",
     element: <AuditScreen />,
     permission: PERMISSIONS.auditView,
+  },
+  {
+    path: "/accounting/chart",
+    labelKey: "nav.chart",
+    element: <ChartScreen />,
+    permission: PERMISSIONS.accountView,
+  },
+  {
+    path: "/accounting/trial-balance",
+    labelKey: "nav.trialBalance",
+    element: <TrialBalanceScreen />,
+    permission: PERMISSIONS.accountView,
   },
   // No permission: changing your own password is not an administrative act, and the person who
   // most needs it may hold nothing at all (1.11 D3).

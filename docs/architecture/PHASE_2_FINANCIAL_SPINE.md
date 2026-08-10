@@ -478,3 +478,34 @@ shipped configuration; the second charges an exempt customer. Both now distingui
 **Exhaustively verified:** for every price from 0.01 to 10.00, an inclusive decomposition
 re-adds to exactly the quoted price; and across 2,000 prices with two taxes, the components sum
 exactly to the extracted tax.
+
+### Step 2.8 — The read-only accounting surface ✅
+
+§20.6's **v1.1 tier**: the chart of accounts and the trial balance, readable, with no way to
+post, edit, or close. Manual journal entries are v1.3's, and shipping their controls now would
+put buttons behind a permission nobody has and a workflow nobody has designed.
+
+**Built:** the `Accounting` binding (`Chart`, `Periods`, `TrialBalance`), its DTOs, the TS
+wrapper, `formatMinor`, and two screens.
+
+**Decisions taken**
+
+1. **Money crosses the boundary as STRINGS of minor units.** JavaScript numbers are float64 and
+   lose integer precision above 2^53 — a ceiling a two-decimal currency never reaches and a
+   hyperinflated one reaches in ordinary trading, which is the situation §18 is built for. The
+   frontend formats; it never adds up. Every total worth trusting is computed in Go.
+   A test asserts `9007199254740993` survives the trip and is distinguishable from its
+   predecessor — which it would not be as a number.
+2. **`balanced` crosses as a flag.** The assertion made visible, rather than making a reader add
+   up a hundred rows. And when it is false the screen raises an ALERT rather than showing a
+   number, because an unbalanced trial balance is the one thing on that screen nobody should be
+   able to read past.
+3. **`depth` crosses rather than being derived from the path.** One answer to "how deep is this
+   account", computed where the hierarchy is built.
+
+**Found while wiring it:** the policy-coverage test hardcoded a list of *three* modules whose
+permissions it validated against — so accounting's and tax's were missing from the very check
+that exists to catch an unreachable method, and it only surfaced because this step added a
+binding that used one. Replaced with `bootstrap.DeclaredPermissions()`, the single list both
+production and the test now read. That is the same maintenance trap as the count-based
+assertions, in a different shape.

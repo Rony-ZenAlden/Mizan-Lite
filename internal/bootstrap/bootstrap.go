@@ -165,19 +165,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	}
 	app.DB = db
 
-	// Modules are constructed early only to obtain their migrations; their services are built
-	// after the schema exists.
-	currencyModule := currency.NewModule(nil)
-	orgModule := org.NewModule(nil)
-	identityModule := identity.NewModule(nil)
-	auditModule := audit.NewModule(nil)
-	profileModule := profile.NewModule(nil)
-	accountingModule := accounting.NewModule(nil)
-	taxModule := tax.NewModule(nil)
-
 	// 4. Migrate — before anything else reads a table.
-	if err = app.runMigrations(ctx, currencyModule, orgModule, identityModule, auditModule,
-		profileModule, accountingModule, taxModule); err != nil {
+	//
+	// The modules are constructed here with NIL services, purely to read their declarations:
+	// a migration is a property of the module, not of a built graph, and the graph cannot exist
+	// before the schema it needs does.
+	if err = app.runMigrations(ctx, DeclarationModules()...); err != nil {
 		abandon(db)
 		return nil, err
 	}
@@ -255,11 +248,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Nothing is provisioned here (Step 1.1, D1): a fresh install has no company until the
 	// setup wizard runs, and Start must succeed against exactly that state.
 	app.Currency = currency.NewService(db, opts.Clock, app.Trans)
-	currencyModule = currency.NewModule(app.Currency)
-	orgModule = org.NewModule(app.Org)
-	identityModule = identity.NewModule(app.Identity)
+	currencyModule := currency.NewModule(app.Currency)
+	orgModule := org.NewModule(app.Org)
+	identityModule := identity.NewModule(app.Identity)
 	app.Audit = audit.NewService(db, opts.Clock, auditActors{})
-	auditModule = audit.NewModule(app.Audit)
+	auditModule := audit.NewModule(app.Audit)
 
 	// Profiles are loaded from FILES, in two layers: what this binary embeds, and whatever the
 	// administrator dropped into the data directory. The second layer is what makes Addendum
@@ -279,7 +272,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
 			"loading the country and business profiles")
 	}
-	profileModule = profile.NewModule(app.Profile)
+	profileModule := profile.NewModule(app.Profile)
 
 	// The chart of accounts rides the same layered loader country profiles do (1.8), so an
 	// accountant's own chart in the data directory replaces the shipped template.
@@ -294,12 +287,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
 			"loading the charts of accounts")
 	}
-	accountingModule = accounting.NewModule(app.Accounting)
+	accountingModule := accounting.NewModule(app.Accounting)
 
 	// Tax ships with no rates (§19.1, §C.3) and disabled by default (§19.5). The engine is
 	// complete; the data is the customer's.
 	app.Tax = tax.NewService(db, opts.Clock)
-	taxModule = tax.NewModule(app.Tax)
+	taxModule := tax.NewModule(app.Tax)
 
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,

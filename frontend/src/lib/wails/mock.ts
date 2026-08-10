@@ -89,6 +89,18 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
     UnassignRole: () => ok(true),
     RevokeSession: () => ok(true),
   },
+  Accounting: {
+    Chart: () =>
+      ok([
+        { id: "a1", code: "1000", name: "Assets", nameKey: "account.assets", type: "asset", normal: "debit", depth: 0, isPostable: false, isSystem: false, isActive: true },
+        { id: "a2", code: "1110", name: "Cash", nameKey: "account.cash", type: "asset", normal: "debit", depth: 1, isPostable: true, isSystem: true, isActive: true },
+      ]),
+    Periods: () => ok([{ id: "p1", sequence: 1, start: "2026-01-01", end: "2026-01-31", status: "open" }]),
+    TrialBalance: () =>
+      ok({
+        periodId: "p1", rows: [], totalDebitMinor: "0", totalCreditMinor: "0", balanced: true,
+      }),
+  },
   System: {
     Health: () =>
       ok({

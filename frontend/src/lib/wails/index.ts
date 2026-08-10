@@ -279,7 +279,74 @@ export const PERMISSIONS = {
   sessionRevoke: "identity.session.revoke",
   auditView: "audit.entry.view",
   auditPayload: "audit.entry.view_payload",
+  accountView: "accounting.account.view",
 } as const;
+
+// ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
+//
+// The chart and the trial balance are readable two releases before anything may be edited, so
+// this surface deliberately offers no way to post, edit, or close.
+
+export interface Account {
+  id: string;
+  code: string;
+  name: string;
+  nameKey: string;
+  type: string;
+  normal: string;
+  depth: number;
+  isPostable: boolean;
+  isSystem: boolean;
+  isActive: boolean;
+}
+
+export interface TrialBalanceRow {
+  accountId: string;
+  code: string;
+  name: string;
+  type: string;
+  normal: string;
+  /**
+   * Minor units as STRINGS.
+   *
+   * JavaScript numbers are float64 and lose integer precision above 2^53. Money crosses as
+   * text and is formatted, never arithmetic'd, on this side — the totals that matter are
+   * computed in Go, where they are exact.
+   */
+  openingMinor: string;
+  debitMinor: string;
+  creditMinor: string;
+  closingMinor: string;
+}
+
+export interface TrialBalance {
+  periodId: string;
+  rows: TrialBalanceRow[];
+  totalDebitMinor: string;
+  totalCreditMinor: string;
+  /** The assertion made visible: a correct trial balance sums to zero (2.3). */
+  balanced: boolean;
+}
+
+export interface FiscalPeriod {
+  id: string;
+  sequence: number;
+  start: string;
+  end: string;
+  status: string;
+}
+
+export function chartOfAccounts(): Promise<Account[]> {
+  return call<Account[]>("Accounting", "Chart");
+}
+
+export function fiscalPeriods(): Promise<FiscalPeriod[]> {
+  return call<FiscalPeriod[]>("Accounting", "Periods");
+}
+
+export function trialBalance(periodId: string): Promise<TrialBalance> {
+  return call<TrialBalance>("Accounting", "TrialBalance", periodId);
+}
 
 // ── System ──────────────────────────────────────────────────────────────────────
 

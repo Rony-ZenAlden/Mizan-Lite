@@ -185,7 +185,3 @@ func (m *Module) Subscribe(bus *eventbus.Bus, _ *outbox.Subscribers) error {
 
 // Jobs: none. Retention pruning is Phase 9, and it is an audited operation itself.
 func (m *Module) Jobs() []jobs.Registration { return nil }
-
-// Bindings: none. The Audit binding lives in internal/api/bindings with the rest of the static
-// façade set (0.11 D2), since Module.Bindings() cannot be collected before Wails runs.
-func (m *Module) Bindings() any { return nil }

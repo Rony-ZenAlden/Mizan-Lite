@@ -92,7 +92,3 @@ func (m *Module) Jobs() []jobs.Registration {
 		},
 	}}
 }
-
-// Bindings: none in this step. Login lands in 1.3 with sessions, and the user admin screens in
-// 1.11 — a binding with no screen would be shape without a consumer.
-func (m *Module) Bindings() any { return nil }

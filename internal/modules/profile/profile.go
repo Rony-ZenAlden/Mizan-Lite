@@ -285,10 +285,6 @@ func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { retur
 // Jobs: none.
 func (m *Module) Jobs() []jobs.Registration { return nil }
 
-// Bindings: none yet. The wizard's binding surface is Step 1.9, and a binding with no screen
-// to call it would be shape without a consumer.
-func (m *Module) Bindings() any { return nil }
-
 // SortedCountryCodes is a small convenience for diagnostics and tests.
 func SortedCountryCodes(countries []Country) []string {
 	out := make([]string, 0, len(countries))

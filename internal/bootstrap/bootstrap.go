@@ -111,8 +111,11 @@ type App struct {
 	Profile   *profile.Service
 	Setup     *setup.Service
 	Modules   []modules.Module
-	// Bindings are the structs handed to Wails.
-	Bindings []any
+	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
+	// of the graph, and they are assembled statically in internal/api/bindings (0.11 D2). This
+	// field held whatever Module.Bindings() returned, which for two phases was nothing at all
+	// — removed with that method by the Phase 1 DoD review (1.12).
+	//
 	// Ctx is the root context with settings bound, from which per-call contexts derive.
 	Ctx context.Context
 
@@ -335,13 +338,6 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		abandon(db)
 		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
 			"reconciling jobs")
-	}
-
-	// 14. Bindings.
-	for _, m := range ordered {
-		if b := m.Bindings(); b != nil {
-			app.Bindings = append(app.Bindings, b)
-		}
 	}
 
 	app.registerShutdown()

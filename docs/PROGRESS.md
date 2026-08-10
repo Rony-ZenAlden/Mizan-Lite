@@ -1,7 +1,7 @@
 # Mizan ERP — Progress & Status
 
 > **Running status / resume-point document.** Read this first when picking the project back up.
-> Last updated: **2026-08-08** (Step 1.11). Branch: `main`. Everything below is committed and verified
+> Last updated: **2026-08-10** (Step 1.12 — Phase 1 complete). Branch: `main`. Everything below is committed and verified
 > **offline** (build · archlint · vet · tests+race · golangci-lint · frontend all green).
 
 ---
@@ -62,6 +62,7 @@ fetched). The GitHub Actions workflow is an inert opt-in template under
 | `docs/architecture/STEP_1_9_SETUP_WIZARD.md` | Step 1.9: the setup wizard backend and its structural gate. |
 | `docs/architecture/STEP_1_10_FRONTEND_GATES.md` | Step 1.10: the gate stack, router, login screen, and setup wizard. |
 | `docs/architecture/STEP_1_11_ADMIN_SCREENS.md` | Step 1.11: the administration surface and permission-aware navigation. |
+| `docs/architecture/STEP_1_12_PHASE_1_DOD_REVIEW.md` | Step 1.12: the Phase 1 DoD review — evidence per criterion. |
 | `docs/PROGRESS.md` | **This file** — running status. |
 
 ---
@@ -129,7 +130,7 @@ and D7 synchronous in-transaction audit).
 | **1.9** | Setup wizard backend | ✅ committed |
 | **1.10** | Frontend: deps, gates, router, login, setup wizard | ✅ committed |
 | **1.11** | Administration: users, roles, sessions, audit viewer; permission-aware navigation | ✅ committed |
-| **1.12** | Phase 1 Definition-of-Done review | ⬜ next |
+| **1.12** | Phase 1 Definition-of-Done review | ✅ committed — 11/12, visual confirmation open |
 
 ---
 
@@ -718,6 +719,24 @@ had none at all.
   the test was strengthened.
 - 8 new frontend tests (152 total), 12 new Go tests.
 
+### Step 1.12 — Phase 1 Definition-of-Done review
+Checked against **evidence** — a named test, a file, a command — not against memory of having
+built it. **11 of 12 criteria pass.**
+- **"Stay signed in" was a promise the code could not keep.** 1.3 gave a remembered session a
+  longer absolute window; 1.5 D3 put the token in the Go process. Both right; together they made
+  the feature do nothing — the row survived a restart and the only thing that could present it
+  died with the window. Four steps missed it because **no test had ever restarted the app**.
+  Fixed with an opt-in 0600 token file beside the database, validated and discarded on restore.
+- **`Module.Bindings()` was removed, not reconciled.** 0.11 D2 inverted boot so Wails gets its
+  fixed `[]any` before any module exists; the method could never work, and six modules returned
+  nil for two phases. A contract method with no possible implementor is a promise the
+  architecture cannot keep.
+- **archlint never scanned the repository root.** `main.go` and `shell.go` hold the boot
+  inversion and the policy-coverage check, and were outside the rules. Widened to `./...`.
+- Coverage: 28 Go packages, mean **81.1%**; 152 frontend tests.
+- **Open: visual confirmation.** Sixteen screens exist; none has been rendered on a display.
+  Not closable by tests — needs one `make dev` run on the reviewer's machine.
+
 ---
 
 ## 7. Repository map (as built)
@@ -786,8 +805,11 @@ Prereqs present: Go 1.26, Node 22, golangci-lint. **Not installed locally:** the
 
 ## 9. Open items / next
 
-- **Immediate next: Step 1.12 — the Phase 1 Definition-of-Done review.** That is also where the
-  visual confirmation belongs: twelve screens now exist and none has been rendered on a display.
+- **Immediate next: Phase 2 — the financial spine.** Awaiting approval, and the first thing it
+  needs is either the first customer's real tax figures and chart of accounts, or confirmation
+  that shipping an empty user-configured tax profile is acceptable (§C.3).
+- **The one open Phase 1 item: visual confirmation.** Sixteen screens, none looked at. `make dev`
+  on your machine; it is the only DoD criterion tests cannot close.
 - **The audit viewer is not paginated.** It reads a 200-row window with an entity-type filter.
   §FE.2 called the audit log "the first genuinely paginated read"; it will need to be before a
   shop has a year of history.

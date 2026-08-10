@@ -70,7 +70,11 @@ rules:
 
       - selector: "os.Exit"
         applies_to: ["self/**"]
-        exclude: ["**/cmd/**", "**/bootstrap/**", "**/tools/**", "**_test.go"]
+        # A package main's entrypoint IS the application bootstrap — the one place a non-zero
+        # exit code is the correct way to report that the program cannot run. Added when Step
+        # 1.12 widened the scan to the repository root and found the rule firing on the very
+        # entrypoint it was written to permit.
+        exclude: ["**/main.go", "**/cmd/**", "**/bootstrap/**", "**/tools/**", "**_test.go"]
         message: "no os.Exit() outside the application bootstrap"
 
       - selector: "fmt.Println"

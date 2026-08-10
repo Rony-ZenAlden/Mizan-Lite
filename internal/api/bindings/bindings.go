@@ -89,6 +89,9 @@ type Set struct {
 	Setup    *Setup
 	Identity *Identity
 	session  *currentSession
+	// remember is the "stay signed in" token store. Zero until Attach, because it needs the
+	// data directory and the set is built before the graph exists (0.11 D2).
+	remember rememberedToken
 }
 
 // New constructs the binding set. No database, no graph, no I/O.
@@ -123,6 +126,13 @@ func (s *Set) All() []any {
 //
 // Called exactly once, from the boot goroutine, on success.
 func (s *Set) Attach(app *bootstrap.App) {
+	// "Stay signed in" is restored HERE, before anything can call a binding, so the first
+	// question the frontend asks (Auth.Me) already has the right answer. Restoring it later
+	// would flash the login screen at someone who explicitly asked not to see it.
+	s.remember = newRememberedToken(app.Paths.Data)
+	s.Auth.remember = s.remember
+	s.restoreRemembered(app)
+
 	s.System.attach(app)
 	s.Config.attach(app)
 	s.Ops.attach(app)
@@ -135,6 +145,24 @@ func (s *Set) Attach(app *bootstrap.App) {
 	// to mount and immediately calls bindings; marking ready first would open a window in
 	// which those calls fail with not-ready for no reason.
 	s.Boot.markReady()
+}
+
+// restoreRemembered re-establishes a persisted session, or discards it.
+//
+// Validated once, here, rather than trusted: the stored token may have expired, or an
+// administrator may have revoked it from another machine since this one was last open. A dead
+// token is removed rather than left to fail on the next call — the file is a convenience, and a
+// convenience that lingers after it stops working is a support question.
+func (s *Set) restoreRemembered(app *bootstrap.App) {
+	token := s.remember.read()
+	if token == "" {
+		return
+	}
+	if _, _, err := app.Identity.Validate(app.Context(), token); err != nil {
+		s.remember.clear()
+		return
+	}
+	s.session.set(token)
 }
 
 // Progress records a migration progress update for the boot screen.

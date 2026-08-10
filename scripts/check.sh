@@ -19,6 +19,10 @@ export GOTOOLCHAIN=local
 
 CORE="./internal/... ./tools/..."
 APP="./internal/..."
+# The architecture rules scan the ROOT package too — main.go and shell.go hold the boot
+# inversion and the policy-coverage check (0.11 D2, 1.5), which is real logic and was
+# unchecked until Step 1.12 noticed the scan stopped at internal/.
+ARCH="./... "
 run_go=1
 run_fe=1
 case "${1:-}" in
@@ -42,7 +46,7 @@ if [ "$run_go" = 1 ]; then
   CGO_ENABLED=0 go build $CORE
 
   step "architecture rules (archlint)"
-  go run ./tools/archlint $APP
+  go run ./tools/archlint $ARCH
 
   step "go vet"
   go vet $CORE

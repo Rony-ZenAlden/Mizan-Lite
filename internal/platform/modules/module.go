@@ -72,7 +72,16 @@ type Module interface {
 	// Jobs are the module's background tasks (§24).
 	Jobs() []jobs.Registration
 
-	// Bindings returns the Wails binding struct exposed to the frontend. DTOs only —
-	// never a domain aggregate.
-	Bindings() any
+	// There is deliberately NO Bindings() method.
+	//
+	// 0.9 (D5) added one, expecting each module to return its own Wails binding struct. 0.11
+	// (D2) then inverted boot so the window opens BEFORE the object graph exists — which means
+	// Wails is handed its fixed []any while no module has been constructed. A per-module
+	// binding cannot be collected in time, and every one of the six modules returned nil for
+	// two phases.
+	//
+	// The Phase 1 Definition-of-Done review (1.12) closed the 0.11 D8 debt item by removing it
+	// rather than by finding a use: the binding surface is a property of the BUILD, assembled
+	// statically in internal/api/bindings, and a contract method with no possible implementor
+	// is a promise the architecture cannot keep.
 }

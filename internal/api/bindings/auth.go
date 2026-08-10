@@ -28,6 +28,12 @@ type SessionDTO struct {
 type Auth struct {
 	graph
 	session *currentSession
+	// remember persists the token across restarts when the user asked to stay signed in.
+	//
+	// A VALUE, filled in by Attach. A pointer would have to be non-nil before the data
+	// directory is known, and the zero value is already correct: a store with no path is
+	// disabled, so every method on it is a safe no-op.
+	remember rememberedToken
 }
 
 // authPolicies declares what Auth's methods require.
@@ -66,6 +72,12 @@ func (a *Auth) Login(username, password string, remember bool) envelope.Result[S
 	}
 
 	a.session.set(result.Token)
+	if remember {
+		// §13.1's "stay signed in" only means something if the token outlives the process.
+		// Best-effort: a failed write costs one sign-in tomorrow, and refusing a successful
+		// login over it would be the wrong trade entirely.
+		_ = a.remember.write(result.Token)
+	}
 
 	// Permissions are read through a context carrying the new actor, not the pre-login one.
 	dto := SessionDTO{
@@ -92,6 +104,10 @@ func (a *Auth) Logout() envelope.Result[bool] {
 	}
 	token := a.session.get()
 	a.session.clear()
+	// Always, even when there was no live token: a stored one may outlive the in-memory copy
+	// after a restore that failed, and "sign out" must leave nothing behind that could sign
+	// this machine back in.
+	a.remember.clear()
 	if token == "" {
 		return envelope.Ok(true)
 	}

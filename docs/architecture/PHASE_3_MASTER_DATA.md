@@ -332,3 +332,56 @@ the service guard only protects writes that go through the service, and the migr
 claims more: that a bad import cannot produce two. A new test now writes straight to the table,
 the way 3.2's default-variant test does. **The sixth drill to correct a test rather than the
 code**, and the second in this phase to catch a redundant guard masking the one that matters.
+
+### Step 3.4 — Partners
+
+**Delivered.** A new `partner` module: `0018_partners.sql` (`partners`, `partner_addresses`,
+`partner_contacts`, `partner_role_usage`), the domain, the repositories, the service, and the
+composition-root wiring.
+
+**D1 — one table, two role flags (decision 9).** A workshop that buys steel from a merchant and
+sells them finished brackets is ordinary. Two tables would make that either a duplicate identity
+nobody keeps in step or a join nobody remembers to write — and the statement of account for such
+a company would be two queries a developer has to think to combine. The cost is columns only one
+role uses; NULL says "not applicable" perfectly well.
+
+**D2 — `partner_role_usage` is separate from `has_history`, and the split is the interesting
+part.** They drive different rules:
+
+- `has_history` refuses **deletion** — the partner appears on some document.
+- Per-role usage refuses removing **that one role** — a supplier who has been billed has a
+  payable in the accounts, and clearing the flag would hide them from the supplier list while the
+  balance remains: a payable that becomes invisible without becoming settled.
+
+One flag could not express both, and the case it would get wrong — a partner who bought once and
+supplies constantly, wanting to stop being a customer — is not a rare shape. Drill 4 exists
+precisely to keep the two apart.
+
+**D3 — a credit limit of zero means NO LIMIT, not "no credit".** The two readings differ by every
+sale the business makes, and a limit of zero refusing everything is never what leaving the field
+alone was meant to say. The rule lives in the domain so that what zero means has exactly one
+home; a check re-written at the point of sale would be a second place to forget it.
+
+**D4 — permissions split by role as well as by action.** A salesperson maintains customers and
+has no business editing supplier payment terms; a buyer the reverse. One `partner.manage` would
+force a business to choose between granting too much and granting nothing.
+
+**D5 — addresses are free-form lines.** Street/number/district columns assume one country's
+shape and force every other into the wrong boxes, which §1 says this cannot do.
+
+**Mutation drills — 8 run, all fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | A partner may have no role (domain) | `TestAPartnerMustHaveAtLeastOneRole` fails |
+| 2 | The schema CHECK on roles dropped | `TestTheDatabaseRefusesARolelessPartner` fails |
+| 3 | A used role can be removed | `…CannotBeRemoved` + the audit test fail |
+| 4 | Role usage collapsed to one flag | `…UnusedRoleCanStillBeRemoved…` fails |
+| 5 | Zero credit limit means no credit | `TestAZeroCreditLimitMeansNoLimit` fails |
+| 6 | A partner with history becomes deletable | `…DeactivatedNotDeleted` fails |
+| 7 | One-default-address index weakened | `TestOnlyOneDefaultAddressPerPurpose` fails |
+| 8 | The role filter ignores `is_supplier` | `…SeparatesPureCustomersFromPureSuppliers` fails |
+
+Drills 1 and 2 are deliberately a pair: the domain and the schema each keep the same rule, and
+each is watched to fail on its own — the lesson 3.3's fifth drill taught, where a service guard
+was silently standing in for the index the test claimed to pin.

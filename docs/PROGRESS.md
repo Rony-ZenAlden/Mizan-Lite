@@ -950,3 +950,13 @@ unique — a scan resolves to exactly one variant and one quantity, and scanning
 
 8 mutation drills; the fifth passed and corrected the test rather than the code (the service's
 own duplicate check masked the index the test claimed to pin). `make ci` green.
+
+### Step 3.4 — Partners ✅
+
+A new `partner` module. Customers and suppliers in one table discriminated by role flags, so
+the workshop that buys steel from a merchant and sells them brackets is one identity. Role
+usage tracked per role, separately from document history: a supplier who has been billed
+cannot stop being a supplier, but may stop being a customer if nothing was ever sold to them.
+Credit limits where zero means no limit. Addresses and contacts.
+
+8 mutation drills, all failing as required. `make ci` green.

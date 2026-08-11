@@ -30,6 +30,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
 	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
@@ -118,6 +119,7 @@ type App struct {
 	Accounting *accounting.Service
 	Tax        *tax.Service
 	Catalog    *catalog.Service
+	Partner    *partner.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -314,6 +316,13 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	}
 	catalogModule := catalog.NewModule(app.Catalog)
 
+	// Partners: customers and suppliers in one table, because a business that both buys from
+	// and sells to the same company is ordinary (decision 9).
+	app.Partner = partner.NewService(db, partner.Options{
+		Clock: opts.Clock, Bus: app.Bus, Logger: opts.Logger,
+	})
+	partnerModule := partner.NewModule(app.Partner)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
@@ -323,7 +332,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, catalogModule, taxModule, accountingModule, profileModule,
+		auditModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
 		identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)

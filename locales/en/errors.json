@@ -142,6 +142,7 @@
   "inventory.non_positive_quantity": "A stock movement must move a positive quantity.",
   "inventory.publisher_missing": "Inventory could not be started because the event publisher is missing.",
   "inventory.return_needs_source": "A return must name the issue it reverses, so it can be costed at what the item originally cost.",
+  "inventory.same_warehouse": "A transfer needs two different warehouses.",
   "inventory.storage": "The stock data could not be read or saved.",
   "inventory.unknown_costing_method": "This version cannot value stock by the method {method}.",
   "inventory.unknown_movement_type": "That is not a kind of stock movement.",

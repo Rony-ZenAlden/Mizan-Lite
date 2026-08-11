@@ -1022,3 +1022,16 @@ twice. Stock value reconciles to the inventory account exactly.
 5 mutation drills. The 17th passed and resolved a third way: the guard is genuinely defensive,
 so it is kept, documented as saving work rather than changing outcomes, and left untested
 rather than given an assertion that would pass either way.
+
+### Step 4.4 — Transfers between warehouses ✅
+
+Two legs in one transaction, with the arrival costed at the SOURCE's average — costing it at the
+destination's would create inventory value by moving a box across town. Total company stock value
+is unchanged, which is what makes a transfer post nothing.
+
+The step also deleted a company-scope `allow_negative_stock` setting I had written: Phase 1
+already put `allows_negative_stock` on `warehouses`, commented "Read from Phase 4". The column is
+the authority, and per-warehouse is the right grain anyway.
+
+5 mutation drills, all failing as required — including a matched pair for the warehouse flag,
+since a flag read in only one direction is a flag half-tested.

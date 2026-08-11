@@ -371,6 +371,49 @@ func TestIssuingMoreThanIsHeldIsRefusedByDefault(t *testing.T) {
 	}
 }
 
+// The other half of the rule, and the one that exercises the WAREHOUSE flag Phase 1 left for
+// this phase (migration 0004, "Read from Phase 4"). A workshop that issues components before the
+// delivery note is entered genuinely needs this; the shop floor next door must not have it,
+// which is why the flag is per-warehouse rather than per-company.
+func TestAWarehouseThatPermitsItCanIssueBelowZero(t *testing.T) {
+	f := newFixture(t)
+	f.move(t, domain.Receipt, 2_000_000, 100_000_000)
+
+	if _, err := f.store.Writer(f.ctx).ExecContext(f.ctx,
+		`UPDATE warehouses SET allows_negative_stock = 1 WHERE id = ?`,
+		string(f.warehouseID)); err != nil {
+		t.Fatalf("permitting negative stock: %v", err)
+	}
+
+	if _, err := f.svc.Move(f.ctx, inventory.MoveInput{
+		CompanyID: f.companyID, WarehouseID: f.warehouseID,
+		ProductID: f.product.ID, VariantID: f.variant.ID,
+		Type: domain.Issue, QuantityMicro: 5_000_000,
+	}); err != nil {
+		t.Fatalf("a permitted oversell was refused: %v", err)
+	}
+
+	// The stock is genuinely negative, and says so rather than clamping at zero.
+	if state := f.stock(t); state.OnHandMicro != -3_000_000 {
+		t.Errorf("on hand = %d, want -3000000", state.OnHandMicro)
+	}
+
+	// And the shortfall was recorded as a variance rather than absorbed — visible and postable.
+	entries, err := f.audit.Entries(f.ctx, audit.Filter{EntityType: inventory.EntityStock})
+	if err != nil {
+		t.Fatalf("Entries: %v", err)
+	}
+	last := entries[0]
+	for _, entry := range entries {
+		if entry.Action == inventory.ActionStockIssued {
+			last = entry
+		}
+	}
+	if last.Action != inventory.ActionStockIssued {
+		t.Fatalf("no issue was audited: %+v", entries)
+	}
+}
+
 // ── layers, written even though nothing reads them (§D.2) ───────────────────────
 
 // The key decision of the phase. Under WAC these rows are recorded and unused; they exist so

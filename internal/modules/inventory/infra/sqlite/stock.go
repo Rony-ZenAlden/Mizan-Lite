@@ -420,3 +420,28 @@ func (r *Repos) ConsumeLayers(
 	// Refusing here would be a second, quieter rule contradicting the first.
 	return nil
 }
+
+// WarehouseAllowsNegative reads whether a warehouse tolerates stock below zero.
+//
+// The column lives on `warehouses` because Phase 1 put it there (migration 0004) with the note
+// "Read from Phase 4" — and per-warehouse is the right grain: a bonded store may permit what the
+// shop floor must not.
+//
+// A warehouse that does not exist reads as FALSE rather than as an error. The movement will fail
+// on its foreign key a moment later with a message about the warehouse, which is clearer than a
+// costing question failing first.
+func (r *Repos) WarehouseAllowsNegative(
+	ctx context.Context, warehouseID id.ID,
+) (bool, error) {
+	var allows int
+	err := r.db.Reader(ctx).QueryRowContext(ctx,
+		`SELECT allows_negative_stock FROM warehouses WHERE id = ?`,
+		string(warehouseID)).Scan(&allows)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, r.wrap(err, "reading a warehouse's negative-stock policy")
+	}
+	return allows == 1, nil
+}

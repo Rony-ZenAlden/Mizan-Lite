@@ -240,6 +240,7 @@
   "inventory.stock.rebuilt": "Stock levels rebuilt",
   "inventory.stock.received": "Stock received",
   "inventory.stock.transfer": "Transfer stock",
+  "inventory.stock.transferred": "Stock transferred",
   "inventory.stock.view": "View stock",
   "jobs.accounting.ledger_integrity": "Check the accounting records",
   "locale.name.ar": "العربية",

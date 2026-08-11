@@ -142,6 +142,7 @@
   "inventory.non_positive_quantity": "يجب أن تحرّك حركة المخزون كمية موجبة.",
   "inventory.publisher_missing": "تعذّر تشغيل المخزون لعدم توفّر ناشر الأحداث.",
   "inventory.return_needs_source": "يجب أن يحدّد المرتجع حركة الصرف التي يعكسها، ليُسعَّر بتكلفة الصنف الأصلية.",
+  "inventory.same_warehouse": "يحتاج التحويل إلى مستودعين مختلفين.",
   "inventory.storage": "تعذّرت قراءة بيانات المخزون أو حفظها.",
   "inventory.unknown_costing_method": "هذا الإصدار لا يستطيع تقييم المخزون بطريقة {method}.",
   "inventory.unknown_movement_type": "هذا ليس نوعًا من حركات المخزون.",

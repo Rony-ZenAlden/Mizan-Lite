@@ -383,3 +383,60 @@ That is the third possible outcome of a passing drill, alongside 3.x's "strength
 
 > **Keep the code, document that it saves work rather than changing outcomes, and write no test
 > that pretends otherwise.**
+
+### Step 4.4 — Transfers between warehouses
+
+**Delivered.** `Transfer`, `moveWithin`, and the `WarehouseAllowsNegative` read. `Move` now
+delegates to `moveWithin`, so the recording body exists once rather than twice.
+
+**D1 — the inbound leg is costed at the SOURCE's average.** This is the whole subtlety of the
+step. If warehouse A holds stock at 100 and B at 200, moving five units and costing the arrival
+at B's average would credit A with 500 and debit B with 1000 — **creating 500 of inventory value
+by moving a box across town**. The destination receives at what the goods actually cost where
+they came from and blends that into its own average, so total company inventory value is
+unchanged. That is DoD criterion 10, and it is what makes a transfer post nothing to the ledger.
+
+**D2 — both legs in one transaction, through `moveWithin`.** A crash between them would produce
+the worst state this module can reach: stock that has left one warehouse and arrived at none. The
+ledger would be internally consistent per warehouse, and the company would simply own less. Note
+that `moveWithin` takes an existing transaction rather than opening one — nesting `db.Do` would
+either deadlock on the single writer or commit the first leg independently, which is exactly the
+half-transfer being prevented.
+
+**D3 — a transfer to the same warehouse is refused**, not treated as a no-op. It would write two
+movements that cancel, leaving the ledger noisier and the stock unchanged.
+
+**D4 — negative stock is read from the WAREHOUSE, and the company setting I first wrote was
+deleted.**
+
+This is the most useful thing the step found. I declared an `inventory.allow_negative_stock`
+setting at company scope, noted in a comment that per-warehouse "would arguably be righter", and
+moved on. Writing the transfer test then required inserting a warehouse row — and the `warehouses`
+table already had:
+
+```sql
+-- §21.2: some businesses genuinely need negative stock, most should not. Read from Phase 4.
+allows_negative_stock SMALLINT NOT NULL DEFAULT 0,
+```
+
+Phase 1 had left the seam, labelled with the phase that was meant to read it, and I had built a
+second one at the wrong grain without looking. The setting is gone; the column is the authority.
+It is also simply *righter* — a bonded store may tolerate what the shop floor must not, which a
+company setting cannot express.
+
+**The lesson generalises past this instance:** before declaring a new place for a fact to live,
+look for the one an earlier phase already left. This codebase writes those down in the schema, in
+comments that name the phase.
+
+**Mutation drills — 5 run, all fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 19 | Arrival costed at the destination's average | 3 tests fail, incl. value conservation |
+| 20 | Source cost read as a stale zero | 3 tests fail |
+| 21 | Same-warehouse transfer allowed | `…ToTheSameWarehouseIsRefused` fails |
+| 22 | Warehouse flag ignored — always permissive | 3 tests fail |
+| 23 | Warehouse flag ignored — never permissive | `…WarehouseThatPermitsItCanIssueBelowZero` fails |
+
+Drills 22 and 23 are deliberately a pair: a flag read in only one direction is a flag half-tested,
+and the default being `false` means a single test could pass while the read did nothing at all.

@@ -3,8 +3,6 @@ package inventory
 import (
 	"context"
 
-	"github.com/mizan-erp/mizan/internal/kernel/clock"
-	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/inventory/domain"
@@ -65,135 +63,13 @@ func (s *Service) Move(ctx context.Context, in MoveInput) (domain.Movement, erro
 	}
 
 	var recorded domain.Movement
-
 	err := s.db.Do(ctx, func(txCtx context.Context) error {
-		strategy, err := s.strategy(txCtx)
+		movement, err := s.moveWithin(txCtx, in)
 		if err != nil {
 			return err
 		}
-
-		movementID, err := id.New()
-		if err != nil {
-			return err
-		}
-		movement, err := domain.NewMovement(movementID, in.WarehouseID, in.ProductID,
-			in.VariantID, in.Type, in.QuantityMicro)
-		if err != nil {
-			return err
-		}
-
-		movement.UnitCostMicro = in.UnitCostMicro
-		movement.SourceMovementID = in.SourceMovementID
-		movement.DocumentType = in.DocumentType
-		movement.DocumentID = in.DocumentID
-		movement.DocumentLineID = in.DocumentLineID
-		movement.ReasonCode = in.ReasonCode
-		movement.Reason = in.Reason
-		movement.OccurredAt = in.OccurredAt
-		if movement.OccurredAt == "" {
-			movement.OccurredAt = clock.Format(s.clk.Now())
-		}
-		if movement.Type == domain.Count {
-			// The counted figure is what the balance BECOMES; the quantity is the difference
-			// found, which is what the trail should show.
-			movement.BalanceAfterMicro = in.CountedMicro
-		}
-
-		level, found, err := s.repos.LevelFor(txCtx, in.VariantID, in.WarehouseID)
-		if err != nil {
-			return err
-		}
-		if !found {
-			levelID, idErr := id.New()
-			if idErr != nil {
-				return idErr
-			}
-			level = sqlite.Level{
-				ID: levelID, WarehouseID: in.WarehouseID,
-				ProductID: in.ProductID, VariantID: in.VariantID,
-			}
-		}
-
-		// A return is costed at its ORIGINAL issue's cost, so the original is loaded and handed
-		// to the strategy. Not fetched by the strategy: a strategy that could fetch would need a
-		// database and would stop being testable against a table.
-		var original domain.Movement
-		if !in.SourceMovementID.IsZero() {
-			found, ok, sourceErr := s.repos.MovementByID(txCtx, in.SourceMovementID)
-			if sourceErr != nil {
-				return sourceErr
-			}
-			if !ok {
-				return errs.NotFound(domain.CodeReturnNeedsSource,
-					"the movement this reverses does not exist").
-					WithParam("id", string(in.SourceMovementID))
-			}
-			original = found
-		}
-
-		result, err := strategy.Cost(level.State, movement, original)
-		if err != nil {
-			return err
-		}
-		movement.UnitCostMicro = result.UnitCostMicro
-		movement.ValueMinor = result.ValueDeltaMinor
-		movement.AverageAfterMicro = result.NewAverageMicro
-
-		after, err := domain.Apply(level.State, movement)
-		if err != nil {
-			return err
-		}
-		movement.BalanceAfterMicro = after.OnHandMicro
-		after.AverageMicro = result.NewAverageMicro
-
-		if err = s.repos.InsertMovement(txCtx, in.CompanyID, movement, s.actorOf(txCtx)); err != nil {
-			return err
-		}
-
-		level.State = after
-		if err = s.repos.UpsertLevel(txCtx, in.CompanyID, level, movement.ID); err != nil {
-			return err
-		}
-
-		// Layers: written on every inward movement and drawn down on every outward one,
-		// REGARDLESS of costing method (§D.2). Under WAC nothing reads them; they exist so that
-		// switching a company to FIFO is a configuration change plus a recompute rather than a
-		// migration that would have to reconstruct purchase history from movements.
-		if movement.Type.IsInward() {
-			layerID, layerErr := id.New()
-			if layerErr != nil {
-				return layerErr
-			}
-			if err = s.repos.InsertLayer(txCtx, layerID, in.CompanyID, movement); err != nil {
-				return err
-			}
-		}
-		if movement.Type.IsOutward() {
-			if err = s.repos.ConsumeLayers(txCtx, in.VariantID, in.WarehouseID,
-				movement.QuantityMicro); err != nil {
-				return err
-			}
-		}
-
 		recorded = movement
-
-		// The books, before the audit trail: both run inside this transaction, and a failure in
-		// either must roll the movement back. Posting first means a rule that refuses — a closed
-		// period, a missing mapping — stops the movement rather than leaving a stock change the
-		// ledger never heard about.
-		if err = s.publishPosting(txCtx, in.CompanyID, s.branchOf(txCtx), movement); err != nil {
-			return err
-		}
-
-		return s.audit(txCtx, auditc.Auditable{
-			Action: actionFor(movement.Type), EntityType: EntityStock, EntityID: movement.ID,
-			After: map[string]any{
-				"type": string(movement.Type), "quantity_micro": movement.QuantityMicro,
-				"unit_cost_micro": movement.UnitCostMicro, "value_minor": movement.ValueMinor,
-				"balance_after_micro": movement.BalanceAfterMicro,
-				"variance_minor":      result.VarianceMinor,
-			},
-		})
+		return nil
 	})
 	if err != nil {
 		return domain.Movement{}, err

@@ -240,6 +240,7 @@
   "inventory.stock.rebuilt": "تمت إعادة بناء أرصدة المخزون",
   "inventory.stock.received": "تم استلام مخزون",
   "inventory.stock.transfer": "تحويل المخزون",
+  "inventory.stock.transferred": "تم تحويل مخزون",
   "inventory.stock.view": "عرض المخزون",
   "jobs.accounting.ledger_integrity": "فحص السجلات المحاسبية",
   "locale.name.ar": "العربية",

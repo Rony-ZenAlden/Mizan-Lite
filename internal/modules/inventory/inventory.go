@@ -168,16 +168,25 @@ func NewService(db Database, opts Options) *Service {
 	}
 }
 
-// strategy builds the costing strategy for a company.
+// strategy builds the costing strategy for one warehouse.
 //
 // # Read fresh, not cached
 //
-// The setting can change (§D.4 permits it at a period boundary), and a strategy captured at
-// startup would keep pricing movements by the old method until a restart — silently, with the
-// audit trail claiming the new one. Building it per call costs a settings read against an
-// in-memory registry.
-func (s *Service) strategy(ctx context.Context) (domain.Strategy, error) {
-	options := domain.Options{AllowNegativeStock: AllowNegativeStock.Get(ctx)}
+// The costing method can change (§D.4 permits it at a period boundary), and a strategy captured
+// at startup would keep pricing movements by the old method until a restart — silently, with the
+// audit trail claiming the new one.
+//
+// # Per warehouse, not per company
+//
+// Whether negative stock is tolerated is a property of the PLACE: a bonded store may permit what
+// the shop floor must not. Phase 1 put the column on `warehouses` for exactly this, and reading
+// it here is what makes that seam real.
+func (s *Service) strategy(ctx context.Context, warehouseID id.ID) (domain.Strategy, error) {
+	allows, err := s.repos.WarehouseAllowsNegative(ctx, warehouseID)
+	if err != nil {
+		return nil, err
+	}
+	options := domain.Options{AllowNegativeStock: allows}
 
 	// Only WAC exists in v1. When FIFO arrives it is selected HERE, by the setting, and nothing
 	// else in this module changes — which is the whole point of the port.
@@ -237,7 +246,6 @@ func (m *Module) Permissions() []auth.PermissionDef {
 // Settings declares the two decisions a company makes about its stock.
 func (m *Module) Settings() []config.Definition {
 	return []config.Definition{
-		mustDefinition(AllowNegativeStock.Key()),
 		mustDefinition(CostingMethod.Key()),
 	}
 }

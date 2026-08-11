@@ -385,3 +385,67 @@ shape and force every other into the wrong boxes, which §1 says this cannot do.
 Drills 1 and 2 are deliberately a pair: the domain and the schema each keep the same rule, and
 each is watched to fail on its own — the lesson 3.3's fifth drill taught, where a service guard
 was silently standing in for the index the test claimed to pin.
+
+### Step 3.5 — Price lists and resolution
+
+**Delivered.** A new `pricing` module: `0019_pricing.sql` (`price_lists`, `price_list_items`,
+`partner_price_lists`, `branch_price_lists`), the pure resolution domain, the repositories, the
+service, and the composition-root wiring. This realises **D1** — multiple price lists with
+resolution — decided in §1.5.
+
+**D1 — §2.6's five levels became three lists × two granularities, and the reason is module
+ownership.** Levels 4 and 5 were "the variant's own price" and "the product's price": columns on
+`product_variants` and `products`, tables the **catalog** module owns. A module adding a column
+to another module's table breaks the ownership rule that makes a modular monolith survive ten
+years, and the alternative — catalog carrying a price column for a feature it knows nothing
+about — is worse.
+
+So a `price_list_item` targets **either** a product or a variant, and a variant-level item
+overrides a product-level one *within the same list*. Same expressive power, one mechanism
+instead of two, and no column crossing a boundary. The partner's assigned list moved from a
+column on `partners` to a table here for exactly the same reason, correcting what 0018's comment
+promised.
+
+**D2 — list priority outranks granularity.** A partner's blanket product price beats the default
+list's price for that exact variant. That is what a negotiated rate means, and getting it
+backwards would quietly ignore every agreement the business has made.
+
+**D3 — the highest qualifying quantity break wins.** Taking the first match instead would charge
+the base price on an order of ten and lose the sale the discount existed to win.
+
+**D4 — no price is an ERROR, but a price of zero is a price.** A variant nobody has priced is a
+configuration gap; returning zero would sell it for nothing, silently, on a receipt that looks
+perfectly ordinary. A free sample priced at zero is a different thing entirely, and the two have
+their own tests sitting next to each other.
+
+**D5 — a missing default list is a distinct error from an unpriced item.** One is a setup step
+nobody completed; the other is a product nobody priced. Different problems, different answers.
+
+**D6 — sale and purchase are one concept with a direction.** A supplier's agreed rates and a
+customer's wholesale list are both price lists; separating them by table would duplicate every
+column and both resolution functions.
+
+**Mutation drills — 9 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | Product price checked before variant price | Domain and service tests fail |
+| 2 | The LOWEST qualifying break wins | 3 tests fail |
+| 3 | An unpriced variant resolves to zero | 3 tests fail |
+| 4 | List validity dates ignored | `…OutOfDateIsSkipped`, `…RetiredListIsSkipped` fail |
+| 5 | One-default-list index weakened | `TestOnlyOneDefaultListPerDirection` fails |
+| 6 | `ck_price_item_targets_one` dropped | **Passed at first — the test was wrong.** See below. |
+| 7 | The domain accepts both/neither targets | `TestAPriceTargetsExactlyOneThing` fails |
+| 8 | The branch list consulted before the partner's | 2 service tests fail |
+| 9 | Direction ignored on the default list | `TestSaleAndPurchaseListsAreSeparate` fails |
+
+**Drill 6, and the pattern now has a name.** `NewItem` refuses a price targeting both or neither
+before the CHECK is ever reached, so dropping the constraint changed nothing any test could see.
+This is the **third** time in Phase 3 that a higher layer silently stood in for a lower one the
+test claimed to pin — after 3.1's cross-category check (the kernel covered it) and 3.3's barcode
+index (the service covered it). The rule that came out of it:
+
+> **When two layers keep one rule, each needs a test that can only fail if THAT layer is the one
+> enforcing it.** In practice: write straight to the table.
+
+Drills 6 and 7 are now that pair, as drills 1 and 2 were in 3.4.

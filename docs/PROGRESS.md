@@ -960,3 +960,14 @@ cannot stop being a supplier, but may stop being a customer if nothing was ever 
 Credit limits where zero means no limit. Addresses and contacts.
 
 8 mutation drills, all failing as required. `make ci` green.
+
+### Step 3.5 — Price lists and resolution ✅
+
+A new `pricing` module, realising D1. Resolution is a pure function: partner list, then branch
+list, then the company default, and within each a variant price before a product price — the
+five levels §2.6 sketched, restructured so that no price column lands on a table the catalog
+module owns. Quantity breaks with the highest qualifying one winning. Every resolution records
+which list answered. No price is an error; a price of zero is a price.
+
+9 mutation drills; the sixth passed and corrected the test rather than the code — the third
+time in Phase 3 that a higher layer masked the one the test claimed to pin. `make ci` green.

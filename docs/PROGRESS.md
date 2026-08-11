@@ -996,3 +996,17 @@ settled. The alternative (splitting the table) is written up in the phase doc.
 
 Four drills passed during the phase, each revealing a test that was pinning the wrong layer.
 The rule that came out of it is recorded at the end of the phase document.
+
+## Phase 4 — Inventory & Costing
+
+### Steps 4.1–4.2 — The stock ledger, the costing port, and WAC ✅
+
+A new `inventory` module. `stock_movements` is an append-only ledger and the source of truth;
+`stock_levels` is a projection that is rebuilt and verified against it — Phase 2's shape,
+reused. Costing goes through a strategy port so FIFO is a setting rather than a rewrite, and
+`inventory_layers` is written on every receipt even though WAC never reads it. All four §D.3
+arithmetic traps handled, each with a named test.
+
+12 mutation drills. Two passed, and both found redundant CODE rather than weak tests: half of
+the zero-on-hand guard is arithmetically unreachable (documented), and the explicit revaluation
+case restated what the direction table already said (deleted). `make ci` green.

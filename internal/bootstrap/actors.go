@@ -7,6 +7,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
+	"github.com/mizan-erp/mizan/internal/modules/inventory"
 )
 
 // auditActors tells the audit module who is acting.
@@ -54,4 +55,23 @@ func (identityActors) UserID(ctx context.Context) (id.ID, bool) {
 		return id.ID(""), false
 	}
 	return a.UserID, true
+}
+
+// inventoryActors satisfies inventory's own ActorResolver from the same context principal.
+//
+// A second type rather than one satisfying both interfaces: inventory declares its own port so
+// that it does not depend on the audit package (§10.3's module isolation), and the two shapes
+// are deliberately different — inventory needs a user and a branch, not a session or a display
+// name. One implementation, two narrow views of it, and the composition root is where they meet.
+type inventoryActors struct{}
+
+var _ inventory.ActorResolver = inventoryActors{}
+
+// Actor reads the principal the 1.5 guard stamped onto the context.
+func (inventoryActors) Actor(ctx context.Context) (inventory.Actor, bool) {
+	a, ok := appctx.ActorFrom(ctx)
+	if !ok || a.UserID.IsZero() {
+		return inventory.Actor{}, false
+	}
+	return inventory.Actor{UserID: a.UserID, BranchID: a.BranchID}, true
 }

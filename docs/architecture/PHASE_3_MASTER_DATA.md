@@ -557,9 +557,11 @@ cases forever.
 queries, so the change is mostly mechanical. The cost is a second table duplicating
 `price_minor`, `min_quantity_micro`, and `is_active`, plus a second insert path.
 
-**This is a judgement call on a criterion the design doc stated absolutely, so it is escalated
-rather than settled.** The code as it stands takes the first reading; say the word and 3.8 takes
-the second.
+**This was escalated rather than settled, and has now been decided: the design stands as
+implemented.** The `ck_price_item_targets_one` CHECK carries the invariant, exactly-one-of-two
+remains unrepresentable, and criterion 2 is read as governing *transactional* `variant_id`
+columns — which every one of them, present and future, still satisfies. Recorded here so the
+deviation stays visible to whoever reads §1.2 next.
 
 ### What Phase 3 leaves for later
 

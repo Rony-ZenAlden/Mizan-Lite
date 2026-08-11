@@ -29,6 +29,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
+	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/pricing"
@@ -122,6 +123,7 @@ type App struct {
 	Catalog    *catalog.Service
 	Partner    *partner.Service
 	Pricing    *pricing.Service
+	Inventory  *inventory.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -332,6 +334,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	})
 	pricingModule := pricing.NewModule(app.Pricing)
 
+	// Inventory: an append-only movement ledger with a verified projection, the same shape the
+	// general ledger has (Phase 2). Costing goes through a strategy port so that FIFO is a
+	// setting rather than a rewrite (§D.1).
+	app.Inventory = inventory.NewService(db, inventory.Options{
+		Clock: opts.Clock, Bus: app.Bus, Settings: settings,
+		Actors: inventoryActors{}, Logger: opts.Logger,
+	})
+	inventoryModule := inventory.NewModule(app.Inventory)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
@@ -341,7 +352,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
+		auditModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
 		identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)

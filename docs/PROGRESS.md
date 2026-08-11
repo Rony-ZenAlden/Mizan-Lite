@@ -982,3 +982,17 @@ who is both customer and supplier appears in both lists as one identity with bot
 New `Badge` primitive. 8 mutation drills; the second passed and corrected the test rather than
 the code — the fourth time in Phase 3, and the first on the frontend. `make ci` green with 181
 frontend tests.
+
+### Step 3.7 — Phase 3 Definition-of-Done review ✅ (11/12 + 1 escalated)
+
+11 of 12 criteria met in full, each backed by a test watched to fail under mutation. 40 drills
+across the phase.
+
+**Criterion 2 is met with a documented exception:** `price_list_items.variant_id` is nullable,
+a consequence of the 3.5 decision to let a price target either a product or a variant. A CHECK
+makes "exactly one of the two" unrepresentable otherwise, and only the resolution function reads
+both cases — but §1.2 names that table explicitly, so the deviation is escalated rather than
+settled. The alternative (splitting the table) is written up in the phase doc.
+
+Four drills passed during the phase, each revealing a test that was pinning the wrong layer.
+The rule that came out of it is recorded at the end of the phase document.

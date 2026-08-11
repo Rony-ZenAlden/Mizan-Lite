@@ -507,3 +507,89 @@ unconditionally inside the guarded block and can therefore only be removed by th
 service covered the index), and 3.5 (the domain covered the CHECK). The rule 3.5 wrote down holds
 on the frontend unchanged: *when two mechanisms produce the same visible outcome, the test must
 name the one it is about.*
+
+---
+
+## Step 3.7 — Phase 3 Definition-of-Done review
+
+**Result: 11 of 12 met in full; 1 met with a deliberate, documented exception that needs a
+decision.** Every criterion below names the test that proves it, and every one of those tests was
+watched to FAIL under a mutation before being counted.
+
+| # | Criterion | Verdict | Proof |
+|---|---|---|---|
+| 1 | Every product has at least one variant; a simple product's is automatic and never shown | ✅ | `NewProduct` returns `(Product, Variant, error)` — no domain path yields a product alone. `TestNoProductIsEverWithoutAVariant` asserts it over the whole table; the browse screen shows a dash, not "1" |
+| 2 | `variant_id` is `NOT NULL` everywhere it appears | ⚠️ **exception** | See below |
+| 3 | Conversion within a category is exact and round-trips; across it is a typed error | ✅ | `TestConversionRoundTrips`, `TestCrossCategoryConversionIsRefused` |
+| 4 | A fractional quantity of a non-fractional unit is refused | ✅ | `TestAFractionalCountIsRefused`, `…IsNotSilentlyRounded` — refused, never rounded |
+| 5 | `stock_uom` cannot change once stock has moved | ✅ | `TestTheStockUnitCannotChangeOnceStockHasMoved` (domain) and `…IsLockedOnceStockHasMoved` (through storage) |
+| 6 | Generation produces a previewable plan and refuses to delete a variant with history | ✅ | `TestPlanningChangesNothing`, `TestAVariantThatHasBeenSoldIsDeactivatedAndOneThatHasNotIsDeleted` |
+| 7 | An attribute is variant-defining for one product and descriptive for another | ✅ | `TestAnAttributeIsVariantDefiningForOneProductAndDescriptiveForAnother` — one dictionary row, two meanings |
+| 8 | A barcode resolves to exactly one variant; a packaging barcode to a quantity | ✅ | `TestABarcodeResolvesToExactlyOneVariant`, `TestTheDatabaseRefusesADuplicateBarcode…`, `TestScanningABoxBarcodeResolvesToTwelve` |
+| 9 | One `partners` table serves both roles, including a partner who is both | ✅ | `TestAPartnerCanBeBothCustomerAndSupplier`, `TestTheDatabaseRefusesARolelessPartner` |
+| 10 | Price resolution follows the documented order and records which list answered | ✅ | `TestResolutionFollowsTheDocumentedOrder` (6 cases), `TestAPartnersListBeatsTheBranchAndTheDefault` |
+| 11 | Every new binding has a declared policy; every state change is audited in-transaction | ✅ | The startup policy check covers `Catalog` and `Partners`; `TestARefusedCreateIsNotAudited`, `TestARefusedChangeIsNotAudited`, `TestARefusedPriceIsNotAudited` prove the rollback takes the entry with it |
+| 12 | `make ci` green, with the mutation drills each step declares | ✅ | Green. **40 drills** across 3.1–3.6 |
+
+### Criterion 2 — the exception, stated plainly
+
+`price_list_items.variant_id` is **nullable**, and §1.2 names `price_list_items` among the tables
+that must carry `NOT NULL`. This is a direct consequence of the 3.5 decision to let a price
+target either a product or a variant, and it is my deviation, not an oversight.
+
+**What the criterion exists to prevent** (§1.2): a nullable `variant_id` meaning *"the product
+itself"*, which forces every query, stock lookup, price resolution, and report to handle two
+cases forever.
+
+**What is actually true here:**
+
+- The NULL does not mean "the product itself" ambiguously — `ck_price_item_targets_one` makes
+  the database refuse any row that is not **exactly one** of the two kinds. The state the
+  criterion fears is unrepresentable, not merely discouraged.
+- Exactly **one** function reads both cases: `domain.Resolve`, whose entire job is choosing
+  between granularities. No stock lookup, no document line, no report touches it.
+- Every *transactional* `variant_id` — `product_variant_values`, `barcodes`, and everything
+  Phases 4–6 will add — is and must stay `NOT NULL`.
+
+**The alternative**, if the criterion is to be met literally: split the table into
+`price_list_items` (`variant_id NOT NULL`) and `price_list_product_items`
+(`product_id NOT NULL`). The repositories already load the two granularities as two separate
+queries, so the change is mostly mechanical. The cost is a second table duplicating
+`price_minor`, `min_quantity_micro`, and `is_active`, plus a second insert path.
+
+**This is a judgement call on a criterion the design doc stated absolutely, so it is escalated
+rather than settled.** The code as it stands takes the first reading; say the word and 3.8 takes
+the second.
+
+### What Phase 3 leaves for later
+
+Carried deliberately, not forgotten:
+
+- **No create/edit forms.** The screens read; the workflows that write belong with the releases
+  that design them (§20.6's staging, applied here).
+- **Variant generation has no screen.** The plan/apply pair exists and is tested, but nothing
+  shows the preview yet — 3.3 built the mechanism, and the screen belongs with the release that
+  introduces variant editing.
+- **`MarkVariantHistory` and `MarkHistory` have no production caller.** Phase 4 and Phase 5 are
+  their triggers. They exist now because they are what the strongest rules READ, and a rule whose
+  trigger does not exist is a rule no test can exercise.
+- **Packagings have no screen**, and `Catalog.Scan` / `Catalog.Price` have no caller — Phase 5's
+  till is the consumer.
+- **`branch_price_lists` cannot be set from a screen**, only through the service.
+
+### The lesson Phase 3 taught
+
+Four of the 40 mutation drills **passed**, and each time the code was right and the test was
+wrong — a second layer was silently standing in for the one the test claimed to pin:
+
+| Step | The test thought it pinned | What actually answered |
+|---|---|---|
+| 3.1 | the domain's cross-category check | the kernel's own refusal |
+| 3.3 | `ux_barcodes_code` | `CreateBarcode`'s duplicate lookup |
+| 3.5 | `ck_price_item_targets_one` | `NewItem`'s validation |
+| 3.6 | the `isSimple` guard | the empty-row filter |
+
+**The rule, now written down:** *when two layers or two mechanisms produce the same observable
+outcome, a test must name the one it is about* — assert on something only that layer controls
+(no wrapped cause; a direct table write; the heading rather than the table). Defence in depth is
+right; a test that cannot tell which defence fired is not.

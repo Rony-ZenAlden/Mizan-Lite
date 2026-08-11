@@ -29,6 +29,7 @@ import (
 
 type fixture struct {
 	svc         *inventory.Service
+	bus         *eventbus.Bus
 	audit       *audit.Service
 	store       *database.Store
 	settings    *config.Settings
@@ -124,7 +125,7 @@ func newFixture(t *testing.T) fixture {
 		svc: inventory.NewService(store, inventory.Options{
 			Clock: clock.System(), Bus: bus, Settings: settings,
 		}),
-		audit: auditSvc, store: store, settings: settings,
+		audit: auditSvc, bus: bus, store: store, settings: settings,
 		companyID: provisioned.CompanyID, warehouseID: provisioned.WarehouseID, ctx: ctx,
 		product: product, variant: variant,
 	}

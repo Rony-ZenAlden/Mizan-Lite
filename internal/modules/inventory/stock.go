@@ -177,6 +177,14 @@ func (s *Service) Move(ctx context.Context, in MoveInput) (domain.Movement, erro
 
 		recorded = movement
 
+		// The books, before the audit trail: both run inside this transaction, and a failure in
+		// either must roll the movement back. Posting first means a rule that refuses — a closed
+		// period, a missing mapping — stops the movement rather than leaving a stock change the
+		// ledger never heard about.
+		if err = s.publishPosting(txCtx, in.CompanyID, s.branchOf(txCtx), movement); err != nil {
+			return err
+		}
+
 		return s.audit(txCtx, auditc.Auditable{
 			Action: actionFor(movement.Type), EntityType: EntityStock, EntityID: movement.ID,
 			After: map[string]any{
@@ -224,6 +232,17 @@ func (s *Service) audit(ctx context.Context, a auditc.Auditable) error {
 //
 // Nil-safe: a movement made by a job or by the setup wizard has no user, and recording no actor
 // is the truth where a fabricated one is not — the same reasoning ActorResolver states.
+func (s *Service) branchOf(ctx context.Context) id.ID {
+	if s.actors == nil {
+		return id.ID("")
+	}
+	actor, ok := s.actors.Actor(ctx)
+	if !ok {
+		return id.ID("")
+	}
+	return actor.BranchID
+}
+
 func (s *Service) actorOf(ctx context.Context) id.ID {
 	if s.actors == nil {
 		return id.ID("")

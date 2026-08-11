@@ -1010,3 +1010,15 @@ arithmetic traps handled, each with a named test.
 12 mutation drills. Two passed, and both found redundant CODE rather than weak tests: half of
 the zero-on-hand guard is arithmetically unreachable (documented), and the explicit revaluation
 case restated what the direction table already said (deleted). `make ci` green.
+
+### Step 4.3 — GL posting through Phase 2's rules ✅
+
+Inventory publishes what happened and how much it was worth; the rules decide the accounts. An
+increase and a decrease are separate actions because the engine refuses negative amounts. A
+movement with a document is posted by that document's module, a movement without one by
+inventory, and a transfer by nobody — which is what stops every purchase debiting inventory
+twice. Stock value reconciles to the inventory account exactly.
+
+5 mutation drills. The 17th passed and resolved a third way: the guard is genuinely defensive,
+so it is kept, documented as saving work rather than changing outcomes, and left untested
+rather than given an assertion that would pass either way.

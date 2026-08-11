@@ -9,9 +9,24 @@
       "sequence": 1,
       "description": "A sale: the customer owes us the total; the net is revenue and the tax is owed to the authority.",
       "lines": [
-        { "side": "debit",  "account": "mapping:AR",          "amount": "document.total", "memo": "sale" },
-        { "side": "credit", "account": "mapping:SALES",       "amount": "document.net",   "memo": "revenue" },
-        { "side": "credit", "account": "mapping:TAX_PAYABLE", "amount": "document.tax",   "memo": "tax on sale" }
+        {
+          "side": "debit",
+          "account": "mapping:AR",
+          "amount": "document.total",
+          "memo": "sale"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:SALES",
+          "amount": "document.net",
+          "memo": "revenue"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:TAX_PAYABLE",
+          "amount": "document.tax",
+          "memo": "tax on sale"
+        }
       ]
     },
     {
@@ -20,8 +35,18 @@
       "sequence": 2,
       "description": "The same sale's cost: goods leave stock and become an expense. A separate rule because it is a separate fact — a shop that does not track stock simply omits the cost amount and this rule posts nothing.",
       "lines": [
-        { "side": "debit",  "account": "mapping:COGS",      "amount": "document.cost", "memo": "cost of goods sold" },
-        { "side": "credit", "account": "mapping:INVENTORY", "amount": "document.cost", "memo": "stock released" }
+        {
+          "side": "debit",
+          "account": "mapping:COGS",
+          "amount": "document.cost",
+          "memo": "cost of goods sold"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.cost",
+          "memo": "stock released"
+        }
       ]
     },
     {
@@ -30,9 +55,24 @@
       "sequence": 1,
       "description": "A purchase: stock arrives, recoverable tax is an asset, and we owe the supplier the total.",
       "lines": [
-        { "side": "debit",  "account": "mapping:INVENTORY",      "amount": "document.net",   "memo": "stock received" },
-        { "side": "debit",  "account": "mapping:TAX_RECEIVABLE", "amount": "document.tax",   "memo": "recoverable tax" },
-        { "side": "credit", "account": "mapping:AP",             "amount": "document.total", "memo": "supplier" }
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.net",
+          "memo": "stock received"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "supplier"
+        }
       ]
     },
     {
@@ -41,8 +81,18 @@
       "sequence": 1,
       "description": "A customer pays: cash rises, what they owe falls.",
       "lines": [
-        { "side": "debit",  "account": "mapping:CASH", "amount": "document.total", "memo": "payment received" },
-        { "side": "credit", "account": "mapping:AR",   "amount": "document.total", "memo": "settles invoice" }
+        {
+          "side": "debit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "payment received"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AR",
+          "amount": "document.total",
+          "memo": "settles invoice"
+        }
       ]
     },
     {
@@ -51,8 +101,58 @@
       "sequence": 1,
       "description": "We pay a supplier: what we owe falls, cash falls.",
       "lines": [
-        { "side": "debit",  "account": "mapping:AP",   "amount": "document.total", "memo": "settles bill" },
-        { "side": "credit", "account": "mapping:CASH", "amount": "document.total", "memo": "payment made" }
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles bill"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "payment made"
+        }
+      ]
+    },
+    {
+      "code": "stock_increase",
+      "event": "inventory.stock.increased",
+      "sequence": 1,
+      "description": "Stock found: an adjustment in, or a count that discovered more than the books said. Inventory rises and the gain offsets the adjustment account. A SEPARATE event from a decrease because the posting engine refuses a negative amount — a negative would flip the side silently, and the ledger's 'debit XOR credit, both non-negative' rule is what makes an entry checkable.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.total",
+          "memo": "stock found"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.total",
+          "memo": "adjustment gain"
+        }
+      ]
+    },
+    {
+      "code": "stock_decrease",
+      "event": "inventory.stock.decreased",
+      "sequence": 1,
+      "description": "Stock lost: an adjustment out, a count shortfall, or shrinkage. The loss is an expense and inventory falls.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.total",
+          "memo": "adjustment loss"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.total",
+          "memo": "stock written off"
+        }
       ]
     }
   ]

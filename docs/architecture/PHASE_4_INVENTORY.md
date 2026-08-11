@@ -321,3 +321,65 @@ deleted. The direction table is now the only thing that decides, and the re-run 
 
 The rule Phase 3 wrote down has now earned a corollary: *when a drill passes, the second
 mechanism is sometimes the one to delete — not the test to strengthen.*
+
+### Step 4.3 — GL posting through Phase 2's rules
+
+**Delivered.** `posting.go` in the inventory module, a `5600 Stock adjustments` account and an
+`INVENTORY_ADJUSTMENT` mapping in the shipped chart, and two posting rules — all of it data
+except the sixty lines that decide *whether* to publish.
+
+**D1 — an increase and a decrease are DIFFERENT actions.** Phase 2's engine refuses a negative
+amount, deliberately: a negative would flip a line's side silently, and "a line is debit XOR
+credit, both non-negative" is what makes an entry checkable at all. So `inventory.stock.increased`
+and `inventory.stock.decreased` are separate events with separate rules — exactly as a credit
+note is a separate event from an invoice. The alternative, one action carrying a signed amount,
+would push the sign into every rule an accountant writes.
+
+**D2 — the rule that prevents double-posting.** A movement caused by a *document* is posted by
+that document's module, as one entry that also records the payable or the revenue. A movement
+with no document has nobody else to post it.
+
+```
+DocumentType set   → somebody else posts it; inventory publishes nothing.
+DocumentType empty → inventory posts it.
+Transfer           → nothing posts it, either way.
+```
+
+Without this, every purchase would debit inventory twice. The transfer case is its own: the
+company owns the same goods in a different place, so total inventory value is unchanged and
+posting one would be an entry whose two sides are the same account.
+
+**D3 — the posting happens before the audit entry, and both inside the movement's
+transaction.** A rule that refuses — a closed period, a missing mapping — must stop the
+movement, not leave a stock change the ledger never heard about. `TestAMovementIsRolledBackWhenItsPostingFails`
+deletes a mapping and asserts that neither the level nor the ledger moved.
+
+**D4 — stock value reconciles to the inventory account exactly**, which is DoD criterion 3 and
+the reason any of this exists. `TestStockValueReconcilesToTheInventoryAccount` runs four
+movements including two that change the average, and compares the shelf against the account to
+the minor unit.
+
+**Mutation drills — 5 run.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 14 | Documented movements posted too | 5 tests fail |
+| 15 | A transfer posts | `TestATransferPostsNothing` fails |
+| 16 | A decrease publishes the increase action | 4 tests fail |
+| 17 | A costless movement posts a zero entry | **Passed — and stayed passed.** See below. |
+| 18 | Posting skipped entirely | 7 tests fail |
+
+**Drill 17 is the third passing drill of this phase, and the first that resolved to "keep it and
+say so".** Publishing a zero-amount event changes no balance, because Phase 2's engine already
+skips lines that resolve to zero. I then checked whether it at least left a stray journal *header*
+— it does not; the engine declines to create an entry with no lines. So the guard is genuinely
+defensive: what it saves is a publish and a rules lookup on every costless movement, which is
+real work but not a different answer.
+
+It is kept, `postingFor` now says exactly that, and **no assertion was written for it** — an
+assertion that passes either way would tell the next reader something is pinned when nothing is.
+That is the third possible outcome of a passing drill, alongside 3.x's "strengthen the test" and
+4.1's "delete the redundant code":
+
+> **Keep the code, document that it saves work rather than changing outcomes, and write no test
+> that pretends otherwise.**

@@ -12,6 +12,7 @@ export { Checkbox, Switch, type CheckboxProps, type SwitchProps } from "./Toggle
 export { Dialog, Sheet, DialogClose } from "./Dialog";
 export { Tabs, type TabItem } from "./Tabs";
 export { Table, type Column, type TableProps } from "./Table";
+export { Badge, type BadgeTone } from "./Badge";
 export { Tooltip, TooltipProvider } from "./Tooltip";
 export { ToastProvider, useToast, type ToastTone } from "./Toast";
 export {

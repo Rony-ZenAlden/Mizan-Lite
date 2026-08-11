@@ -6,6 +6,8 @@ import { SessionsScreen } from "@/modules/admin/SessionsScreen";
 import { UsersScreen } from "@/modules/admin/UsersScreen";
 import { ChangePasswordScreen } from "@/modules/account/ChangePasswordScreen";
 import { ChartScreen } from "@/modules/accounting/ChartScreen";
+import { CatalogScreen } from "@/modules/catalog/CatalogScreen";
+import { PartnersScreen } from "@/modules/partners/PartnersScreen";
 import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
 
@@ -59,6 +61,24 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.audit",
     element: <AuditScreen />,
     permission: PERMISSIONS.auditView,
+  },
+  {
+    path: "/catalog",
+    labelKey: "nav.catalog",
+    element: <CatalogScreen />,
+    permission: PERMISSIONS.catalogView,
+  },
+  {
+    path: "/partners/customers",
+    labelKey: "nav.customers",
+    element: <PartnersScreen role="customer" />,
+    permission: PERMISSIONS.customerView,
+  },
+  {
+    path: "/partners/suppliers",
+    labelKey: "nav.suppliers",
+    element: <PartnersScreen role="supplier" />,
+    permission: PERMISSIONS.supplierView,
   },
   {
     path: "/accounting/chart",

@@ -971,3 +971,14 @@ which list answered. No price is an error; a price of zero is a price.
 
 9 mutation drills; the sixth passed and corrected the test rather than the code — the third
 time in Phase 3 that a higher layer masked the one the test claimed to pin. `make ci` green.
+
+### Step 3.6 — Screens: catalog browse, product detail, partners ✅
+
+Two read-only bindings and four screens. §A.1 is invisible on screen: a simple product shows a
+dash rather than "1" variant, and the variants section is absent entirely. Locks are explained
+rather than rendered as controls that refuse. A credit limit of "0" reads "No limit". A partner
+who is both customer and supplier appears in both lists as one identity with both badges.
+
+New `Badge` primitive. 8 mutation drills; the second passed and corrected the test rather than
+the code — the fourth time in Phase 3, and the first on the frontend. `make ci` green with 181
+frontend tests.

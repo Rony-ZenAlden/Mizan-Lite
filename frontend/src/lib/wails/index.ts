@@ -280,6 +280,10 @@ export const PERMISSIONS = {
   auditView: "audit.entry.view",
   auditPayload: "audit.entry.view_payload",
   accountView: "accounting.account.view",
+  catalogView: "catalog.view",
+  customerView: "partner.customer.view",
+  supplierView: "partner.supplier.view",
+  priceView: "pricing.view",
 } as const;
 
 // ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
@@ -481,4 +485,151 @@ export interface Currency {
 
 export function currencies(): Promise<Currency[]> {
   return call<Currency[]>("Money", "Currencies");
+}
+
+// ── Catalog (read-only) ─────────────────────────────────────────────────────────
+//
+// Phase 3 builds the master data and the screens that READ it. There is no create form here
+// deliberately: shipping one would put a control behind a workflow nobody has designed yet.
+
+export interface Category {
+  id: string;
+  code: string;
+  name: string;
+  nameKey: string;
+  path: string;
+  depth: number;
+  isActive: boolean;
+}
+
+export interface ProductRow {
+  id: string;
+  code: string;
+  name: string;
+  nameKey: string;
+  categoryCode: string;
+  type: string;
+  stockUnit: string;
+  tracking: string;
+  variantCount: number;
+  isActive: boolean;
+}
+
+export interface Variant {
+  id: string;
+  sku: string;
+  name: string;
+  combination: string;
+  isDefault: boolean;
+  hasHistory: boolean;
+  isActive: boolean;
+}
+
+export interface AttributeValue {
+  code: string;
+  name: string;
+  nameKey: string;
+  displayHint: string;
+}
+
+export interface ProductAttribute {
+  code: string;
+  name: string;
+  nameKey: string;
+  isVariantDefining: boolean;
+  values: AttributeValue[];
+}
+
+export interface ProductDetail {
+  product: ProductRow;
+  salesUnit: string;
+  purchaseUnit: string;
+  stockUnitLocked: boolean;
+  variants: Variant[];
+  attributes: ProductAttribute[];
+  /**
+   * One variant, and it is the default (§A.1). The detail screen hides the variants section
+   * entirely when this is true, so a bag of cement never shows the word "variant".
+   */
+  isSimple: boolean;
+}
+
+export function productCategories(): Promise<Category[]> {
+  return call<Category[]>("Catalog", "Categories");
+}
+
+export function products(): Promise<ProductRow[]> {
+  return call<ProductRow[]>("Catalog", "Products");
+}
+
+export function product(code: string): Promise<ProductDetail> {
+  return call<ProductDetail>("Catalog", "Product", code);
+}
+
+// ── Partners (read-only) ────────────────────────────────────────────────────────
+
+export interface PartnerRow {
+  id: string;
+  code: string;
+  name: string;
+  legalName: string;
+  partnerType: string;
+  isCustomer: boolean;
+  isSupplier: boolean;
+  taxNumber: string;
+  isTaxExempt: boolean;
+  currency: string;
+  paymentTermsDays: number;
+  /** Minor units as a string (§17). "0" means NO LIMIT, not "no credit". */
+  creditLimitMinor: string;
+  phone: string;
+  email: string;
+  isActive: boolean;
+  hasHistory: boolean;
+}
+
+export interface PartnerAddress {
+  id: string;
+  label: string;
+  addressType: string;
+  line1: string;
+  line2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  countryCode: string;
+  isDefault: boolean;
+}
+
+export interface PartnerContact {
+  id: string;
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+  isPrimary: boolean;
+}
+
+export interface PartnerDetail {
+  partner: PartnerRow;
+  addresses: PartnerAddress[];
+  contacts: PartnerContact[];
+  customerRoleLocked: boolean;
+  supplierRoleLocked: boolean;
+}
+
+export function customers(search: string): Promise<PartnerRow[]> {
+  return call<PartnerRow[]>("Partners", "Customers", search);
+}
+
+export function suppliers(search: string): Promise<PartnerRow[]> {
+  return call<PartnerRow[]>("Partners", "Suppliers", search);
+}
+
+export function customer(code: string): Promise<PartnerDetail> {
+  return call<PartnerDetail>("Partners", "Customer", code);
+}
+
+export function supplier(code: string): Promise<PartnerDetail> {
+  return call<PartnerDetail>("Partners", "Supplier", code);
 }

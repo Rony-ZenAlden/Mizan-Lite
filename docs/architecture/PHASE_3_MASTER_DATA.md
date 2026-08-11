@@ -449,3 +449,61 @@ index (the service covered it). The rule that came out of it:
 > enforcing it.** In practice: write straight to the table.
 
 Drills 6 and 7 are now that pair, as drills 1 and 2 were in 3.4.
+
+### Step 3.6 — Screens: catalog browse, product detail, partners
+
+**Delivered.** Two bindings (`Catalog`, `Partners`), four screens (catalog browse, product
+detail, partner list, partner detail), a `Badge` primitive, three routes, and 22 frontend tests.
+
+**D1 — read-only, deliberately.** The same reasoning §20.6 applies to accounting: Phase 3 builds
+the master data and the screens that READ it. A create form belongs with the release that has
+designed the workflow around it; shipping one now would put a control behind a permission nobody
+has a process for.
+
+**D2 — §A.1 is made invisible on screen.** Every product has a default variant, and the browse
+list shows a **dash** rather than "1" for a simple product, while the detail hides the variants
+section entirely. `isSimple` is computed in the binding, not the screen, so the rule has one
+home. A shop selling bags of cement never encounters the word "variant".
+
+**D3 — the partner detail method is split into `Customer` and `Supplier`.** A single method would
+need "either permission", and the policy model deliberately holds **one** permission per method
+so that what a method requires is a fact of its declaration rather than something evaluated at
+call time. Widening the model for one caller would be inventing a seam; two methods say the same
+thing without it, and the screens are two screens anyway.
+
+**D4 — the catalog filters in the browser, the partner list on the server.** A category tree is
+bounded and already loaded; a partner list is not, and searching by **tax number** matters at a
+counter where the customer hands over a card with a number on it and nothing else the operator
+can type.
+
+**D5 — locks are explained, never rendered as controls that refuse.** A stock unit fixed by
+movement and a role fixed by trade both produce a short explanation rather than a disabled
+toggle, because a control that always fails teaches people the software is broken.
+
+**D6 — a credit limit of "0" reads as "No limit".** Printing the zero would say the opposite of
+the truth, and the two readings differ by every sale the business makes. It is also hidden
+entirely for a pure supplier, where it is a field nothing reads.
+
+**Mutation drills — 8 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | Simple product's variant count prints "1" | `…dash rather than 1` fails |
+| 2 | Variants section shows for a simple product | **Passed at first — the test was wrong.** See below. |
+| 3 | Zero credit limit prints as "0" | `…reads a zero credit limit as no limit` fails |
+| 4 | Raw combination string shown | `…renders the combination readably` fails |
+| 5 | Stock-unit lock explanation dropped | `…explains why a stock unit cannot be changed` fails |
+| 6 | Role-lock explanation dropped | `…explains that a traded role cannot be removed` fails |
+| 7 | Credit limit shown for a pure supplier | `…does not show a credit limit…` fails |
+| 8 | Category filter ignored | `filters the list by category` fails |
+
+**Drill 2, and the pattern crosses to the frontend.** The test asserted the absence of a table
+named "Variants" — but the row filter empties the list anyway, and `Table` renders an
+`EmptyState` rather than a `<table>` when it has no rows. The test was passing on the filter
+while claiming to pin the `isSimple` guard. It now asserts on the **heading**, which renders
+unconditionally inside the guarded block and can therefore only be removed by the guard.
+
+**Fourth occurrence in Phase 3** — after 3.1 (the kernel covered the domain check), 3.3 (the
+service covered the index), and 3.5 (the domain covered the CHECK). The rule 3.5 wrote down holds
+on the frontend unchanged: *when two mechanisms produce the same visible outcome, the test must
+name the one it is about.*

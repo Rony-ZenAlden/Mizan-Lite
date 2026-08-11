@@ -1,0 +1,121 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "@/app/providers/PreferencesProvider";
+import {
+  customer, customers, supplier, suppliers,
+  type PartnerDetail as PartnerDetailData, type PartnerRow,
+} from "@/lib/wails";
+import { Alert, Badge, EmptyState, Input, Table } from "@/shared/ui";
+import { useErrorText } from "@/modules/admin/useAdminError";
+import { PartnerDetail } from "./PartnerDetail";
+
+/**
+ * Customers and suppliers.
+ *
+ * # Two screens over one table
+ *
+ * Decision 9 puts both roles in one `partners` table, and the reason shows here: a partner who
+ * is both appears in BOTH lists, as one identity with one tax number and one balance. The screens
+ * are separate because the permissions are — a salesperson has no business reading a supplier's
+ * payment terms — not because the data is.
+ */
+export function PartnersScreen({ role }: { role: "customer" | "supplier" }) {
+  const { t } = useTranslation();
+  const errorText = useErrorText();
+
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState("");
+
+  const rows = useQuery({
+    queryKey: ["partners", role, search],
+    queryFn: () => (role === "customer" ? customers(search) : suppliers(search)),
+  });
+
+  if (selected) {
+    return (
+      <PartnerDetail
+        code={selected}
+        role={role}
+        load={(code: string): Promise<PartnerDetailData> =>
+          role === "customer" ? customer(code) : supplier(code)
+        }
+        onBack={() => setSelected("")}
+      />
+    );
+  }
+
+  const title = role === "customer" ? t("partners.customers") : t("partners.suppliers");
+
+  return (
+    <section className="flex flex-col gap-4">
+      <header className="flex flex-col gap-1">
+        <h2 className="text-base font-medium text-text">{title}</h2>
+        <p className="text-sm text-text-muted">{t(`partners.${role}.help`)}</p>
+      </header>
+
+      <Input
+        label={t("partners.search")}
+        /* Searched on the SERVER, unlike the catalog: a partner list is unbounded where a
+           category tree is not, and the query already matches name, code, and tax number —
+           the last of which matters at a counter, where the customer hands over a card with a
+           number on it and nothing else the operator can type. */
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+
+      {rows.isPending && <p className="text-sm text-text-muted">{t("gate.checking")}</p>}
+      {rows.isError && (
+        <Alert tone="danger" title={t("partners.failed")}>{errorText(rows.error)}</Alert>
+      )}
+
+      {rows.data && (
+        <Table<PartnerRow>
+          caption={title}
+          rowKey={(row) => row.id}
+          rows={rows.data}
+          empty={<EmptyState title={t("partners.none")} />}
+          columns={[
+            {
+              key: "code",
+              header: t("partners.code"),
+              cell: (row) => (
+                <button
+                  type="button"
+                  className="font-mono text-xs text-accent underline-offset-2 hover:underline"
+                  onClick={() => setSelected(row.code)}
+                >
+                  {row.code}
+                </button>
+              ),
+            },
+            { key: "name", header: t("partners.name"), cell: (row) => row.name },
+            {
+              key: "roles",
+              header: t("partners.roles"),
+              /* The case decision 9 exists for, shown plainly: one row, both badges. */
+              cell: (row) => (
+                <span className="flex gap-1">
+                  {row.isCustomer && <Badge tone="info">{t("partners.customer")}</Badge>}
+                  {row.isSupplier && <Badge tone="info">{t("partners.supplier")}</Badge>}
+                </span>
+              ),
+            },
+            {
+              key: "terms",
+              header: t("partners.terms"),
+              cell: (row) =>
+                row.paymentTermsDays === 0
+                  ? t("partners.cash")
+                  : t("partners.days", { days: String(row.paymentTermsDays) }),
+            },
+            {
+              key: "status",
+              header: t("partners.status"),
+              cell: (row) => (row.isActive ? t("partners.active") : t("partners.retired")),
+            },
+          ]}
+        />
+      )}
+    </section>
+  );
+}

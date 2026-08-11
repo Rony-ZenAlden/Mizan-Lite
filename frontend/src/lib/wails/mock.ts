@@ -101,6 +101,45 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
         periodId: "p1", rows: [], totalDebitMinor: "0", totalCreditMinor: "0", balanced: true,
       }),
   },
+  Catalog: {
+    Categories: () =>
+      ok([
+        { id: "c1", code: "FOOD", name: "Food", nameKey: "", path: "/FOOD/", depth: 0, isActive: true },
+        { id: "c2", code: "DAIRY", name: "Dairy", nameKey: "", path: "/FOOD/DAIRY/", depth: 1, isActive: true },
+      ]),
+    Products: () =>
+      ok([
+        { id: "p1", code: "CEMENT", name: "Bag of cement", nameKey: "", categoryCode: "", type: "goods", stockUnit: "PCS", tracking: "quantity", variantCount: 1, isActive: true },
+        { id: "p2", code: "SHIRT", name: "Shirt", nameKey: "", categoryCode: "FOOD", type: "goods", stockUnit: "PCS", tracking: "quantity", variantCount: 4, isActive: true },
+      ]),
+    Product: () =>
+      ok({
+        product: { id: "p1", code: "CEMENT", name: "Bag of cement", nameKey: "", categoryCode: "", type: "goods", stockUnit: "PCS", tracking: "quantity", variantCount: 1, isActive: true },
+        salesUnit: "PCS", purchaseUnit: "PCS", stockUnitLocked: false,
+        variants: [{ id: "v1", sku: "CEMENT", name: "", combination: "", isDefault: true, hasHistory: false, isActive: true }],
+        attributes: [], isSimple: true,
+      }),
+  },
+  Partners: {
+    Customers: () =>
+      ok([
+        { id: "pt1", code: "SHOP", name: "Corner Shop", legalName: "", partnerType: "company", isCustomer: true, isSupplier: false, taxNumber: "", isTaxExempt: false, currency: "", paymentTermsDays: 30, creditLimitMinor: "0", phone: "", email: "", isActive: true, hasHistory: false },
+      ]),
+    Suppliers: () =>
+      ok([
+        { id: "pt2", code: "MILL", name: "Steel Mill", legalName: "", partnerType: "company", isCustomer: false, isSupplier: true, taxNumber: "", isTaxExempt: false, currency: "", paymentTermsDays: 0, creditLimitMinor: "0", phone: "", email: "", isActive: true, hasHistory: false },
+      ]),
+    Customer: () =>
+      ok({
+        partner: { id: "pt1", code: "SHOP", name: "Corner Shop", legalName: "", partnerType: "company", isCustomer: true, isSupplier: false, taxNumber: "", isTaxExempt: false, currency: "", paymentTermsDays: 30, creditLimitMinor: "0", phone: "", email: "", isActive: true, hasHistory: false },
+        addresses: [], contacts: [], customerRoleLocked: false, supplierRoleLocked: false,
+      }),
+    Supplier: () =>
+      ok({
+        partner: { id: "pt2", code: "MILL", name: "Steel Mill", legalName: "", partnerType: "company", isCustomer: false, isSupplier: true, taxNumber: "", isTaxExempt: false, currency: "", paymentTermsDays: 0, creditLimitMinor: "0", phone: "", email: "", isActive: true, hasHistory: false },
+        addresses: [], contacts: [], customerRoleLocked: false, supplierRoleLocked: false,
+      }),
+  },
   System: {
     Health: () =>
       ok({

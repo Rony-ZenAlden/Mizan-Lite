@@ -60,6 +60,7 @@
   "catalog.invalid_exclusion": "An exclusion must name at least one attribute value.",
   "catalog.invalid_packaging": "This packaging is not valid.",
   "catalog.invalid_product": "This product is not valid.",
+  "catalog.invalid_quantity": "That is not a quantity.",
   "catalog.invalid_unit": "This unit of measure is not valid.",
   "catalog.invalid_unit_set": "This set of units of measure could not be read.",
   "catalog.invalid_variant": "This product variant is not valid.",

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BOTH_DIRECTIONS, renderIn } from "@/test/render";
 import {
   Alert,
+  Badge,
   Button,
   Checkbox,
   Dialog,
@@ -205,5 +206,32 @@ describe("Button", () => {
     expect(button).toHaveAttribute("aria-busy", "true");
     await user.click(button);
     expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("Badge", () => {
+  it("renders its children", () => {
+    renderIn(<Badge>Customer</Badge>);
+    expect(screen.getByText("Customer")).toBeInTheDocument();
+  });
+
+  it("carries no role and no live region", () => {
+    // A badge repeats what the row already says. Announcing "customer" twice helps nobody, and
+    // a status role here would interrupt a screen reader on every list render.
+    renderIn(<Badge tone="info">Supplier</Badge>);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("styles every tone from tokens rather than hardcoded colours", () => {
+    const tones = ["neutral", "info", "success", "warning", "danger"] as const;
+    for (const tone of tones) {
+      const { container, unmount } = renderIn(<Badge tone={tone}>x</Badge>);
+      const className = container.firstElementChild?.className ?? "";
+      // No hex, no rgb: the token rule Step 0.11 D6 set for every primitive.
+      expect(className).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
+      expect(className).not.toBe("");
+      unmount();
+    }
   });
 });

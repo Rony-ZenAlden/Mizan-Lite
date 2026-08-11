@@ -60,6 +60,7 @@
   "catalog.invalid_exclusion": "يجب أن يحدّد الاستبعاد قيمة خاصية واحدة على الأقل.",
   "catalog.invalid_packaging": "التعبئة غير صالحة.",
   "catalog.invalid_product": "هذا الصنف غير صالح.",
+  "catalog.invalid_quantity": "هذه ليست كمية.",
   "catalog.invalid_unit": "وحدة القياس هذه غير صالحة.",
   "catalog.invalid_unit_set": "تعذّرت قراءة مجموعة وحدات القياس هذه.",
   "catalog.invalid_variant": "هذا المتغيّر غير صالح.",

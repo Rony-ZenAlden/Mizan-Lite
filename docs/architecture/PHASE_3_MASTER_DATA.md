@@ -276,3 +276,59 @@ declared its `Organisation` port before org existed (1.2).
 Drill 1 is the one that matters: it fails `TestNoProductIsEverWithoutAVariant`, which asserts the
 property over the whole table rather than per-product, because the path that breaks §A.1 will be
 one nobody thought to write a specific test for.
+
+### Step 3.3 — Variant generation, exclusions, barcodes, packagings
+
+**Delivered.** `0017_variants.sql` (`variant_exclusions`, `product_packagings`, `barcodes`), the
+generation domain (`GeneratePlan`, `NewExclusion`, `NewPackaging`, `NewBarcode`, `Resolve`), the
+repositories, and the service: `PlanVariants`, `ApplyVariantPlan`, `Exclude`, `CreatePackaging`,
+`CreateBarcode`, `ScanBarcode`.
+
+**D1 — the plan is re-computed inside the transaction, not carried in from the preview.** A plan
+is a snapshot of the catalog at the moment it was made. Between the preview and the click,
+somebody may have sold one of the variants it intended to delete — applying the stale plan would
+then delete a variant that now has history, which is the exact thing §A.4 forbids. Re-planning
+under the write lock is the only safe version, and the preview stays honest because it calls the
+same function.
+
+**D2 — history decides delete-versus-deactivate, in the domain.** Not in the caller, not on the
+screen. A variant that appears on a two-year-old invoice is retired; one that never appeared on
+anything is removed. `ApplyVariantPlan` calls `RequireDeletable()` again before each delete, so
+the decision cannot be bypassed by calling the repository directly.
+
+**D3 — a retired variant that is wanted again is REVIVED, not re-created.** Reusing the row keeps
+its history, its barcodes, and its SKU. A new row would orphan every label already printed.
+
+**D4 — an exclusion is a subset test, not equality.** `COLOUR:RED` removes every red variant;
+`COLOUR:RED|SIZE:XXL` removes exactly one. A manufacturer who drops a colour says so once rather
+than listing every size it came in.
+
+**D5 — a cap of 1000 variants per generation.** Not a technical limit. Five attributes with six
+values each is 7,776 variants, and the person who added the fifth was thinking about the fifth.
+The cap turns an unusable catalog back into an error naming the number, before anything is
+written.
+
+**D6 — a barcode is trimmed but never upper-cased**, unlike every other code in this module. A
+barcode is scanned, not typed; the scanner sends exactly what is printed, and folding case would
+make two distinct printed codes collide — the one thing a barcode must never do.
+
+**Mutation drills — 8 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | History stops protecting a variant | 4 tests fail across both levels |
+| 2 | A retired wanted variant is re-created | `…ReactivatedNotRecreated` + service test fail |
+| 3 | Exclusions ignored | 5 tests fail |
+| 4 | Partial exclusion becomes exact match | `…RemovesEveryCombinationContainingIt` fails |
+| 5 | `ux_barcodes_code` scoped per variant | **Passed at first — the test was wrong.** See below. |
+| 6 | A retired barcode still scans | `TestARetiredBarcodeIsNotRecognised` fails |
+| 7 | A box barcode resolves to 1 | `…ResolvesToTwelve` fails at both levels |
+| 8 | The explosion cap removed | `…RefusedBeforeAnythingIsWritten` fails |
+
+**Drill 5 is the one worth reading.** `CreateBarcode` looks a code up and refuses a duplicate
+*before* the index is ever consulted, so scoping the index per-variant changed nothing any test
+could observe — the test was passing on the service guard while claiming to pin the schema. But
+the service guard only protects writes that go through the service, and the migration comment
+claims more: that a bad import cannot produce two. A new test now writes straight to the table,
+the way 3.2's default-variant test does. **The sixth drill to correct a test rather than the
+code**, and the second in this phase to catch a redundant guard masking the one that matters.

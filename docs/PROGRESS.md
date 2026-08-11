@@ -940,3 +940,13 @@ in one category. `is_variant_defining` on the product-attribute link, so materia
 variants for a sofa and describes a screwdriver.
 
 7 mutation drills, all failing as required. `make ci` green.
+
+### Step 3.3 — Variant generation, exclusions, barcodes, packagings ✅
+
+Generation produces a previewable plan (create / reactivate / deactivate / delete), re-computed
+inside the transaction so a stale preview cannot delete a variant that has since been sold.
+History decides delete-versus-deactivate, in the domain. Partial exclusions. Barcodes globally
+unique — a scan resolves to exactly one variant and one quantity, and scanning the box adds 12.
+
+8 mutation drills; the fifth passed and corrected the test rather than the code (the service's
+own duplicate check masked the index the test claimed to pin). `make ci` green.

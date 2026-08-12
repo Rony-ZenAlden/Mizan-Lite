@@ -1125,3 +1125,16 @@ caller. Nothing had to be reshaped to fit.
 
 7 drills, 6 failing as required. The seventh is deferred to 5.4 with its reason recorded: credit
 notes do not exist yet, so the branch it targets has no caller.
+
+### Step 5.4 — Returns and credit notes ✅
+
+A credit note reverses a posted invoice, costed at the ORIGINAL sale's cost via the chain
+credit-note line → invoice line → its stock movement. Returning an item sold at 60 when today's
+average is 300 credits inventory with 60. Already-credited quantities are summed across notes, so
+two today and two tomorrow cannot exceed a sale of three.
+
+**The first credit note posted no journal entry at all** — Phase 2 had seeded invoice rules and
+never a credit-note counterpart. The fix was two rules in a seed file with no Go changed, which is
+§20.3's promise tested rather than asserted, and a gap only a real caller could have found.
+
+6 drills, all failing as required — including 5.3's deferred one, now discharged.

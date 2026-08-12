@@ -181,10 +181,10 @@ type Line struct {
 	SerialID     id.ID
 	Notes        string
 
-	// sourceMovementID is the stock movement a credit-note line reverses. Unexported with an
-	// accessor, because it is derived at posting from source_line_id rather than stored on this
-	// row — and a settable field would invite a caller to name its own.
-	sourceMovementID id.ID
+	// There is deliberately no sourceMovementID field. A credit-note line names the INVOICE LINE
+	// it reverses, and that line names the movement it produced; posting walks the chain. Copying
+	// the movement id here would be a second copy of a fact that can be looked up — and a copy
+	// that could be wrong.
 }
 
 // NewLine builds a line, or refuses.
@@ -326,21 +326,6 @@ func scaledProduct(quantityMicro, unitMinor int64) int64 {
 		return 0
 	}
 	return quotient.Int64()
-}
-
-// SourceMovementID is the stock movement a credit-note line reverses.
-//
-// A credit note's line carries `source_line_id`, and that line carries the movement it produced.
-// The chain is what §D.3 needs: a return is costed at its ORIGINAL issue's cost, not today's
-// average, and this is the only path to that figure.
-//
-// Empty on an ordinary sale, where there is nothing to reverse.
-func (l Line) SourceMovementID() id.ID { return l.sourceMovementID }
-
-// WithSourceMovement records which movement a credit-note line reverses.
-func (l Line) WithSourceMovement(movementID id.ID) Line {
-	l.sourceMovementID = movementID
-	return l
 }
 
 // CostOfLine is what a line's goods cost us, in whole minor units.

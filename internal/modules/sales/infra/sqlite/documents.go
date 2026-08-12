@@ -394,3 +394,55 @@ func (r *Repos) SetDocumentTotals(ctx context.Context, d domain.Document) error 
 	}
 	return nil
 }
+
+// CreditedQuantities reports how much of each invoice line has already been credited.
+//
+// Summed across every credit note that references the invoice, so a customer returning two of
+// three today and two more tomorrow is refused the second time — the sum is what makes that
+// visible, and a per-note check would not.
+func (r *Repos) CreditedQuantities(
+	ctx context.Context, invoiceID id.ID,
+) (map[id.ID]int64, error) {
+	rows, err := r.db.Writer(ctx).QueryContext(ctx, `
+		SELECT l.source_line_id, SUM(l.quantity_micro)
+		  FROM sales_lines l
+		  JOIN sales_documents d ON d.id = l.document_id
+		 WHERE d.source_document_id = ? AND d.document_type = 'credit_note'
+		   AND d.status <> 'cancelled' AND l.source_line_id IS NOT NULL
+		 GROUP BY l.source_line_id`, string(invoiceID))
+	if err != nil {
+		return nil, r.wrap(err, "reading credited quantities")
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[id.ID]int64{}
+	for rows.Next() {
+		var (
+			lineID   id.ID
+			quantity int64
+		)
+		if err = rows.Scan(&lineID, &quantity); err != nil {
+			return nil, r.wrap(err, "reading a credited quantity")
+		}
+		out[lineID] = quantity
+	}
+	return out, rows.Err()
+}
+
+// MovementOfLine reports which stock movement a sales line produced.
+//
+// The link §D.3 depends on: a credit-note line names the invoice line it reverses, and that line
+// names the movement whose cost the return must use.
+func (r *Repos) MovementOfLine(ctx context.Context, lineID id.ID) (id.ID, error) {
+	var movementID any
+	err := r.db.Writer(ctx).QueryRowContext(ctx,
+		`SELECT movement_id FROM sales_lines WHERE id = ?`, string(lineID)).Scan(&movementID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return id.ID(""), errs.NotFound(domain.CodeInvalidLine,
+			"there is no line with that identity").WithParam("line", string(lineID))
+	}
+	if err != nil {
+		return id.ID(""), r.wrap(err, "reading a line's stock movement")
+	}
+	return id.ID(text(movementID)), nil
+}

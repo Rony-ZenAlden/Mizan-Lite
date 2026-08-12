@@ -190,11 +190,26 @@ func (s *Service) settle(
 		QuantityMicro: line.QuantityStockMicro,
 		LotID:         line.LotID, SerialID: line.SerialID,
 		DocumentType: EntityDocument, DocumentID: document.ID, DocumentLineID: line.ID,
-		OccurredAt: document.Date, SourceMovementID: line.SourceMovementID(),
+		OccurredAt: document.Date,
 	}
 
 	var moved StockResult
 	if document.Type == domain.CreditNote {
+		// §D.3: a return is costed at its ORIGINAL issue's cost, not today's average. The chain
+		// is credit-note line → the invoice line it reverses → the movement that line produced.
+		//
+		// Resolved HERE rather than carried on the line, because the movement id belongs to the
+		// invoice's line and copying it onto the credit note would be a second copy of a fact
+		// that can be looked up — and a copy that could be wrong.
+		if line.SourceLineID.IsZero() {
+			return domain.Line{}, errs.Validation(CodeUnknownSourceLine,
+				"a credit note line must name the sale line it reverses")
+		}
+		sourceMovement, movementErr := s.repos.MovementOfLine(ctx, line.SourceLineID)
+		if movementErr != nil {
+			return domain.Line{}, movementErr
+		}
+		request.SourceMovementID = sourceMovement
 		moved, err = s.stock.Return(ctx, request)
 	} else {
 		moved, err = s.stock.Issue(ctx, request)

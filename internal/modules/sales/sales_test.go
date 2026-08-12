@@ -494,3 +494,13 @@ func (f fixture) balances(t *testing.T, books *accounting.Service) map[string]in
 	}
 	return out
 }
+
+// stockNow reads what is on the shelf.
+func (f fixture) stockNow(t *testing.T) int64 {
+	t.Helper()
+	state, err := f.inventory.StockOf(f.ctx, f.variant.ID, f.warehouseID)
+	if err != nil {
+		t.Fatalf("StockOf: %v", err)
+	}
+	return state.OnHandMicro
+}

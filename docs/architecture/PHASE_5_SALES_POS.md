@@ -415,3 +415,58 @@ check that it did.
 with no document, and inventory correctly posted it as a stock increase (Phase 4.3's rule) — so a
 test expecting inventory at −120 found 480, because the receipt had debited 600 first. The
 fixture now receives against a purchase bill, which is both realistic and what isolates the sale.
+
+### Step 5.4 — Returns and credit notes
+
+**Delivered.** `DraftReturn`, the source-line chain that makes §D.3 reachable, the
+already-credited sum, and **two new posting rules in the seed file**.
+
+**Drill 20's obligation is discharged.** 5.3 recorded that a credit note's action had no caller
+and no test could distinguish it. It now does: the drill removing the branch fails
+`TestACreditNotePostsItsOwnActionAndReversesTheSale`.
+
+**D1 — the missing rules were a SEED FILE, not code.**
+
+Posting the first credit note produced *no journal entry at all* — Phase 2 seeded
+`sales.invoice.posted` and never a credit-note counterpart, so nothing matched. The fix was two
+rules in `generic_trading.json`:
+
+```
+sale_credit_revenue   debit SALES, debit TAX_PAYABLE, credit AR
+sale_credit_cost      debit INVENTORY, credit COGS
+```
+
+**No Go changed.** That is §20.3's promise tested rather than asserted: a country that books
+returns differently is a different file. It is also a gap that only a real caller could have
+found — the rules had looked complete for three phases.
+
+**D2 — §D.3's chain, walked at posting.** A credit-note line names the invoice line it reverses;
+that line names the stock movement it produced; that movement knows what the goods cost when they
+left. Returning an item sold at 60 when today's average is 300 credits inventory with **60**.
+
+The movement id is resolved at posting rather than copied onto the credit-note line, because a
+copy of a fact that can be looked up is a copy that can be wrong. The domain's `Line` carries no
+`sourceMovementID` field, and says so.
+
+**D3 — the snapshot is COPIED from the invoice, never re-fetched.** A credit note must describe
+what was *sold*, including what the product was called then. Re-fetching would make a return of a
+renamed product say something the original invoice does not.
+
+**D4 — already-credited quantities are summed ACROSS credit notes.** Two returned today and two
+more tomorrow is the same overreturn as four at once, and a per-note check would miss it.
+
+**D5 — a partial return scales the stock quantity from the ORIGINAL line's two figures**, rather
+than re-converting. Returning 1 of 3 rolls returns a third of the metres, using the factor the
+sale used — even if the unit's conversion has been edited since. A whole-line return copies the
+figure outright: no arithmetic, no rounding, no drift.
+
+**Mutation drills — 6 run, all fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 20 | A credit note publishes the invoice action | `…PostsItsOwnAction…` fails *(was deferred from 5.3)* |
+| 21 | The source movement is ignored | 6 tests fail |
+| 22 | The snapshot is re-fetched | `…CopiesTheInvoicesSnapshot…` fails |
+| 23 | Already-credited quantities ignored | 2 tests fail |
+| 24 | A draft invoice can be credited | `…OnlyAPostedInvoice…` fails |
+| 25 | A credit note can be credited | `…CannotBeCredited` fails |

@@ -50,6 +50,52 @@
       ]
     },
     {
+      "code": "sale_credit_revenue",
+      "event": "sales.credit_note.posted",
+      "sequence": 1,
+      "description": "A return: the customer no longer owes the total, the revenue is reversed, and the tax is no longer owed to the authority. A SEPARATE event from a sale rather than an invoice with negative amounts, because the engine refuses negatives — a negative would flip a line's side silently, and 'debit XOR credit, both non-negative' is what makes an entry checkable.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:SALES",
+          "amount": "document.net",
+          "memo": "revenue reversed"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_PAYABLE",
+          "amount": "document.tax",
+          "memo": "tax on return"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AR",
+          "amount": "document.total",
+          "memo": "credited to customer"
+        }
+      ]
+    },
+    {
+      "code": "sale_credit_cost",
+      "event": "sales.credit_note.posted",
+      "sequence": 2,
+      "description": "The same return's cost: goods come back into stock and the expense is reversed. Costed at the ORIGINAL sale's cost (§D.3), which is why the credit note line names the sale line it reverses — returning an item bought at last year's price at today's cost would invent profit out of a customer changing their mind.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.cost",
+          "memo": "stock returned"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:COGS",
+          "amount": "document.cost",
+          "memo": "cost of sale reversed"
+        }
+      ]
+    },
+    {
       "code": "purchase",
       "event": "purchasing.bill.posted",
       "sequence": 1,

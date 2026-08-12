@@ -9,6 +9,8 @@ import { ChartScreen } from "@/modules/accounting/ChartScreen";
 import { CatalogScreen } from "@/modules/catalog/CatalogScreen";
 import { StockScreen } from "@/modules/inventory/StockScreen";
 import { PartnersScreen } from "@/modules/partners/PartnersScreen";
+import { POSTerminal } from "@/modules/sales/POSTerminal";
+import { InvoicesScreen } from "@/modules/sales/InvoicesScreen";
 import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
 
@@ -74,6 +76,21 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.stock",
     element: <StockScreen />,
     permission: PERMISSIONS.stockView,
+  },
+  // The till is placed FIRST among the working screens, above the ledgers it feeds. For a shop
+  // this is the screen that runs all day, and burying it under administration would put the
+  // most-used thing in the application behind the least-used.
+  {
+    path: "/pos",
+    labelKey: "nav.pos",
+    element: <POSTerminal />,
+    permission: PERMISSIONS.saleDraft,
+  },
+  {
+    path: "/sales/invoices",
+    labelKey: "nav.invoices",
+    element: <InvoicesScreen />,
+    permission: PERMISSIONS.saleView,
   },
   {
     path: "/partners/customers",

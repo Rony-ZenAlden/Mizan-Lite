@@ -287,6 +287,12 @@ export const PERMISSIONS = {
   stockView: "inventory.stock.view",
   stockAdjust: "inventory.stock.adjust",
   costView: "inventory.cost.view",
+  saleView: "sales.document.view",
+  saleDraft: "sales.document.draft",
+  salePost: "sales.document.post",
+  saleCancel: "sales.document.cancel",
+  shiftOpen: "pos.shift.open",
+  shiftClose: "pos.shift.close",
 } as const;
 
 // ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
@@ -569,6 +575,21 @@ export function product(code: string): Promise<ProductDetail> {
   return call<ProductDetail>("Catalog", "Product", code);
 }
 
+/** What a barcode resolves to (§A.5): one variant, and how many the scan is worth. */
+export interface Scan {
+  variantId: string;
+  productCode: string;
+  productName: string;
+  sku: string;
+  /** A case barcode is worth its whole case, so one scan can be twelve units. */
+  quantityMicro: string;
+  packagingCode: string;
+}
+
+export function scanBarcode(code: string): Promise<Scan> {
+  return call<Scan>("Catalog", "Scan", code);
+}
+
 // ── Partners (read-only) ────────────────────────────────────────────────────────
 
 export interface PartnerRow {
@@ -713,4 +734,155 @@ export function checkLedger(): Promise<LedgerCheck> {
 
 export function adjustStock(input: AdjustInput): Promise<MovementRow> {
   return call<MovementRow>("Inventory", "Adjust", input);
+}
+
+// ── Sales and point of sale ─────────────────────────────────────────────────────
+//
+// Every amount is a STRING of minor units and every quantity a string of micro units, for the
+// reason money.ts gives: float64 loses integer precision above 2^53, and a till in a
+// hyperinflated currency reaches that in ordinary trading (§17, §18).
+//
+// Nothing here adds two of them together. Totals are computed in Go, where they are exact
+// integers, and re-read after every change.
+
+export interface SalesDocument {
+  id: string;
+  documentType: string;
+  status: string;
+  number: string;
+  partnerName: string;
+  date: string;
+  currency: string;
+  netMinor: string;
+  taxMinor: string;
+  discountMinor: string;
+  totalMinor: string;
+  /** What is still owed. Empty on anything not posted — a draft has not been agreed. */
+  outstandingMinor: string;
+  isHeld: boolean;
+  holdLabel: string;
+}
+
+export interface SalesLine {
+  id: string;
+  lineNumber: number;
+  variantId: string;
+  /** What the product was CALLED when the line was added, not what it is called now (§9.3). */
+  productName: string;
+  sku: string;
+  uomCode: string;
+  quantityMicro: string;
+  unitPriceMinor: string;
+  discountMinor: string;
+  taxAmountMinor: string;
+  netMinor: string;
+  totalMinor: string;
+  /** Which price list answered. A salesperson who cannot explain a price overrides it by hand. */
+  priceListCode: string;
+}
+
+export interface SalesDetail {
+  document: SalesDocument;
+  lines: SalesLine[];
+  /** A posted document is a record, not a form. */
+  editable: boolean;
+}
+
+export interface Shift {
+  id: string;
+  terminal: string;
+  status: string;
+  openedAt: string;
+  openingFloatMinor: string;
+  closedAt: string;
+  /** The three reconciliation figures, present only once a shift is closed. */
+  expectedMinor?: string;
+  countedMinor?: string;
+  differenceMinor?: string;
+}
+
+export interface NewSale {
+  warehouseId: string;
+  partnerId: string;
+  partnerName: string;
+  date: string;
+  currency: string;
+}
+
+/** No price field: the caller says WHAT and HOW MANY, and the price lists answer the rest. */
+export interface NewSaleLine {
+  documentId: string;
+  variantId: string;
+  uomId: string;
+  quantityMicro: string;
+}
+
+export interface NewPayment {
+  documentId: string;
+  shiftId: string;
+  method: string;
+  amountMinor: string;
+  reference: string;
+  date: string;
+  currency: string;
+}
+
+export function salesDocuments(documentType = "", status = ""): Promise<SalesDocument[]> {
+  return call<SalesDocument[]>("Sales", "Documents", documentType, status);
+}
+
+export function salesDocument(documentId: string): Promise<SalesDetail> {
+  return call<SalesDetail>("Sales", "Document", documentId);
+}
+
+export function draftSale(input: NewSale): Promise<SalesDocument> {
+  return call<SalesDocument>("Sales", "Draft", input);
+}
+
+export function addSaleLine(input: NewSaleLine): Promise<SalesDetail> {
+  return call<SalesDetail>("Sales", "AddLine", input);
+}
+
+export function removeSaleLine(documentId: string, lineId: string): Promise<SalesDetail> {
+  return call<SalesDetail>("Sales", "RemoveLine", documentId, lineId);
+}
+
+export function postSale(documentId: string): Promise<SalesDocument> {
+  return call<SalesDocument>("Sales", "Post", documentId);
+}
+
+export function cancelSale(documentId: string): Promise<boolean> {
+  return call<boolean>("Sales", "Cancel", documentId);
+}
+
+export function holdSale(documentId: string, label: string): Promise<boolean> {
+  return call<boolean>("Sales", "Hold", documentId, label);
+}
+
+export function resumeSale(documentId: string): Promise<SalesDetail> {
+  return call<SalesDetail>("Sales", "Resume", documentId);
+}
+
+export function heldSales(): Promise<SalesDocument[]> {
+  return call<SalesDocument[]>("Sales", "HeldSales");
+}
+
+export function takePayment(input: NewPayment): Promise<SalesDocument> {
+  return call<SalesDocument>("Sales", "TakePayment", input);
+}
+
+export function openShift(terminal: string, floatMinor: string): Promise<Shift> {
+  return call<Shift>("Sales", "OpenShift", terminal, floatMinor);
+}
+
+export function closeShift(
+  shiftId: string,
+  countedMinor: string,
+  notes: string,
+): Promise<Shift> {
+  return call<Shift>("Sales", "CloseShift", shiftId, countedMinor, notes);
+}
+
+export function currentShift(terminal: string): Promise<Shift> {
+  return call<Shift>("Sales", "CurrentShift", terminal);
 }

@@ -92,6 +92,7 @@ type Set struct {
 	Catalog    *Catalog
 	Inventory  *Inventory
 	Partners   *Partners
+	Sales      *Sales
 	session    *currentSession
 	// remember is the "stay signed in" token store. Zero until Attach, because it needs the
 	// data directory and the set is built before the graph exists (0.11 D2).
@@ -118,6 +119,7 @@ func New() *Set {
 		Catalog:    &Catalog{graph: mk(catalogPolicies())},
 		Inventory:  &Inventory{graph: mk(inventoryPolicies())},
 		Partners:   &Partners{graph: mk(partnerPolicies())},
+		Sales:      &Sales{graph: mk(salesPolicies())},
 		Auth:       &Auth{graph: mk(authPolicies()), session: session},
 		session:    session,
 	}
@@ -128,7 +130,7 @@ func New() *Set {
 // The order is stable so the generated JavaScript bindings are stable.
 func (s *Set) All() []any {
 	return []any{s.Boot, s.System, s.Setup, s.Auth, s.Identity, s.Accounting,
-		s.Catalog, s.Partners, s.Inventory,
+		s.Catalog, s.Partners, s.Inventory, s.Sales,
 		s.Config, s.Ops, s.Money, s.Audit}
 }
 
@@ -155,6 +157,7 @@ func (s *Set) Attach(app *bootstrap.App) {
 	s.Catalog.attach(app)
 	s.Inventory.attach(app)
 	s.Partners.attach(app)
+	s.Sales.attach(app)
 	// Ready is set LAST, after every façade can serve. The shell treats "ready" as permission
 	// to mount and immediately calls bindings; marking ready first would open a window in
 	// which those calls fail with not-ready for no reason.

@@ -666,3 +666,93 @@ a till session reached Accounting.Chart — a guessed PIN would too
 **The general lesson, worth more than the fix:** when a test needs a helper that *imitates* a
 production mechanism to set up its state, the mechanism itself is untested. That helper is a
 warning sign, not a convenience.
+
+### Step 5.8 — the screens
+
+**Delivered.** The `Sales` binding (16 methods), the typed TypeScript surface, and four screens:
+the **till**, the **payment panel**, the **shift bar**, and the **invoice list and detail**.
+
+**D1 — the till is the product, and that changes every decision on it.** §32 calls the point of
+sale the core value. Every other screen here is used occasionally by somebody at a desk; this one
+runs all day, used by somebody standing up with a queue in front of them. So:
+
+- **The scanner is the primary input.** A barcode scanner is a keyboard that types fast and ends
+  with Enter. The scan field holds focus at all times.
+- **The total is enormous**, because it is read across a counter, sometimes by the customer.
+- **Nothing needs a mouse.** Serving is scan, scan, scan, tender.
+- **Every figure comes from Go.** After each change the whole document is re-read rather than
+  patched locally, so what the screen shows is what will be charged.
+
+**D2 — no open shift, no trading, and the screen is REPLACED rather than warned over.** Cash taken
+outside a shift belongs to no reconciliation: at close the drawer is short and there is no record
+of why.
+
+**D3 — the sale opens on the FIRST SCAN, not when the screen loads.** A draft per visit would
+litter the day with empty documents nobody cancels.
+
+**D4 — the till operator cannot type a price.** `AddLine` takes what and how many; the price lists
+answer the rest. A price field is a discount nobody approved.
+
+**D5 — the payment records the SALE's amount, not what was handed over.** The extra note in the
+drawer is change, not revenue. Recording the tendered figure would overstate the day by exactly
+the change given.
+
+**D6 — post first, then pay.** A payment allocates against an obligation. Money recorded against a
+document that is not yet posted gives an unallocated receipt and a customer charged but not
+invoiced. One button, one outcome, that order.
+
+**D7 — change is computed in the frontend, with BigInt.** The one figure this application works
+out in JavaScript, because the operator needs it the instant they type and cannot wait for a round
+trip to open the drawer. `Number` would reintroduce exactly the defect the string representation
+exists to prevent, silently, on the largest amounts. BigInt is arbitrary-precision integer
+arithmetic, which is what minor units *are*. Nothing that gets STORED is computed here.
+
+**D8 — closing a shift is blind, like a stock count.** The expected figure is not shown until the
+drawer has been counted, for the reason `0022_counts.sql` gives: a tired person shown "412.50"
+counts 412.50.
+
+**Mutation drills — 10 run, 2 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 44 | A façade dropped from `All()` | `…IsExportedAndAttached` fails |
+| 45 | A façade never attached | `…IsExportedAndAttached` fails |
+| 46 | The till trades with no open shift | fails |
+| 47 | The payment records the tendered amount | fails |
+| 48 | A short tender is accepted | fails |
+| 49 | Change computed with `Number` | fails |
+| 50 | Extra decimals truncated, not refused | fails |
+| 51 | A case barcode adds one unit | fails |
+| 52 | Focus not returned to the scan field | **Passed.** |
+| 53 | Payment recorded before posting | fails |
+
+### The two that passed
+
+**A façade could be registered and never wired, and the whole suite was green.** `Sales` sat on
+`Set` while appearing in neither `All()` nor `Attach` — 210 tests passed, and the façade could not
+have served a single call. Adding one takes four edits in three places and nothing connects them:
+omitting it from `All()` means Wails never generates its JavaScript and the screen fails at
+runtime; omitting it from `Attach` means every method returns `app.not_ready` forever, which looks
+like a slow start rather than a wiring bug.
+
+`registration_test.go` now walks `Set` **by reflection**. A hand-written list of façades would be
+a fourth place to forget, and it would pass while the application was broken — the struct is the
+one place a new façade cannot be omitted from.
+
+**Drill 52 is drill 39's lesson again, one phase later.** The focus test typed into the scan field
+and asserted the field still had focus — which it did, because nothing had taken it away. Removing
+the focus effect entirely changed nothing.
+
+There were also two mechanisms keeping the rule: an effect on every render, and explicit calls in
+three handlers. Redundant, and the redundancy is what made the drill ambiguous. **The explicit
+calls were deleted**, leaving the effect — which covers the open-ended set of paths that steal
+focus, including the ones nobody has thought of. The test now clicks *Void*, which genuinely takes
+focus, and asserts it comes back.
+
+### What the tests found in the code
+
+**The till rendered as sellable while the shift query was still loading.** `!shift.isPending &&
+!open` falls through to the main layout during the pending window, so a scan field and a cart
+appeared before anything knew whether a shift existed. A scanner does not wait to be told the
+screen was provisional — an operator scanning into that window has items on a sale about to be
+replaced. Pending is now handled first and separately, as its own state.

@@ -1184,3 +1184,28 @@ the real guard, and the drill now fails with three named breaches.
 
 The general lesson: when a test needs a helper that IMITATES a production mechanism to set up its
 state, the mechanism itself is untested.
+
+### Step 5.8 — the screens ✅
+
+The `Sales` binding, its typed TypeScript surface, and four screens: the till, the payment panel,
+the shift bar, and the invoice list and detail.
+
+The till is the product (§32) and that drove every decision: the scanner is the primary input and
+the scan field always holds focus, the total is large enough to read across a counter, no action
+needs a mouse, and every figure is re-read from Go rather than patched locally. No open shift
+means no trading — the screen is replaced, not warned over, because cash taken outside a shift
+belongs to no reconciliation.
+
+Change due is the one figure computed in JavaScript, with BigInt, because the operator needs it
+before a round trip could answer. What gets RECORDED is the sale's amount, not what was handed
+over — the extra note in the drawer is change, not revenue.
+
+**Two drills passed.** A façade could be registered on `Set` and wired into neither `All()` nor
+`Attach`, and all 210 tests stayed green while it could not serve a single call; a reflection walk
+of the struct now catches it, because a hand-written list would be a fourth place to forget. And
+the focus test asserted focus stayed where nothing had taken it from — drill 39's lesson again. It
+now clicks a control that genuinely steals focus, and the two redundant focus mechanisms were
+collapsed into one.
+
+The tests also found a real defect: the till rendered as sellable during the shift query's pending
+window, so a scan could land on a sale about to be replaced.

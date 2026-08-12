@@ -1138,3 +1138,16 @@ never a credit-note counterpart. The fix was two rules in a seed file with no Go
 §20.3's promise tested rather than asserted, and a gap only a real caller could have found.
 
 6 drills, all failing as required — including 5.3's deferred one, now discharged.
+
+### Step 5.5 — Payments and settlement ✅
+
+Payments are their own documents, which buys the three shapes a `paid_minor` column cannot
+express: one payment settling several invoices, one invoice taking several payments, and a deposit
+allocated to nothing. `Outstanding` is derived from posted allocations, never stored.
+
+**A second seed gap, wronger than 5.4's:** Phase 2's rule debited CASH for every payment, which is
+wrong for anybody who takes cards. Fixed by making the METHOD part of the posting action — four
+rules where there was one, and sales still names no account.
+
+6 drills, all failing as required. One left the tree broken because the helper could not restore
+an untracked file; noted, since the restore step is the part of a drill nobody watches.

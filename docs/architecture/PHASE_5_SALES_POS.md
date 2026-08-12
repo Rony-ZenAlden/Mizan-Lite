@@ -470,3 +470,62 @@ figure outright: no arithmetic, no rounding, no drift.
 | 23 | Already-credited quantities ignored | 2 tests fail |
 | 24 | A draft invoice can be credited | `…OnlyAPostedInvoice…` fails |
 | 25 | A credit note can be credited | `…CannotBeCredited` fails |
+
+### Step 5.5 — Payments and settlement
+
+**Delivered.** `0024_payments.sql` (`sales_payments`, `sales_payment_allocations`), the payment
+domain, the repository, `TakePayment` / `Payment` / `Outstanding`, and **four new posting rules
+replacing one wrong one**.
+
+**D1 — a second seed gap, and a wronger one than 5.4's.**
+
+Phase 2's `customer_payment` rule debited `mapping:CASH` for *every* payment. That is right for a
+market stall and wrong for anybody who takes cards — a card payment does not put money in the
+till. It had looked correct for three phases because nothing had ever fired it.
+
+The fix is not a `case` in sales deciding which account to name. It is a distinct **action per
+method**, so the rules differ and sales still names no account:
+
+```
+sales.payment.cash.received          → debit CASH
+sales.payment.card.received          → debit BANK
+sales.payment.bank_transfer.received → debit BANK
+sales.payment.cheque.received        → debit BANK
+```
+
+A business whose card settlements land in a separate clearing account changes a line in a seed
+file. This is the same shape as inventory's increase/decrease split (4.3) and the credit note
+(5.4): **when the books must differ, the ACTION differs — never the module's knowledge of
+accounts.**
+
+**D2 — a payment is its own document, and that buys three shapes a column cannot express.** One
+payment settling several invoices; one invoice taking several payments; a payment allocated to
+nothing yet. Each has a test, because each is something a shop does on an ordinary day and a
+`paid_minor` column silently forbids.
+
+**D3 — `Outstanding` is derived, never stored.** A maintained column would drift from the
+allocations that justify it, and the drift shows up as a customer chased for money they had paid.
+
+**D4 — `credit` is a method that settles nothing.** The customer will pay later; the invoice stays
+outstanding. Treating it as a payment would show a shop as having been paid for everything it had
+ever sold. It takes no receipt number and posts no entry.
+
+**D5 — only POSTED payments count towards settlement.** A draft payment has not been received, and
+counting it would show an invoice as settled by money nobody has handed over.
+
+**Mutation drills — 6 run, all fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 26 | Every method posts as cash | `…CashGoesToTheTillAndACardGoesToTheBank` fails |
+| 27 | A credit sale posts as a real payment | `…SettlesNothing` fails |
+| 28 | Over-allocation permitted | `…CannotSettleMoreThanWasPaid` fails |
+| 29 | Already-settled amounts ignored | `…CannotBeSettledTwice` fails |
+| 30 | Draft payments count towards settlement | `…SettlesNothing` fails |
+| 31 | `Outstanding` inverted | 6 tests fail |
+
+**A process note.** Drill 30 mutated a file the drill helper did not restore — it was newly
+created and untracked, so `git checkout` could not put it back, and the "restored" run failed. The
+mutation was undone by hand and CI re-run green. Worth recording because the restore step is the
+part of a drill nobody watches: **a drill that cannot restore is a drill that leaves the tree
+broken**, and an untracked file is exactly where that happens.

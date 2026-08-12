@@ -122,14 +122,74 @@
       ]
     },
     {
-      "code": "customer_payment",
-      "event": "sales.payment.received",
+      "code": "customer_payment_cash",
+      "event": "sales.payment.cash.received",
       "sequence": 1,
-      "description": "A customer pays: cash rises, what they owe falls.",
+      "description": "A customer pays in cash: the till rises, what they owe falls. One rule PER METHOD rather than one for all payments — cash goes to the till and a card goes to the bank, and the first version of this file debited CASH for both. Sales publishes the method as part of the action and names no account (§20.3).",
       "lines": [
         {
           "side": "debit",
           "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "payment received"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AR",
+          "amount": "document.total",
+          "memo": "settles invoice"
+        }
+      ]
+    },
+    {
+      "code": "customer_payment_card",
+      "event": "sales.payment.card.received",
+      "sequence": 1,
+      "description": "A card payment: the money reaches the bank, not the till. A business whose card settlements land in a separate clearing account changes this line, not the code.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "payment received"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AR",
+          "amount": "document.total",
+          "memo": "settles invoice"
+        }
+      ]
+    },
+    {
+      "code": "customer_payment_bank",
+      "event": "sales.payment.bank_transfer.received",
+      "sequence": 1,
+      "description": "A bank transfer.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "payment received"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AR",
+          "amount": "document.total",
+          "memo": "settles invoice"
+        }
+      ]
+    },
+    {
+      "code": "customer_payment_cheque",
+      "event": "sales.payment.cheque.received",
+      "sequence": 1,
+      "description": "A cheque. Booked to the bank on receipt; a business that tracks uncleared cheques separately points this at its own account.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:BANK",
           "amount": "document.total",
           "memo": "payment received"
         },

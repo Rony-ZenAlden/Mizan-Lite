@@ -504,3 +504,15 @@ func (f fixture) stockNow(t *testing.T) int64 {
 	}
 	return state.OnHandMicro
 }
+
+// newPayingFixture adds a receipt series to the posting fixture.
+func newPayingFixture(t *testing.T) fixture {
+	t.Helper()
+	f := newPostingFixture(t, fixedPricing{priceMinor: 100}, fixedTax{rateMicro: 0})
+	f.series(t, sales.SeriesPayment, "RCT-", 6)
+	f.receive(t, 100_000_000, 60_000_000)
+	return f
+}
+
+// idOf converts a string back to an id, for tests that carry one across a loop.
+func idOf(s string) id.ID { return id.ID(s) }

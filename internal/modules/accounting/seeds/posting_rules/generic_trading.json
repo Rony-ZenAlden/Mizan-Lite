@@ -260,6 +260,46 @@
           "memo": "stock written off"
         }
       ]
+    },
+    {
+      "code": "cash_short",
+      "event": "pos.cash.short",
+      "sequence": 1,
+      "description": "A till closed with less money than the system expected. The shortfall is an expense and the cash account is reduced to what was actually counted. A SEPARATE event from an overage because the engine refuses negative amounts.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:ROUNDING_DIFF",
+          "amount": "document.total",
+          "memo": "till short"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "cash adjusted to count"
+        }
+      ]
+    },
+    {
+      "code": "cash_over",
+      "event": "pos.cash.over",
+      "sequence": 1,
+      "description": "A till closed with more money than expected. Cash rises to what was counted, and the overage offsets. A business that tracks till differences in a dedicated account points both these rules at it — no code changes.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "cash adjusted to count"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:ROUNDING_DIFF",
+          "amount": "document.total",
+          "memo": "till over"
+        }
+      ]
     }
   ]
 }

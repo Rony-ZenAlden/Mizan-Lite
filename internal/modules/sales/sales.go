@@ -279,6 +279,8 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermSalePost, Description: "permissions.sales.document.post"},
 		{Code: PermSaleCancel, Description: "permissions.sales.document.cancel"},
 		{Code: PermSeriesManage, Description: "permissions.sales.series.manage"},
+		{Code: PermShiftOpen, Description: "permissions.pos.shift.open"},
+		{Code: PermShiftClose, Description: "permissions.pos.shift.close"},
 	}
 }
 

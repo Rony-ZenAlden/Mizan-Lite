@@ -52,6 +52,11 @@ type NewPaymentInput struct {
 	AmountMinor int64
 	Notes       string
 
+	// ShiftID is the till that took the money. Empty for a payment taken outside the POS — a
+	// bank transfer arriving while the shop is shut belongs to no till, and forcing one would
+	// make the shift's cash figure include money that never reached its drawer.
+	ShiftID id.ID
+
 	// Settle names the documents this payment clears, and by how much. Empty is a deposit
 	// against nothing yet, which is a real thing a shop takes.
 	Settle []SettleInput
@@ -169,6 +174,12 @@ func (s *Service) TakePayment(ctx context.Context, in NewPaymentInput) (domain.P
 		if err = s.repos.SetPaymentPosted(
 			txCtx, payment.ID, number, payment.PostedAt); err != nil {
 			return err
+		}
+		if !in.ShiftID.IsZero() {
+			if err = s.repos.AttachPaymentToShift(
+				txCtx, payment.ID, in.ShiftID); err != nil {
+				return err
+			}
 		}
 		if err = s.publishPayment(txCtx, in.CompanyID, payment); err != nil {
 			return err

@@ -1151,3 +1151,17 @@ rules where there was one, and sales still names no account.
 
 6 drills, all failing as required. One left the tree broken because the helper could not restore
 an untracked file; noted, since the restore step is the part of a drill nobody watches.
+
+### Step 5.6 — POS shifts ✅
+
+A till opens with a float, takes money, and closes with a count. The difference is recorded and
+posted — never absorbed — which is the POS equivalent of Phase 4's stock reconciliation and the
+most useful number a shop's owner gets from a till. Only cash counts towards the drawer; a card
+payment does not put money in it.
+
+PIN login was split into its own step once its cost was clear: it is a second credential kind with
+its own storage, rate limiting, and scope, not a POS feature wearing an identity disguise.
+
+6 drills. One passed as defensive code (kept, documented, untested — 4.3's rule, third time), one
+was a bad mutation, and one found a test that could not distinguish the index from the service
+check masking it — the sixth occurrence of the Phase 3 rule.

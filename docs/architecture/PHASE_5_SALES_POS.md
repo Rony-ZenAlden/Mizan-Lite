@@ -183,10 +183,20 @@ is resumable at any terminal in the branch.
 | **5.3** | Posting: price, tax, stock, cost, GL, number — one transaction |
 | **5.4** | Returns and credit notes |
 | **5.5** | Payments, allocation, and settlement |
-| **5.6** | POS: shifts, held sales, PIN login |
-| **5.7** | Screens: POS terminal, invoice list and detail |
-| **5.8** | Printing: receipts and invoices |
-| **5.9** | Phase 5 Definition-of-Done review |
+| **5.6** | POS shifts: the float, the count, and the difference |
+| **5.7** | PIN login for the till |
+| **5.8** | Screens: POS terminal, invoice list and detail |
+| **5.9** | Printing: receipts and invoices |
+| **5.10** | Phase 5 Definition-of-Done review |
+
+> **Held sales shipped early**, in 5.2: they turned out to be a flag and a label on a draft rather
+> than a mechanism of their own, which is what §2.6 predicted and what building them proved.
+>
+> **PIN login was split out of 5.6** once its cost was clear. It is not a POS feature wearing an
+> identity disguise — it is a second credential kind, needing its own storage, its own rate
+> limiting, and a scope that grants POS permissions and nothing else. Bundling it into the shift
+> step would have produced a rushed version of the one part of this phase that is a security
+> boundary.
 
 ---
 
@@ -529,3 +539,61 @@ created and untracked, so `git checkout` could not put it back, and the "restore
 mutation was undone by hand and CI re-run green. Worth recording because the restore step is the
 part of a drill nobody watches: **a drill that cannot restore is a drill that leaves the tree
 broken**, and an untracked file is exactly where that happens.
+
+### Step 5.6 — POS shifts
+
+**Delivered.** `0025_shifts.sql` (`pos_shifts`, plus `shift_id` on payments), the shift domain,
+the repository, `OpenShift` / `CloseShift` / `CurrentShift`, and two more posting rules.
+
+**PIN login was split into its own step (5.7).** It is not a POS feature wearing an identity
+disguise — it is a second credential kind, needing its own storage, its own rate limiting, and a
+scope granting POS permissions and nothing else. Bundling it here would have produced a rushed
+version of the one part of this phase that is a security boundary.
+
+**D1 — the difference is recorded and POSTED, never absorbed.** A shop's owner learns more from
+"the till was 50 short on Tuesday" than from most reports this system produces. A POS that quietly
+adjusts the expectation to match the count destroys exactly that, and does it silently. This is
+the same rule Phase 4 applied to stock reconciliation, and the drill for it fails four tests.
+
+**D2 — a short till and an over till are different ACTIONS.** Fourth application of the pattern:
+the engine refuses negative amounts, so the sign chooses the action and the amount is always
+positive.
+
+**D3 — only CASH counts towards the drawer.** A card payment does not put money in the till, and
+counting it would make every shift that took a card look short by exactly that amount. Only
+*posted* payments count, too: a draft has not been received.
+
+**D4 — closing does not refuse a difference.** A till is short because somebody miscounted, gave
+wrong change, or took money. Refusing to close would leave the shop unable to shut, and this
+system is not the right thing to be deciding which of those it was.
+
+**D5 — `expected` is frozen at close, not derived on read.** A payment recorded later must not
+silently change a closed shift's arithmetic — the figure somebody signed off has to stay the
+figure somebody signed off.
+
+**D6 — the terminal is free text, not a table.** A shop with two drawers calls them whatever it
+calls them, and a `terminals` registry would be something to maintain before anybody could take
+money.
+
+**Mutation drills — 6 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 32 | Card payments count towards the drawer | `…OnlyCashCounts…` fails |
+| 33 | The difference is absorbed | 4 tests fail |
+| 34 | A short till publishes the over action | `…ShortTillIsPostedAsAnExpense` fails |
+| 35 | A balanced shift posts a zero entry | **Passed — defensive, kept, untested.** |
+| 36 | Two shifts open on one till | **Bad mutation**, then fails |
+| 37 | The one-open-shift index dropped | **Passed — the test was wrong.** |
+
+**Drill 35 is 4.3's outcome, third application, applied without hesitation.** Phase 2's engine
+already skips zero lines and declines to create an empty entry, so the guard changes no balance.
+It saves a publish and a rules lookup on every shift that balanced — which is most of them — and
+gets **no test**, because one that passes either way claims something is pinned when nothing is.
+
+**Drill 37 is the sixth occurrence of the Phase 3 rule** — after 3.2, 3.3, 3.5, 4.5, and 5.2.
+`OpenShift` refuses before the index is consulted, so weakening it changed nothing. The new test
+writes straight to the table, and asserts both halves: a second *open* shift is refused, while a
+*closed* one on the same till is ordinary and must still be allowed. A second test pins the
+half-reconciliation CHECK, because half a reconciliation is a number somebody will read as
+complete.

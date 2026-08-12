@@ -106,3 +106,74 @@ func TestBootNeedsNoPolicy(t *testing.T) {
 		t.Errorf("Boot.Status is not callable before the graph exists: %+v", result.Error)
 	}
 }
+
+// TestAWritingMethodIsNotGatedOnMerelyViewing.
+//
+// # Why this exists
+//
+// TestEveryBindingMethodHasAPolicy proves each method has a policy. It does NOT prove the policy
+// is the right one — and a mutation drill found the gap: changing `Inventory.Adjust` to require
+// `inventory.stock.view` instead of `inventory.stock.adjust` broke nothing. Every read-only user
+// would silently have gained the ability to write stock off.
+//
+// That failure is invisible in exactly the way this codebase keeps guarding against: nothing
+// errors, no screen changes, and the only symptom is that a permission which was supposed to
+// separate two jobs no longer does.
+//
+// The rule asserted here is general rather than a list: a method whose name says it CHANGES
+// something must not be gated on a permission whose name says `.view`. It costs nothing and
+// catches the whole class.
+func TestAWritingMethodIsNotGatedOnMerelyViewing(t *testing.T) {
+	// Verbs that mean "this changes something". Names rather than a hand-maintained list of
+	// methods, so a new writing method is covered the day it is written rather than the day
+	// somebody remembers to add it here.
+	//
+	// The first version used prefixes and caught `Inventory.Movements` — a READ whose name
+	// happens to start with "Move". A heuristic that reports a false positive is a heuristic
+	// people learn to silence, so the match is now on a whole leading word: a method is a write
+	// when its name IS the verb or continues with an upper-case letter after it.
+	writingVerbs := []string{
+		"Adjust", "Create", "Update", "Delete", "Set", "Apply", "Assign", "Revoke",
+		"Grant", "Move", "Transfer", "Post", "Close", "Reopen", "Cancel", "Submit",
+		"Begin", "Record", "Open", "Change", "Rebuild",
+	}
+
+	// Methods that change only the CALLER's own presentation.
+	//
+	// Choosing your own language or theme is not an administrative act, and the person who most
+	// needs it may hold almost nothing — the same reasoning 1.11 D3 applied to changing your own
+	// password. Listing them explicitly, with this reason attached, is better than widening the
+	// rule until it stops catching anything.
+	personal := map[string]bool{
+		"Config.SetLocale": true,
+		"Config.SetTheme":  true,
+	}
+
+	for name, permission := range bindings.DeclaredPoliciesForTest(bindings.New()) {
+		if permission == "" || personal[name] {
+			continue
+		}
+		method := name[strings.Index(name, ".")+1:]
+
+		writes := false
+		for _, verb := range writingVerbs {
+			if !strings.HasPrefix(method, verb) {
+				continue
+			}
+			rest := method[len(verb):]
+			// "Move" and "MoveSerial" are writes; "Movements" is not.
+			if rest == "" || (rest[0] >= 'A' && rest[0] <= 'Z') {
+				writes = true
+				break
+			}
+		}
+		if !writes {
+			continue
+		}
+
+		if strings.HasSuffix(permission, ".view") {
+			t.Errorf("%s changes something but is gated on %q — a read-only user could do it",
+				name, permission)
+		}
+	}
+}

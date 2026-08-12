@@ -284,6 +284,9 @@ export const PERMISSIONS = {
   customerView: "partner.customer.view",
   supplierView: "partner.supplier.view",
   priceView: "pricing.view",
+  stockView: "inventory.stock.view",
+  stockAdjust: "inventory.stock.adjust",
+  costView: "inventory.cost.view",
 } as const;
 
 // ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
@@ -632,4 +635,82 @@ export function customer(code: string): Promise<PartnerDetail> {
 
 export function supplier(code: string): Promise<PartnerDetail> {
   return call<PartnerDetail>("Partners", "Supplier", code);
+}
+
+// ── Inventory ───────────────────────────────────────────────────────────────────
+//
+// Quantities cross as STRINGS of micro units, like money (§17): integers scaled by 10⁶, which
+// JavaScript's number type cannot be trusted with once a wholesaler's figures are involved.
+// Nothing here does arithmetic with them.
+//
+// Cost fields are OPTIONAL — absent, not zero — for callers without `inventory.cost.view`. A zero
+// on a screen reads as free stock; an absent field reads as "you may not see this".
+
+export interface StockRow {
+  variantId: string;
+  productCode: string;
+  productName: string;
+  sku: string;
+  unit: string;
+  onHandMicro: string;
+  reservedMicro: string;
+  availableMicro: string;
+  averageCostMicro?: string;
+  valueMinor?: string;
+}
+
+export interface MovementRow {
+  id: string;
+  movementType: string;
+  /** Which way the row points, decided by the backend from the movement TYPE. */
+  isInward: boolean;
+  quantityMicro: string;
+  unitCostMicro?: string;
+  valueMinor?: string;
+  balanceAfterMicro: string;
+  documentType: string;
+  reason: string;
+  occurredAt: string;
+}
+
+export interface Discrepancy {
+  variantId: string;
+  sku: string;
+  projectedOnHandMicro: string;
+  ledgerOnHandMicro: string;
+  /** Turns "the total is wrong" into "it went wrong here". */
+  firstSuspectMovementId: string;
+}
+
+export interface LedgerCheck {
+  checked: number;
+  discrepancies: Discrepancy[];
+  healthy: boolean;
+}
+
+export interface AdjustInput {
+  warehouseId: string;
+  productId: string;
+  variantId: string;
+  quantityMicro: string;
+  unitCostMicro: string;
+  /** Which way. A signed quantity would put the direction in the number. */
+  increase: boolean;
+  reason: string;
+}
+
+export function stockOnHand(warehouseId: string): Promise<StockRow[]> {
+  return call<StockRow[]>("Inventory", "Stock", warehouseId);
+}
+
+export function stockMovements(variantId: string, warehouseId: string): Promise<MovementRow[]> {
+  return call<MovementRow[]>("Inventory", "Movements", variantId, warehouseId);
+}
+
+export function checkLedger(): Promise<LedgerCheck> {
+  return call<LedgerCheck>("Inventory", "CheckLedger");
+}
+
+export function adjustStock(input: AdjustInput): Promise<MovementRow> {
+  return call<MovementRow>("Inventory", "Adjust", input);
 }

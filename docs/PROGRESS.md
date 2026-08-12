@@ -1060,3 +1060,14 @@ zero is a real finding. Blind by default, with the expectation hidden at the rea
 in review.
 
 6 mutation drills, all failing as required.
+
+### Step 4.7 — Stock screens ✅
+
+Stock on hand with the ledger check at the top (a drifted projection is invisible until somebody
+counts), and the movement history that explains every figure. Quantities formatted from strings
+without ever being parsed — the drill for this produced `…994` where the truth is `…993`. Cost
+columns absent, not zero, for callers without the permission.
+
+7 mutation drills. The 43rd found a hole in the POLICY SUITE: the coverage test proved every
+method has a policy, never that it has the right one, so gating `Adjust` on `stock.view` broke
+nothing. A general rule now asserts that writing methods are not gated on `.view` permissions.

@@ -140,6 +140,19 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
         addresses: [], contacts: [], customerRoleLocked: false, supplierRoleLocked: false,
       }),
   },
+  Inventory: {
+    Stock: () =>
+      ok([
+        { variantId: "v1", productCode: "CEMENT", productName: "Bag of cement", sku: "CEMENT", unit: "PCS", onHandMicro: "10000000", reservedMicro: "0", availableMicro: "10000000", averageCostMicro: "100000000", valueMinor: "1000" },
+      ]),
+    Movements: () =>
+      ok([
+        { id: "m1", movementType: "receipt", isInward: true, quantityMicro: "10000000", unitCostMicro: "100000000", valueMinor: "1000", balanceAfterMicro: "10000000", documentType: "", reason: "", occurredAt: "2026-06-15T09:00:00Z" },
+      ]),
+    CheckLedger: () => ok({ checked: 1, discrepancies: [], healthy: true }),
+    Adjust: () =>
+      ok({ id: "m2", movementType: "adjustment_in", isInward: true, quantityMicro: "1000000", balanceAfterMicro: "11000000", documentType: "", reason: "", occurredAt: "2026-06-15T10:00:00Z" }),
+  },
   System: {
     Health: () =>
       ok({

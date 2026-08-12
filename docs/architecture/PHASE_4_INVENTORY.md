@@ -570,3 +570,64 @@ Drill 34 fails only at the domain level, and that is correct rather than a gap: 
 check removed, the review check still refuses — two guards, both firing. The **domain** test
 asserts the specific code and so distinguishes them, which is exactly what the Phase 3 rule asks
 for.
+
+### Step 4.7 — Screens: stock on hand, movement history, adjustments
+
+**Delivered.** An `Inventory` binding (`Stock`, `Movements`, `CheckLedger`, `Adjust`), a
+`quantity.ts` formatter, the stock and movement-history screens, a route, and 17 frontend tests.
+
+**D1 — quantities cross as STRINGS and are formatted without ever being parsed.** The same rule
+money follows (§17), for the same reason: a quantity in micro units passes 2^53 at nine billion,
+and JavaScript's number type cannot tell the next two integers apart. The drill for this is the
+clearest demonstration of §17 in the codebase — parsing produced `9,007,199,254,740,994` where
+the true value is `…993`.
+
+`quantity.ts` is deliberately a *second* small module rather than a shared one with `money.ts`: a
+quantity has six implied decimals and a currency has however many its definition says, and merging
+them would produce one function that must be told which it is looking at.
+
+**D2 — cost fields are ABSENT, not zero, for a caller without `inventory.cost.view`.** Through
+`redact.Visible`, the helper 1.6 built — and the screen drops the whole column rather than
+printing figures that would read as free stock. What a business paid for its stock is not
+something every shelf-stacker reads off a screen.
+
+**D3 — the ledger check lives on the stock screen.** A projection that has drifted from its
+movement ledger is invisible until somebody counts, which may be a year away. Putting the
+verifier's answer at the top of a screen people open anyway is what makes it visible before then
+— and the banner says explicitly that nothing was repaired, because nothing was.
+
+**D4 — negative stock is marked, not merely displayed.** It is a real state some warehouses
+permit, and it must look like the exception it is rather than blending into the column.
+
+**Mutation drills — 7 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 37 | Quantities formatted by parsing to a number | 2 tests fail, incl. the precision proof |
+| 38 | The ledger drift warning dropped | `…warns when the stock levels disagree` fails |
+| 39 | Cost columns shown regardless of permission | `…drops the cost columns entirely` fails |
+| 40 | Negative stock unmarked | `…marks stock that has gone below zero` fails |
+| 41 | `toMicro` accepts excess precision | `…refuses more precision` fails |
+| 42 | `Adjust` policy removed | The coverage test fails |
+| 43 | `Adjust` gated on `stock.view` | **Passed — a real gap.** See below. |
+
+**Drill 43 found a hole in the policy suite itself.** `TestEveryBindingMethodHasAPolicy` proves
+every method *has* a policy; nothing proved it has the **right** one. Changing `Adjust` to require
+`inventory.stock.view` broke nothing — and every read-only user would silently have gained the
+ability to write stock off. No error, no visible change; the only symptom is that a permission
+meant to separate two jobs no longer does.
+
+`TestAWritingMethodIsNotGatedOnMerelyViewing` now asserts the general rule: a method whose name
+says it *changes* something must not be gated on a `.view` permission. Two refinements came out of
+writing it, both worth keeping:
+
+- **The first version reported a false positive** — `Inventory.Movements`, a read whose name
+  begins with "Move". A heuristic that cries wolf is one people learn to silence, so the match is
+  now on a whole leading word.
+- **Two legitimate exceptions are listed with their reason**: `Config.SetLocale` and
+  `Config.SetTheme` change only the caller's own presentation, which is not an administrative act
+  — the same reasoning 1.11 D3 applied to changing your own password. Naming them explicitly is
+  better than widening the rule until it stops catching anything.
+
+This is the first drill in the project to find a gap in a *test suite* rather than in code or in
+one test — and it is protecting every future binding, not just this one.

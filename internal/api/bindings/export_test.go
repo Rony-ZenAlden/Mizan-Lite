@@ -22,3 +22,22 @@ func PublicMethodsForTest(s *Set) map[string]bool {
 	}
 	return out
 }
+
+// DeclaredPoliciesForTest exposes every method's declared policy, keyed "Binding.Method".
+//
+// Also test-only, for the reason above. The coverage check proves each method HAS a policy; this
+// lets a test ask whether it has the RIGHT one.
+func DeclaredPoliciesForTest(s *Set) map[string]string {
+	out := map[string]string{}
+	for _, binding := range s.All() {
+		holder, ok := binding.(policyHolder)
+		if !ok {
+			continue
+		}
+		name := reflect.TypeOf(binding).Elem().Name()
+		for method, p := range holder.declaredPolicies() {
+			out[name+"."+method] = p.Permission
+		}
+	}
+	return out
+}

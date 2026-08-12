@@ -7,6 +7,7 @@ import { UsersScreen } from "@/modules/admin/UsersScreen";
 import { ChangePasswordScreen } from "@/modules/account/ChangePasswordScreen";
 import { ChartScreen } from "@/modules/accounting/ChartScreen";
 import { CatalogScreen } from "@/modules/catalog/CatalogScreen";
+import { StockScreen } from "@/modules/inventory/StockScreen";
 import { PartnersScreen } from "@/modules/partners/PartnersScreen";
 import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
@@ -67,6 +68,12 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.catalog",
     element: <CatalogScreen />,
     permission: PERMISSIONS.catalogView,
+  },
+  {
+    path: "/inventory/stock",
+    labelKey: "nav.stock",
+    element: <StockScreen />,
+    permission: PERMISSIONS.stockView,
   },
   {
     path: "/partners/customers",

@@ -510,3 +510,63 @@ test could see. And the serial test used one variant, so it could not tell `(com
 `(variant_id, …)`. Both now have tests that can: one writes straight to the table, the other uses
 **two variants**. The rule holds — *a test must name the mechanism it is about* — and it is now
 cheap to apply, because I recognised the shape before the drill finished running.
+
+### Step 4.6 — Stock counts
+
+**Delivered.** `0022_counts.sql` (`stock_counts`, `stock_count_lines`), the count domain with its
+lifecycle, the repositories, and the service: `OpenCount`, `BeginCounting`, `RecordCount`,
+`SubmitCount`, `PlanCount`, `ApplyCount`, `CancelCount`.
+
+**D1 — a count is a DOCUMENT, not a movement.** A movement is an instant; a count is a process
+that takes hours — a sheet is generated, people walk the aisles, figures come back, somebody
+reviews the surprising ones, and only then does stock change. Modelling it as a bare movement
+loses every part of that except the last, and the parts it loses are the ones an auditor asks
+about.
+
+**D2 — the VARIANCE is applied, never the counted figure. This is the correctness point of the
+step.**
+
+Stock moves while people count. If applying the count *set* the balance to what was counted,
+every movement made during it would be silently undone — a sale shipped at 11am reappearing when
+the count is applied at 4pm, leaving the ledger showing stock that had already left the building.
+
+So the expectation is **frozen at the snapshot** and never refreshed, and the count contributes
+what the counter actually established: `counted − expected`. Two fewer than the sheet said is two
+fewer, whatever else happened meanwhile. The test walks exactly this: receive 10, count 8, sell 3
+during the count, apply → **5**, not 8.
+
+**D3 — an uncounted line is not a zero.** Lines nobody reached are left alone. Treating them as
+zero would write off the entire stock of everything the counter did not get to, which on a
+partial count is most of the warehouse. A zero somebody *entered* is a real finding and is
+applied; `CountedMicro` is a pointer precisely so the two are different values.
+
+**D4 — blind by default, and the hiding happens at the READ.** Showing the counter what to expect
+is how a count comes back agreeing with the system on every line while the shelves say otherwise
+— not through dishonesty, but because a tired person looking at "10" finds ten. The expectation
+is still stored (the apply needs it); it is simply not handed out while counting. A screen cannot
+show what it was never given. In *review* it returns, because there the variance is the whole
+point. The unsafe option is named `ShowExpected`, so it must be asked for.
+
+**D5 — applied from REVIEW only.** A line reading 3 where 300 was expected is a miscount far more
+often than a theft, and applying it unseen writes off stock sitting on the shelf.
+
+**D6 — `StockCount`, not `Count`.** `Count` is already a movement type in that package. The third
+collision of this shape — after `Auditable.EventType` (1.7) and the i18n catalogue versus the
+catalog module (3.1) — and resolved the same way each time: rename the newcomer to say what it
+is, rather than shortening the incumbent.
+
+**Mutation drills — 6 run, all fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 31 | The counted figure applied instead of the variance | Domain and service tests fail |
+| 32 | An uncounted line treated as zero | Domain and service tests fail |
+| 33 | Applied straight from counting | 3 tests fail |
+| 34 | An applied count applied again | Domain test fails |
+| 35 | A blind count shows the expectation | `…DoesNotTellTheCounterWhatToExpect` fails |
+| 36 | Not blind by default | `TestACountIsBlindByDefault` fails |
+
+Drill 34 fails only at the domain level, and that is correct rather than a gap: with the terminal
+check removed, the review check still refuses — two guards, both firing. The **domain** test
+asserts the specific code and so distinguishes them, which is exactly what the Phase 3 rule asks
+for.

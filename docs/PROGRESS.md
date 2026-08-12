@@ -1050,3 +1050,13 @@ draft would have let a database fault silently downgrade a lot-tracked product t
 7 mutation drills. One was a bad MUTATION (the sort still ran), and two found tests that could
 not distinguish a schema guarantee from the service check masking it — the fourth occurrence of
 Phase 3's rule, recognised and fixed before the drill finished.
+
+### Step 4.6 — Stock counts ✅
+
+A count is a document with a lifecycle, not a movement. Expectations are frozen at the snapshot
+and the VARIANCE is applied rather than the counted figure — so a sale made while people are
+counting is not undone when the count is applied. Uncounted lines are left alone; a deliberate
+zero is a real finding. Blind by default, with the expectation hidden at the read and returned
+in review.
+
+6 mutation drills, all failing as required.

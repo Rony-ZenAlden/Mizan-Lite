@@ -34,6 +34,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/pricing"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
+	"github.com/mizan-erp/mizan/internal/modules/sales"
 	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/config"
@@ -124,6 +125,7 @@ type App struct {
 	Partner    *partner.Service
 	Pricing    *pricing.Service
 	Inventory  *inventory.Service
+	Sales      *sales.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -347,6 +349,13 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	})
 	inventoryModule := inventory.NewModule(app.Inventory)
 
+	// Sales: the phase where every earlier seam finds out whether it was built for a real
+	// caller. Numbers are allocated at posting, inside the document's own transaction.
+	app.Sales = sales.NewService(db, sales.Options{
+		Clock: opts.Clock, Bus: app.Bus, Logger: opts.Logger,
+	})
+	salesModule := sales.NewModule(app.Sales)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
@@ -356,7 +365,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
+		auditModule, salesModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
 		identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)

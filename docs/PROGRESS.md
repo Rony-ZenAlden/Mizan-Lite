@@ -1085,3 +1085,19 @@ mapping KEY, so inventory never learns an account code.
 Writing it produced a defect caught by its own test: without the port wired, `Balanced()` returned
 true — a false clean bill of health. `LedgerChecked` now distinguishes "I did not check" from "I
 checked and it was fine".
+
+## Phase 5 — Sales & POS
+
+### Step 5.1 — Number series ✅
+
+Numbers allocated at posting, inside the document's own transaction, by an unexported allocator
+that cannot be called without one. `Format` is separate from `Next`, so a screen can preview a
+number without consuming it. Eight concurrent terminals never collide.
+
+The step deleted the `number_series` table it had just written: `0001_platform.sql` already had
+one, commented "platform-level; used by every transactional module". Second occurrence of 4.4's
+lesson, and the schema said so before any code depended on the duplicate.
+
+6 drills. Two passed as BAD MUTATIONS (one didn't compile; one changed `if err = f(); err != nil`
+to `if err = f(); false`, which still calls f). One passed because a code COMMENT asserted a
+danger the platform had already eliminated — a new category, and one only a drill would catch.

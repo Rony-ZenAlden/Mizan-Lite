@@ -1,0 +1,28 @@
+-- 0023_sales — the sales module's own schema.
+--
+-- # There is deliberately no `number_series` table here
+--
+-- One was written first, and the migration failed: `migrations/sqlite/0001_platform.sql` already
+-- creates it, commented "platform-level; used by every transactional module". That is the right
+-- home — purchasing (Phase 6) and payments will number documents too, and a series table owned by
+-- sales would make them either import sales or build a second one.
+--
+-- The same lesson Step 4.4 recorded: before declaring a new place for a fact to live, look for
+-- the one an earlier phase already left. This codebase writes those down in the schema.
+--
+-- Two consequences worth stating, because they shaped the domain rather than the other way round:
+--
+--   - The platform table has no `company_id`. A series is identified by code + branch + fiscal
+--     year, and a branch already belongs to a company. Adding a column to a platform table from
+--     a module would be exactly the ownership violation §10.3 exists to prevent.
+--
+--   - It has no `is_active`. The domain's Series therefore has no such field either. A field with
+--     no storage is a lie that reads as a feature, and retiring a series is expressible by
+--     changing the code a document type resolves to.
+--
+-- The sales documents themselves arrive in 5.2. This file exists now so the module owns a
+-- migration slot and the numbering step has somewhere to grow.
+
+-- A placeholder is not needed: 0001 already provides everything 5.1 uses. This migration is
+-- intentionally empty of DDL and will carry the sales_documents tables in 5.2.
+SELECT 1;

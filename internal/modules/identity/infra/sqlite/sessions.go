@@ -13,18 +13,24 @@ import (
 // ── sessions ────────────────────────────────────────────────────────────────────
 
 const sessionColumns = `id, user_id, branch_id, token_hash, created_at, last_seen_at,
-	idle_expires_at, absolute_expires_at, ended_at, end_reason, device_info`
+	idle_expires_at, absolute_expires_at, ended_at, end_reason, device_info,
+	auth_method, device_session_id`
 
 func scanSession(row interface{ Scan(...any) error }) (domain.Session, error) {
 	var (
 		s                                  domain.Session
 		created, lastSeen, idleExp, absExp string
 		ended, reason, device              sql.NullString
+		method                             string
+		deviceSession                      sql.NullString
 	)
 	if err := row.Scan(&s.ID, &s.UserID, &s.BranchID, &s.TokenHash,
-		&created, &lastSeen, &idleExp, &absExp, &ended, &reason, &device); err != nil {
+		&created, &lastSeen, &idleExp, &absExp, &ended, &reason, &device,
+		&method, &deviceSession); err != nil {
 		return domain.Session{}, err
 	}
+	s.AuthMethod = domain.AuthMethod(method)
+	s.DeviceSessionID = id.ID(deviceSession.String)
 	s.CreatedAt, _ = clock.ParseTimestamp(created)
 	s.LastSeen, _ = clock.ParseTimestamp(lastSeen)
 	s.IdleExpires, _ = clock.ParseTimestamp(idleExp)
@@ -36,17 +42,27 @@ func scanSession(row interface{ Scan(...any) error }) (domain.Session, error) {
 	return s, nil
 }
 
+// nullableSessionID writes an empty id as NULL, so a full session has no device rather than a
+// device whose identifier is the empty string.
+func nullableSessionID(v id.ID) any {
+	if v.IsZero() {
+		return nil
+	}
+	return string(v)
+}
+
 // InsertSession writes a new session.
 func (r *Repos) InsertSession(ctx context.Context, s domain.Session) error {
 	_, err := r.db.Writer(ctx).ExecContext(ctx, `
 		INSERT INTO sessions (
 			id, user_id, branch_id, token_hash, created_at, last_seen_at,
-			idle_expires_at, absolute_expires_at, device_info
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			idle_expires_at, absolute_expires_at, device_info,
+			auth_method, device_session_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		string(s.ID), string(s.UserID), string(s.BranchID), s.TokenHash,
 		clock.Format(s.CreatedAt), clock.Format(s.LastSeen),
 		clock.Format(s.IdleExpires), clock.Format(s.AbsoluteExpires),
-		nullable(s.DeviceInfo))
+		nullable(s.DeviceInfo), string(s.AuthMethod), nullableSessionID(s.DeviceSessionID))
 	if err != nil {
 		return r.wrap(err, "creating the session")
 	}
@@ -217,4 +233,36 @@ func (r *Repos) ConsecutiveFailures(
 		count++
 	}
 	return count, last, rows.Err()
+}
+
+// DeleteCredential removes a user's credential of one kind.
+//
+// Used to clear a till PIN. The password credential is never deleted this way — a user with no
+// password is a user who cannot sign in at all, and that is a deactivation rather than a
+// credential change.
+func (r *Repos) DeleteCredential(ctx context.Context, userID id.ID, kind string) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx,
+		`DELETE FROM user_credentials WHERE user_id = ? AND credential_type = ?`,
+		string(userID), kind)
+	if err != nil {
+		return r.wrap(err, "removing the credential")
+	}
+	return nil
+}
+
+// EndSessionsFromDevice ends every till session a terminal authorised.
+//
+// A shop that signs its terminal out must not leave four cashiers signed in behind it. Called
+// when a device session ends, so the till sessions it vouched for end with it.
+func (r *Repos) EndSessionsFromDevice(
+	ctx context.Context, deviceSessionID id.ID, endedAt, reason string,
+) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		UPDATE sessions SET ended_at = ?, end_reason = ?
+		 WHERE device_session_id = ? AND ended_at IS NULL`,
+		endedAt, reason, string(deviceSessionID))
+	if err != nil {
+		return r.wrap(err, "ending the sessions this device authorised")
+	}
+	return nil
 }

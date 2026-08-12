@@ -33,6 +33,17 @@ type Actor struct {
 	SessionID id.ID
 	// Locale is the acting user's stored preference, empty if they have none.
 	Locale string
+	// PINSession marks a till session (§979).
+	//
+	// Carried on the ACTOR rather than looked up, because `Can` runs on every guarded call and a
+	// database read per authorization check would be a read per call. The binding decorator sets
+	// it once, from the session it just validated.
+	//
+	// The zero value is `false` — a full session — and that is the safe default in the one
+	// direction that matters: a code path that forgets to set it produces a session with MORE
+	// scrutiny from Can, never less. (A PIN session whose flag was lost would still be bounded
+	// by the permissions its user actually holds.)
+	PINSession bool
 }
 
 type actorKey struct{}

@@ -1165,3 +1165,22 @@ its own storage, rate limiting, and scope, not a POS feature wearing an identity
 6 drills. One passed as defensive code (kept, documented, untested — 4.3's rule, third time), one
 was a bad mutation, and one found a test that could not distinguish the index from the service
 check masking it — the sixth occurrence of the Phase 3 rule.
+
+### Step 5.7 — PIN login for the till ✅
+
+A PIN is not a shorter password. Three protections make four digits defensible: it works only on a
+terminal already holding a full session, the session it issues is BOUNDED to point-of-sale
+permissions in `Can`, and it is throttled like a password. A manager holding everything who signs
+in by PIN gets a till and nothing else.
+
+Phase 1 had left the seam — `user_credentials` already accepted `'pin'`, with a comment saying its
+rules belonged to this design. Third occurrence of that lesson.
+
+**Drill 39 was the worst finding of the project.** Removing the guard's PIN marking broke nothing:
+every test asserting the bound stamped the flag by hand, imitating what the guard does. In
+production every till session would have held the full authority of its user, and a guessed PIN
+would have reached the admin screen and the ledger. A new test drives a real PIN session through
+the real guard, and the drill now fails with three named breaches.
+
+The general lesson: when a test needs a helper that IMITATES a production mechanism to set up its
+state, the mechanism itself is untested.

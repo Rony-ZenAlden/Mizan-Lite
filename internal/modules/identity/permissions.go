@@ -17,6 +17,7 @@ func declaredPermissions() []auth.PermissionDef {
 	return []auth.PermissionDef{
 		{Code: PermUserView, Description: "permissions.identity.user.view"},
 		{Code: PermUserManage, Description: "permissions.identity.user.manage"},
+		{Code: PermPINManage, Description: "permissions.identity.pin.manage"},
 		{Code: PermRoleView, Description: "permissions.identity.role.view"},
 		{Code: PermRoleManage, Description: "permissions.identity.role.manage"},
 		{Code: PermSessionView, Description: "permissions.identity.session.view"},

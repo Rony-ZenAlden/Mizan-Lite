@@ -117,7 +117,7 @@ func (g *graph) guard(method string) (context.Context, *bootstrap.App, error) {
 
 	// Stamping the actor is what makes settings resolve at USER scope (1.3 §6) and what Can
 	// reads to find the grants. It must happen before the authorization check.
-	ctx = withActor(ctx, principal, session.BranchID)
+	ctx = withActor(ctx, principal, session)
 	// The session id is carried separately: withActor is shared with Auth.Me, which resolves a
 	// principal without necessarily being inside a guarded call.
 	ctx = appctx.WithSession(ctx, session.ID)
@@ -145,7 +145,7 @@ func (g *graph) withOptionalActor(ctx context.Context, app *bootstrap.App) conte
 	if err != nil {
 		return ctx
 	}
-	ctx = withActor(ctx, principal, session.BranchID)
+	ctx = withActor(ctx, principal, session)
 	return appctx.WithSession(ctx, session.ID)
 }
 
@@ -164,12 +164,20 @@ func scopeFor(p policy.Policy, branchID id.ID) auth.Scope {
 
 // withActor stamps a principal onto a context. One definition, used by the guard and by Auth.Me,
 // so the two cannot drift about what an actor is.
-func withActor(ctx context.Context, p contract.Principal, branchID id.ID) context.Context {
+//
+// It takes the SESSION rather than just the branch, because how a session was authenticated is
+// part of who the actor is: a till session carries `PINSession`, which `Can` uses to bound its
+// authority (§979). Passing the branch alone would mean the bound had to be re-derived at every
+// call site, and one that forgot would hand a guessed PIN the whole application.
+func withActor(
+	ctx context.Context, p contract.Principal, session domain.Session,
+) context.Context {
 	return appctx.WithActor(ctx, appctx.Actor{
 		UserID:      p.UserID,
 		CompanyID:   p.CompanyID,
-		BranchID:    branchID,
+		BranchID:    session.BranchID,
 		Username:    p.Username,
 		DisplayName: p.DisplayName,
+		PINSession:  session.AuthMethod == domain.AuthPIN,
 	})
 }

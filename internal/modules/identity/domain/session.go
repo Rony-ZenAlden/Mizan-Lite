@@ -54,6 +54,17 @@ type Session struct {
 	EndedAt         time.Time
 	EndReason       string
 	DeviceInfo      string
+
+	// AuthMethod is how this session was authenticated: a full password login, or a till PIN.
+	//
+	// It is what `Can` consults to bound a PIN session's authority (§979). Defaulting to
+	// password means every session that existed before PINs keeps exactly the authority it had.
+	AuthMethod AuthMethod
+	// DeviceSessionID is the terminal session a PIN session was issued from.
+	//
+	// Recorded rather than merely checked: ending the terminal's session must end every till
+	// session it authorised, and "which terminal was this rung up on" is an audit question.
+	DeviceSessionID id.ID
 }
 
 // NewToken mints a session token.
@@ -110,6 +121,9 @@ func NewSession(
 		IdleExpires:     now.Add(policy.Idle),
 		AbsoluteExpires: now.Add(absolute),
 		DeviceInfo:      device,
+		// A session is a full one unless a caller says otherwise. The safe default: a new code
+		// path that forgets to set this gets MORE scrutiny from `Can`, not less.
+		AuthMethod: AuthPassword,
 	}
 }
 

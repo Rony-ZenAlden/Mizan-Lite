@@ -35,6 +35,20 @@ func (s *Service) Can(ctx context.Context, permission string, scope auth.Scope) 
 		return false
 	}
 
+	// THE BOUND THAT MAKES A FOUR-DIGIT CREDENTIAL ACCEPTABLE (§979).
+	//
+	// A till session holds the INTERSECTION of its user's grants and the point-of-sale
+	// namespaces. A manager with every permission in the system who signs in by PIN gets a till
+	// and nothing else — so guessing a PIN buys an attacker the ability to sell things, not to
+	// change prices, adjust stock, or read the ledger.
+	//
+	// Applied HERE, before the grants are even read, because this is the single point every
+	// guarded call passes through (1.5 D1). A check at each call site would be a check somebody
+	// forgets.
+	if actor.PINSession && !domain.PINMayHold(permission) {
+		return false
+	}
+
 	grants, err := s.repos.GrantsFor(ctx, actor.UserID)
 	if err != nil {
 		// A failed read must never read as "allowed". Denying on error is the only safe

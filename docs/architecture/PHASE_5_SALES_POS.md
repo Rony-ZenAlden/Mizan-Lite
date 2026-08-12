@@ -597,3 +597,72 @@ writes straight to the table, and asserts both halves: a second *open* shift is 
 *closed* one on the same till is ordinary and must still be allowed. A second test pins the
 half-reconciliation CHECK, because half a reconciliation is a number somebody will read as
 complete.
+
+### Step 5.7 — PIN login for the till
+
+**Delivered.** `0026_pin.sql` (`auth_method` and `device_session_id` on sessions), the PIN domain,
+`SetOwnPIN` / `SetPINFor` / `ClearPIN` / `PINLogin`, the bound applied in `Can`, and the guard
+carrying it.
+
+**Phase 1 had already left the seam — the third occurrence of that lesson.** `user_credentials`
+accepts `credential_type = 'pin'` (0005), `domain.CredentialPIN` exists, and its comment says PIN
+*"is reserved and unimplemented… its rules belong to that design"*. This one. No new credential
+table was needed.
+
+**D1 — a PIN is NOT a shorter password.** Four digits is ten thousand possibilities; no hashing
+parameter makes that safe alone. Three protections make it defensible, and it needs all three:
+
+1. **It only works on a terminal that already holds a full session.** A PIN is never a way in from
+   nothing — somebody signed the terminal in with a real password, and a PIN changes who is
+   standing at it. A till session cannot authorise another, or one guessed PIN would let an
+   attacker walk the whole staff list.
+2. **The session it issues is BOUNDED** to point-of-sale namespaces, applied in `Can` — the single
+   point every guarded call passes through. A manager holding every permission in the system gets
+   a till and nothing else.
+3. **It is throttled** on the same mechanism a password uses, checked before the hash.
+
+**D2 — the bound is a list of PREFIXES in code, not a role.** A role is data an administrator can
+edit, and the whole point is that this bound is not editable from inside the application. A shop
+wanting cashiers to do more grants them a fuller session with a password.
+
+**D3 — `PINSession` defaults to `false`, and that is the safe direction.** A code path forgetting
+to set it produces a session with *more* scrutiny from `Can`, never less.
+
+**Mutation drills — 6 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 38 | The bound removed from `Can` | 2 tests fail |
+| 39 | The guard forgets to mark a PIN session | **Passed — the worst finding of the project.** |
+| 40 | A PIN works with no unlocked terminal | `…WithoutAnUnlockedTerminal` fails |
+| 41 | A till session authorises another | `…CannotSignInAnotherUser` fails |
+| 42 | Weak PINs accepted | Domain and service tests fail |
+| 43 | The constant-work path skipped | `…IndistinguishableFromAWrongPIN` fails |
+
+### Drill 39 — the most serious finding so far
+
+Removing `PINSession: session.AuthMethod == domain.AuthPIN` from the guard broke **nothing**.
+
+Every test asserting the bound stamped `PINSession: true` onto the context **by hand**, because
+that is what the guard does — so all of them passed while the guard no longer did it. The
+consequence in production: **every till session would hold the full authority of the user behind
+it**, and a guessed four-digit PIN would reach the admin screen, the audit trail, the ledger, and
+stock costs. Nothing would have looked wrong.
+
+This is the Phase 3 rule — *a test must name the mechanism it is about* — at its most expensive.
+The mechanism was the **guard**, and the tests were exercising a context helper that imitates it.
+
+`internal/api/bindings/pin_guard_test.go` now signs in with a password, takes a real PIN session
+from it, adopts that token into the binding set, and calls administrative methods the
+administrator behind the PIN is fully entitled to use. Re-running the drill fails it with three
+named breaches:
+
+```
+a till session reached Identity.Users — a guessed PIN would too
+a till session reached Audit.Entries — a guessed PIN would too
+a till session reached Accounting.Chart — a guessed PIN would too
+```
+
+**The general lesson, worth more than the fix:** when a test needs a helper that *imitates* a
+production mechanism to set up its state, the mechanism itself is untested. That helper is a
+warning sign, not a convenience.

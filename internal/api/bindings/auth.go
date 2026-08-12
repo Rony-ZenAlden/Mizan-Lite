@@ -155,7 +155,7 @@ func (a *Auth) currentPrincipal() (bool, SessionDTO, error) {
 		return false, SessionDTO{}, nil //nolint:nilerr // an ended session is a state, not a failure
 	}
 
-	ctx = withActor(ctx, principal, session.BranchID)
+	ctx = withActor(ctx, principal, session)
 	permissions, err := app.Identity.Effective(ctx)
 	if err != nil {
 		return false, SessionDTO{}, err

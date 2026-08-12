@@ -41,3 +41,14 @@ func DeclaredPoliciesForTest(s *Set) map[string]string {
 	}
 	return out
 }
+
+// AdoptSessionForTest makes the binding set act under a given token.
+//
+// Test-only, and deliberately not a shipped method: the session a binding acts under is
+// established by Login and by the remembered-session restore, and a third way to set it would be
+// a third way to get it wrong.
+//
+// It exists so that the PIN bound can be tested through the REAL guard — a mutation drill showed
+// that every test asserting the bound was stamping the context by hand, and would have passed
+// with the guard's marking removed.
+func (s *Set) AdoptSessionForTest(token string) { s.session.set(token) }

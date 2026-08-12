@@ -12,6 +12,7 @@ import (
 	catalogdomain "github.com/mizan-erp/mizan/internal/modules/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
+	"github.com/mizan-erp/mizan/internal/modules/sales"
 )
 
 // auditActors tells the audit module who is acting.
@@ -137,4 +138,45 @@ func (l inventoryLedger) BalanceOfMapping(
 		return 0, nil
 	}
 	return l.accounting.BalanceOfMapping(ctx, companyID, mappingKey)
+}
+
+// salesActors satisfies sales' ActorResolver from the same context principal.
+type salesActors struct{}
+
+var _ sales.ActorResolver = salesActors{}
+
+// Actor reads the principal the 1.5 guard stamped onto the context.
+func (salesActors) Actor(ctx context.Context) (sales.Actor, bool) {
+	a, ok := appctx.ActorFrom(ctx)
+	if !ok || a.UserID.IsZero() {
+		return sales.Actor{}, false
+	}
+	return sales.Actor{UserID: a.UserID, BranchID: a.BranchID}, true
+}
+
+// salesCatalog satisfies sales' Catalog port from the catalog service.
+//
+// The conversion and the refusals — half a chair, kilograms sold as metres — happen inside
+// catalog, which owns units. Sales gets the answer and the facts to snapshot.
+type salesCatalog struct{ catalog *catalog.Service }
+
+var _ sales.Catalog = salesCatalog{}
+
+// LineFacts reports what a line must snapshot, and converts the quantity into stock units.
+func (c salesCatalog) LineFacts(
+	ctx context.Context, companyID, variantID, uomID id.ID, quantityMicro int64,
+) (sales.LineFacts, error) {
+	if c.catalog == nil {
+		return sales.LineFacts{}, errs.Internal("sales.catalog_missing",
+			"the catalog is not available")
+	}
+	product, variant, unit, inStock, err := c.catalog.SaleFacts(
+		ctx, companyID, variantID, uomID, quantityMicro)
+	if err != nil {
+		return sales.LineFacts{}, err
+	}
+	return sales.LineFacts{
+		ProductID: product.ID, ProductName: product.Name, VariantSKU: variant.SKU,
+		UomID: unit.ID, UomCode: unit.Code, QuantityStockMicro: inStock,
+	}, nil
 }

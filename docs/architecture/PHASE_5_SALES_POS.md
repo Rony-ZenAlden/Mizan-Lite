@@ -290,3 +290,62 @@ guard cannot fire on SQLite, where writers are serialised and the allocation sit
 transaction. It is kept as insurance for the engines §8 says this must survive moving to, the
 comment says exactly that, and **no test was written for it** — because one that passes either way
 would claim something is pinned when nothing is.
+
+### Step 5.2 — The sales document
+
+**Delivered.** `0023_sales.sql` (`sales_documents`, `sales_lines`), the document domain, the
+repositories, the service (`Draft`, `AddLine`, `RemoveLine`, `Hold`, `Resume`, `Cancel`,
+`Document`, `Documents`), and a `Catalog` port satisfied by catalog.
+
+**D1 — the snapshot is taken when a LINE IS ADDED, not at posting.** Posting would be almost as
+good, and "almost" is the gap through which a product renamed between drafting and posting changes
+what the customer sees on the invoice they were quoted. The test renames the product, the SKU, and
+the unit after the line exists, and asserts the line still says what was sold.
+
+**D2 — the conversion happens in CATALOG, not in sales.** Unit arithmetic belongs to the module
+that owns units. Sales could fetch two units and multiply, and it would be right today — but there
+would then be two implementations of "convert a quantity", and the day one stops rounding the way
+the other does is the day "2 rolls" and "200 metres" stop agreeing on an invoice already printed.
+
+This gave **3.1's refusals their first caller**: selling half a widget now fails with
+`catalog.fractional_not_allowed`, from the domain written in Phase 3, unchanged. The seam held.
+
+**D3 — `AddLineInput` has no price field, deliberately.** The caller says what and how many. Price
+comes from resolution at posting, tax from the engine, cost from the costing port. A till operator
+who can type a price is a discount nobody approved, and an input struct with a price field is an
+invitation to build that screen.
+
+**D4 — `MovesStock()` lives on the TYPE.** A quotation is a promise and an order is an intention;
+neither takes anything off a shelf. Putting it on the type means a report, a screen, and the poster
+cannot disagree. A quotation naming a warehouse is *refused* rather than ignored, because a screen
+showing it would be telling the operator something untrue.
+
+**D5 — a held sale is the SAME document, parked.** It occupies no number and moves no stock.
+Modelling it as a different kind of thing would mean resuming had to convert one into the other,
+and a conversion is a place for a line to get lost.
+
+**D6 — `UpdateDocument` is guarded on `status = 'draft'` in its WHERE clause**, not merely checked
+beforehand. An UPDATE matching no rows is a posted document, and it is reported rather than
+silently doing nothing. `SetDocumentStatus` is separate for exactly this reason — the guard that
+protects a posted document would otherwise make cancelling a draft impossible too.
+
+**Mutation drills — 7 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 7 | The line stores no snapshot | 2 tests fail |
+| 8 | The stock quantity is not converted | `…BothTheSoldAndTheStockQuantity` fails |
+| 9 | A posted document becomes editable | `…CannotBeChanged` fails |
+| 10 | The discount guard removed | `…CannotExceedItsLine` fails |
+| 11 | The line rounds twice | 2 tests fail |
+| 12 | The draft/posted number CHECK dropped | **Passed — no test wrote to the table.** |
+| 13 | The number uniqueness index weakened | **Passed — same reason.** |
+
+**Drills 12 and 13 are the fifth occurrence of the Phase 3 rule**, and this time the cause was
+structural rather than an oversight: *posting does not exist yet*, so no test could produce a
+posted document through the service, and the CHECK guarding the draft/posted split had nothing
+exercising it. Two tests now write straight to the table.
+
+Worth noting what those tests assert, because it is more than "a constraint exists": a **draft
+holding a number** means somebody consumed one and abandoned it, and a **posted document without
+one** means a posting skipped allocation entirely. Both halves of §9.4, made unrepresentable.

@@ -79,19 +79,35 @@ type Database interface {
 }
 
 // Options configures the service.
+// ActorResolver reports who is acting, if anyone is.
+type ActorResolver interface {
+	Actor(ctx context.Context) (Actor, bool)
+}
+
+// Actor is who made a document.
+type Actor struct {
+	UserID   id.ID
+	BranchID id.ID
+}
+
+// Options configures the service.
 type Options struct {
-	Clock  clock.Clock
-	Bus    event.Publisher
-	Logger *slog.Logger
+	Clock   clock.Clock
+	Bus     event.Publisher
+	Actors  ActorResolver
+	Catalog Catalog
+	Logger  *slog.Logger
 }
 
 // Service is the sales module's application layer.
 type Service struct {
-	db     Database
-	repos  *sqlite.Repos
-	clk    clock.Clock
-	bus    event.Publisher
-	logger *slog.Logger
+	db      Database
+	repos   *sqlite.Repos
+	clk     clock.Clock
+	bus     event.Publisher
+	actors  ActorResolver
+	catalog Catalog
+	logger  *slog.Logger
 }
 
 // NewService builds the service.
@@ -101,7 +117,7 @@ func NewService(db Database, opts Options) *Service {
 	}
 	return &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock,
-		bus: opts.Bus, logger: opts.Logger,
+		bus: opts.Bus, actors: opts.Actors, catalog: opts.Catalog, logger: opts.Logger,
 	}
 }
 
@@ -272,5 +288,31 @@ func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { retur
 // Jobs: none yet.
 func (m *Module) Jobs() []jobs.Registration { return nil }
 
-// Series is a document numbering sequence, re-exported.
-type Series = domain.Series
+// Re-exported so callers need not import the domain package.
+type (
+	// Series is a document numbering sequence.
+	Series = domain.Series
+	// Document is a sale in one of its forms.
+	Document = domain.Document
+	// Line is one item on a document.
+	Line = domain.Line
+	// Type is what kind of document this is.
+	Type = domain.Type
+	// Status is where a document has got to.
+	Status = domain.Status
+)
+
+// The document types, re-exported.
+const (
+	Quotation  = domain.Quotation
+	Order      = domain.Order
+	Invoice    = domain.Invoice
+	CreditNote = domain.CreditNote
+)
+
+// The statuses, re-exported.
+const (
+	Draft     = domain.Draft
+	Posted    = domain.Posted
+	Cancelled = domain.Cancelled
+)

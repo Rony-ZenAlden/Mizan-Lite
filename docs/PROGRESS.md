@@ -1101,3 +1101,14 @@ lesson, and the schema said so before any code depended on the duplicate.
 6 drills. Two passed as BAD MUTATIONS (one didn't compile; one changed `if err = f(); err != nil`
 to `if err = f(); false`, which still calls f). One passed because a code COMMENT asserted a
 danger the platform had already eliminated — a new category, and one only a drill would catch.
+
+### Step 5.2 — The sales document ✅
+
+One table discriminated by type, with the §9.3 snapshot taken when a line is ADDED rather than at
+posting — the test renames the product, SKU, and unit afterwards and the line still says what was
+sold. Dual quantity, with the conversion done inside catalog, which owns units: that gave 3.1's
+"you cannot sell half a chair" its first caller, unchanged.
+
+7 drills. Two passed because posting does not exist yet, so nothing could produce a posted
+document through the service and the draft/posted CHECK had nothing exercising it. Two tests now
+write straight to the table — the fifth occurrence of the Phase 3 rule.

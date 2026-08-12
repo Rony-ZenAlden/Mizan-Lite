@@ -6,6 +6,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/kernel/round"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/modules/catalog/infra/sqlite"
@@ -512,4 +513,58 @@ func (s *Service) ProductByID(
 			"there is no product with that identity").WithParam("id", string(productID))
 	}
 	return products[0], nil
+}
+
+// SaleFacts reports what a sales line must snapshot about a variant, and converts the entered
+// quantity into the product's stock unit.
+//
+// # Why the conversion happens HERE
+//
+// Unit arithmetic belongs to the module that owns units. Sales could fetch the two units and
+// multiply, and it would be right today — but there would then be two implementations of "convert
+// a quantity", and the day one of them stops rounding the way the other does is the day "2 rolls"
+// and "200 metres" stop agreeing on an invoice that has already been printed.
+//
+// It also refuses a unit from the wrong category, and a fractional quantity of something that
+// cannot be divided — both already built in 3.1, and both exactly what a till needs to say when
+// somebody keys half a chair.
+func (s *Service) SaleFacts(
+	ctx context.Context, companyID, variantID, uomID id.ID, quantityMicro int64,
+) (domain.Product, domain.Variant, domain.Unit, int64, error) {
+	variant, product, err := s.repos.VariantWithProduct(ctx, companyID, variantID)
+	if err != nil {
+		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+	}
+
+	stockUnit, err := s.repos.UnitByID(ctx, product.StockUnitID)
+	if err != nil {
+		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+	}
+
+	// No unit named means the product's SALES unit, which is what a till should default to: a
+	// business that buys in rolls and sells in metres expects the sale to be in metres without
+	// anybody saying so.
+	saleUnit := stockUnit
+	if !uomID.IsZero() {
+		if saleUnit, err = s.repos.UnitByID(ctx, uomID); err != nil {
+			return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+		}
+	} else if product.SalesUnitID != product.StockUnitID {
+		if saleUnit, err = s.repos.UnitByID(ctx, product.SalesUnitID); err != nil {
+			return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+		}
+	}
+
+	// Refuses half a chair, and refuses kilograms sold as metres. Both are 3.1's rules, reached
+	// here by the first caller they have ever had.
+	normalised, err := domain.Normalise(quantityMicro, saleUnit)
+	if err != nil {
+		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+	}
+	inStock, err := domain.Convert(normalised, saleUnit, stockUnit, round.HalfAwayFromZero)
+	if err != nil {
+		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+	}
+
+	return product, variant, saleUnit, inStock, nil
 }

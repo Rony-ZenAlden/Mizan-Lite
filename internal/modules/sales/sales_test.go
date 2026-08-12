@@ -9,10 +9,18 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
+	"github.com/mizan-erp/mizan/internal/modules/catalog"
+	catalogdomain "github.com/mizan-erp/mizan/internal/modules/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/identity"
+	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/modules/partner"
+	"github.com/mizan-erp/mizan/internal/modules/profile"
 	"github.com/mizan-erp/mizan/internal/modules/sales"
+	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
@@ -20,12 +28,20 @@ import (
 )
 
 type fixture struct {
-	svc       *sales.Service
-	audit     *audit.Service
-	store     *database.Store
-	companyID id.ID
-	branchID  id.ID
-	ctx       context.Context
+	svc         *sales.Service
+	audit       *audit.Service
+	bus         *eventbus.Bus
+	store       *database.Store
+	companyID   id.ID
+	branchID    id.ID
+	warehouseID id.ID
+	ctx         context.Context
+
+	// Populated by newSellingFixture, which adds a catalog.
+	catalog      *catalog.Service
+	variant      catalogdomain.Variant
+	heavyVariant catalogdomain.Variant
+	kilogramID   id.ID
 }
 
 func newFixture(t *testing.T) fixture {
@@ -39,11 +55,20 @@ func newFixture(t *testing.T) fixture {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
+	// Sales lines key products, variants, units, lots, serials, and stock movements, so the
+	// fixture runs the same merged schema the application does.
 	merged := migrate.Merge(
 		migrations.SQLite(),
 		currency.NewModule(nil).Migrations(),
 		org.NewModule(nil).Migrations(),
 		audit.NewModule(nil).Migrations(),
+		identity.NewModule(nil).Migrations(),
+		profile.NewModule(nil).Migrations(),
+		accounting.NewModule(nil).Migrations(),
+		tax.NewModule(nil).Migrations(),
+		catalog.NewModule(nil).Migrations(),
+		partner.NewModule(nil).Migrations(),
+		inventory.NewModule(nil).Migrations(),
 		sales.NewModule(nil).Migrations(),
 	)
 	runner, err := migrate.New(store, migrate.Options{FS: merged, DBPath: path, SkipBackup: true})
@@ -85,9 +110,60 @@ func newFixture(t *testing.T) fixture {
 
 	return fixture{
 		svc:   sales.NewService(store, sales.Options{Clock: clock.System(), Bus: bus}),
-		audit: auditSvc, store: store,
-		companyID: provisioned.CompanyID, branchID: provisioned.BranchID, ctx: ctx,
+		audit: auditSvc, store: store, bus: bus,
+		companyID: provisioned.CompanyID, branchID: provisioned.BranchID,
+		warehouseID: provisioned.WarehouseID, ctx: ctx,
 	}
+}
+
+// newSellingFixture adds a catalog with something to sell, and wires the Catalog port to the real
+// service — so a line's snapshot and its unit conversion travel the path production uses.
+func newSellingFixture(t *testing.T) fixture {
+	t.Helper()
+	f := newFixture(t)
+
+	bus := eventbus.New(eventbus.Options{})
+	catalogSvc, err := catalog.NewService(f.store, catalog.Options{
+		Clock: clock.System(), Bus: bus,
+	})
+	if err != nil {
+		t.Fatalf("catalog.NewService: %v", err)
+	}
+	if err = catalogSvc.ApplyUnits(f.ctx, "standard"); err != nil {
+		t.Fatalf("ApplyUnits: %v", err)
+	}
+
+	// A widget, counted in pieces — which cannot be divided (3.1's rule).
+	_, variant, err := catalogSvc.CreateProduct(f.ctx, catalog.NewProductInput{
+		CompanyID: f.companyID, Code: "WIDGET", Name: "Widget", StockUnit: "PCS",
+	})
+	if err != nil {
+		t.Fatalf("CreateProduct: %v", err)
+	}
+
+	// Something stocked in grams and sold in kilograms, so the dual quantity has work to do.
+	_, heavy, err := catalogSvc.CreateProduct(f.ctx, catalog.NewProductInput{
+		CompanyID: f.companyID, Code: "SAND", Name: "Sand",
+		StockUnit: "G", SalesUnit: "KG",
+	})
+	if err != nil {
+		t.Fatalf("CreateProduct: %v", err)
+	}
+	kilogram, err := catalogSvc.UnitByCode(f.ctx, "KG")
+	if err != nil {
+		t.Fatalf("UnitByCode: %v", err)
+	}
+
+	f.catalog = catalogSvc
+	f.variant = variant
+	f.heavyVariant = heavy
+	f.kilogramID = kilogram.ID
+
+	// The service is rebuilt with the catalog port wired.
+	f.svc = sales.NewService(f.store, sales.Options{
+		Clock: clock.System(), Bus: f.bus, Catalog: realCatalog{svc: catalogSvc},
+	})
+	return f
 }
 
 func (f fixture) series(t *testing.T, code, prefix string, padding int) {

@@ -352,7 +352,8 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Sales: the phase where every earlier seam finds out whether it was built for a real
 	// caller. Numbers are allocated at posting, inside the document's own transaction.
 	app.Sales = sales.NewService(db, sales.Options{
-		Clock: opts.Clock, Bus: app.Bus, Logger: opts.Logger,
+		Clock: opts.Clock, Bus: app.Bus, Actors: salesActors{},
+		Catalog: salesCatalog{catalog: app.Catalog}, Logger: opts.Logger,
 	})
 	salesModule := sales.NewModule(app.Sales)
 

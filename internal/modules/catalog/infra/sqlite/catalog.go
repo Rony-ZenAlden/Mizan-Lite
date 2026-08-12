@@ -575,3 +575,90 @@ func (r *Repos) ProductsByIDs(
 	}
 	return out, rows.Err()
 }
+
+// VariantWithProduct reads a variant and the product it belongs to, in one query.
+//
+// One round trip rather than two, because a till adds a line per scan and a second query per scan
+// is a second query per scan.
+func (r *Repos) VariantWithProduct(
+	ctx context.Context, companyID, variantID id.ID,
+) (domain.Variant, domain.Product, error) {
+	row := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT v.id, v.product_id, v.sku, v.name, v.is_default, v.combination,
+		       v.has_history, v.is_active,
+		       `+qualifyProduct()+`
+		  FROM product_variants v
+		  JOIN products p ON p.id = v.product_id
+		 WHERE v.id = ? AND p.company_id = ?`, string(variantID), string(companyID))
+
+	var (
+		v                               domain.Variant
+		name                            any
+		def, history, active            int
+		p                               domain.Product
+		nameKey, categoryID, taxGroup   any
+		income, expense, inventory      any
+		productType, tracking           string
+		pHistory, pActive, sold, bought int
+	)
+	if err := row.Scan(&v.ID, &v.ProductID, &v.SKU, &name, &def, &v.Combination,
+		&history, &active,
+		&p.ID, &p.Code, &p.Name, &nameKey, &categoryID, &productType,
+		&p.StockUnitID, &p.SalesUnitID, &p.PurchaseUnitID, &tracking, &taxGroup,
+		&income, &expense, &inventory, &pHistory, &pActive, &sold, &bought); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Variant{}, domain.Product{}, errs.NotFound(
+				domain.CodeInvalidVariant, "there is no such product variant").
+				WithParam("id", string(variantID))
+		}
+		return domain.Variant{}, domain.Product{}, r.wrap(err, "reading a variant")
+	}
+
+	v.Name = text(name)
+	v.IsDefault = def == 1
+	v.HasHistory = history == 1
+	v.IsActive = active == 1
+
+	p.NameKey = text(nameKey)
+	p.CategoryID = id.ID(text(categoryID))
+	p.Type = domain.ProductType(productType)
+	p.Tracking = domain.Tracking(tracking)
+	p.TaxGroupID = id.ID(text(taxGroup))
+	p.IncomeAccountID = id.ID(text(income))
+	p.ExpenseAccountID = id.ID(text(expense))
+	p.InventoryAccountID = id.ID(text(inventory))
+	p.HasHistory = pHistory == 1
+	p.IsActive = pActive == 1
+	p.IsSold = sold == 1
+	p.IsPurchased = bought == 1
+
+	return domain.AdoptVariant(v), domain.AdoptProduct(p), nil
+}
+
+// qualifyProduct prefixes the product columns with their table alias, so the one definition of
+// `productColumns` serves both the plain selects and this join.
+func qualifyProduct() string {
+	out := make([]byte, 0, len(productColumns)*2)
+	field := make([]byte, 0, 32)
+	flush := func() {
+		if len(field) == 0 {
+			return
+		}
+		out = append(out, "p."...)
+		out = append(out, field...)
+		field = field[:0]
+	}
+	for i := 0; i < len(productColumns); i++ {
+		switch c := productColumns[i]; c {
+		case ',':
+			flush()
+			out = append(out, ", "...)
+		case ' ', '\n', '\t':
+			flush()
+		default:
+			field = append(field, c)
+		}
+	}
+	flush()
+	return string(out)
+}

@@ -255,6 +255,7 @@
   "inventory.stock.transferred": "تم تحويل مخزون",
   "inventory.stock.view": "عرض المخزون",
   "jobs.accounting.ledger_integrity": "فحص السجلات المحاسبية",
+  "jobs.inventory.stock_reconciliation": "التحقّق من مطابقة قيمة المخزون لحساب المخزون",
   "locale.name.ar": "العربية",
   "locale.name.en": "English",
   "month.1": "كانون الثاني",

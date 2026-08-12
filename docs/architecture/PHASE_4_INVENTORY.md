@@ -631,3 +631,84 @@ writing it, both worth keeping:
 
 This is the first drill in the project to find a gap in a *test suite* rather than in code or in
 one test — and it is protecting every future binding, not just this one.
+
+---
+
+## Step 4.8 — Phase 4 Definition-of-Done review
+
+**Result: 13 of 13 met.** Every criterion names the test that proves it, and every one of those
+tests was watched to FAIL under a mutation before being counted.
+
+| # | Criterion | Verdict | Proof |
+|---|---|---|---|
+| 1 | `stock_movements` is append-only | ✅ | No `UPDATE`/`DELETE` on the table exists outside tests — verified by grep, not by assertion. `TestTheLedgerIsAppendOnly` |
+| 2 | Levels rebuildable and verified, reporting not repairing | ✅ | `…RestoresTheProjectionFromTheLedger`, `…CaughtAndReportedNotRepaired` |
+| 3 | Stock value reconciles to the inventory account, **proven by a job** | ✅ | Built in this step — see below. `TestStockReconcilesToTheInventoryAccount` |
+| 4 | Costing reached only through the port | ✅ | `domain.WAC{}` is constructed in exactly one place — the selector — and every caller uses the interface. `TestTheStrategyIsReachedThroughThePort` |
+| 5 | Layers written on every receipt, under WAC too | ✅ | `…EvenUnderAverageCost`, `TestLayersAreConsumedInReceiptOrder` |
+| 6 | WAC handles all four §1.5 traps | ✅ | Four named tests, one per trap |
+| 7 | A return costed at its original issue | ✅ | `TestAReturnIsCostedAtItsOriginalIssue` |
+| 8 | Negative stock blocked by default; variance visible where permitted | ✅ | `…RefusedByDefault`, `…WarehouseThatPermitsItCanIssueBelowZero` |
+| 9 | Lot rules in both directions | ✅ | `…CannotMoveWithoutALot…`, `…CannotMoveWithALot…` |
+| 10 | A transfer moves value without changing total | ✅ | `…LeavesTotalStockValueUnchanged`, `…CostedAtTheSourcesAverage…` |
+| 11 | No accounting logic in inventory | ✅ | The module names no account, debit, or credit — verified by grep. `TestInventoryPublishesAmountsAndNamesNoAccounts` rewrites only a rule row and watches the money move |
+| 12 | Every binding has a policy; every state change audited in-transaction | ✅ | The coverage test, the new writing-method test, and three "a refused X is not audited" tests |
+| 13 | `make ci` green with the declared drills | ✅ | Green. **47 drills** across 4.1–4.8 |
+
+### Criterion 3 was NOT met when this review began
+
+The review found it. `VerifyLedger` existed and was tested, but:
+
+- `Module.Jobs()` returned `nil` — there was no job at all, and the criterion says *"proven by a
+  job"*.
+- Nothing in production compared stock value against the **inventory account**. A test did it; no
+  running code did.
+
+Both are now built: `Reconcile` (per company), `ReconcileAll` (the nightly sweep), a `Ledger` port
+answered by accounting, and `accounting.BalanceOfMapping`, which takes a mapping **key** so that
+inventory never learns an account code.
+
+Three decisions came out of building it:
+
+**The sweep asks inventory's own levels which companies to check**, rather than taking a port to
+org. A company with no stock has nothing to reconcile, which makes it the more precise question as
+well as the one needing no port — and accounting's integrity job answers the same question the
+same way, from its own ledger.
+
+**A finding is not an outage.** A failing job retries and eventually alerts as one; a stock
+reconciliation that does not balance cannot be fixed by running it again. So the difference is
+logged at warning level with both figures and the job **succeeds**. A genuine failure — database
+gone, mapping missing — still errors, because that one *is* an outage.
+
+**`LedgerChecked` exists because a test I wrote caught a defect in code I had just written.**
+Without the port wired, `Reconcile` returned a difference of zero and no discrepancies, and
+`Balanced()` said yes — a **false clean bill of health**. "I did not check" and "I checked and it
+was fine" are different answers, and only one of them should reassure anybody.
+
+### What Phase 4 leaves for later
+
+- **`qty_reserved` is written by nobody.** Phase 5 reserves stock against orders; the column and
+  the arithmetic are here so that a rebuild already knows not to discard it.
+- **FIFO is not implemented.** The port, the setting's enum, and the layers are all in place; the
+  strategy is one file.
+- **No lot or serial screens.** The service and the domain are complete and tested; the concept is
+  behind flags and no UI reveals it yet.
+- **No transfer or count screens.** Both workflows exist and are tested through the service.
+- **`inventory.Adjust` is the only write reachable from a screen.**
+
+### The drills, and what they taught
+
+**47 run across the phase; 8 passed.** A passing drill has now resolved **five** distinct ways,
+and the list is the phase's most portable output:
+
+| Outcome | Example |
+|---|---|
+| Strengthen the test | 3.1, 3.3, 3.5, 3.6, and 4.5's schema pair |
+| **Delete the redundant code** | 4.1's `case Revaluation:` — the direction table already said it |
+| **Keep it and document that it saves work, not answers** | 4.3's zero-value guard, deliberately untested |
+| **Fix the mutation** | 4.5's FEFO sort, where a comparator was inserted but never took effect |
+| **Fix the test suite** | 4.7's policy gap — the coverage test proved every method *had* a policy, never that it had the *right* one |
+
+The last is the most valuable thing this phase produced. `TestAWritingMethodIsNotGatedOnMerelyViewing`
+now protects every binding written from here on, and it exists only because a drill asked a
+question nobody had asked: *what if the policy is present but wrong?*

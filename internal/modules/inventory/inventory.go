@@ -31,7 +31,6 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
-	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
@@ -179,6 +178,7 @@ type Options struct {
 	Settings *config.Settings
 	Actors   ActorResolver
 	Products Products
+	Ledger   Ledger
 	Logger   *slog.Logger
 }
 
@@ -191,6 +191,7 @@ type Service struct {
 	settings *config.Settings
 	actors   ActorResolver
 	products Products
+	ledger   Ledger
 	logger   *slog.Logger
 }
 
@@ -202,7 +203,7 @@ func NewService(db Database, opts Options) *Service {
 	return &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock, bus: opts.Bus,
 		settings: opts.Settings, actors: opts.Actors, products: opts.Products,
-		logger: opts.Logger,
+		ledger: opts.Ledger, logger: opts.Logger,
 	}
 }
 
@@ -320,10 +321,6 @@ func (m *Module) Metadata() []metadata.SeedSpec { return nil }
 // rather than through events, because a sale must fail if its stock movement fails — and an
 // event that can be retried later is precisely the wrong shape for that.
 func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { return nil }
-
-// Jobs: the ledger verifier, registered in 4.1's companion step once the job surface for a
-// company-scoped periodic check is wired.
-func (m *Module) Jobs() []jobs.Registration { return nil }
 
 // Re-exported so callers need not import the domain package.
 type (

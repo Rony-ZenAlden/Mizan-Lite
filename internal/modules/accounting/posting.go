@@ -396,3 +396,44 @@ func itoa(n int) string {
 	}
 	return string(digits[i:])
 }
+
+// BalanceOfMapping reports the current balance of whichever account fills a mapping role.
+//
+// # Why this exists, and why it takes a KEY rather than an account
+//
+// Phase 4's inventory module must prove that what is on the shelf is worth what the inventory
+// account says — the reconciliation §21 asks for and the thing standing between a business and a
+// year of quietly wrong gross margin.
+//
+// It takes a mapping KEY because inventory must not learn account codes: which account holds
+// stock is a decision an accountant makes in a seed file (§20.3), and a caller that named "1300"
+// would break the moment a country's chart differed. Inventory asks for "the INVENTORY role" and
+// gets a number.
+//
+// Debit-positive, like every balance in this module: a positive result means the account holds
+// value, which for inventory is what a stocked warehouse looks like.
+func (s *Service) BalanceOfMapping(
+	ctx context.Context, companyID id.ID, mappingKey string,
+) (int64, error) {
+	account, err := s.repos.ResolveMapping(ctx, companyID, id.ID(""), mappingKey)
+	if err != nil {
+		return 0, err
+	}
+
+	// Summed from the movement rows rather than read from a single "current balance" column,
+	// because there is no such column: `account_balances` holds MOVEMENT per period (0012), and
+	// opening is derived. Adding them is the same arithmetic a trial balance does.
+	rows, err := s.repos.BalanceRows(ctx, companyID)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, row := range rows {
+		if row.AccountID != account.ID {
+			continue
+		}
+		// Debit-positive throughout, as everywhere in this module.
+		total += row.Debit - row.Credit
+	}
+	return total, nil
+}

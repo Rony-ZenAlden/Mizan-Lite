@@ -6,6 +6,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/appctx"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/accounting"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/modules/catalog/domain"
@@ -117,4 +118,23 @@ func (p inventoryProducts) TrackingOf(
 		return "", err
 	}
 	return inventory.Tracking(product.Tracking), nil
+}
+
+// inventoryLedger satisfies inventory's Ledger port from the accounting service.
+//
+// One number, by mapping KEY rather than by account code — so inventory never learns which
+// account holds stock, and a country whose chart differs is a seed file rather than a change
+// here (§20.3).
+type inventoryLedger struct{ accounting *accounting.Service }
+
+var _ inventory.Ledger = inventoryLedger{}
+
+// BalanceOfMapping reports what the books say an account role holds.
+func (l inventoryLedger) BalanceOfMapping(
+	ctx context.Context, companyID id.ID, mappingKey string,
+) (int64, error) {
+	if l.accounting == nil {
+		return 0, nil
+	}
+	return l.accounting.BalanceOfMapping(ctx, companyID, mappingKey)
 }

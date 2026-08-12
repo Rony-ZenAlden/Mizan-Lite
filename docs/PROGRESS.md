@@ -1071,3 +1071,17 @@ columns absent, not zero, for callers without the permission.
 7 mutation drills. The 43rd found a hole in the POLICY SUITE: the coverage test proved every
 method has a policy, never that it has the right one, so gating `Adjust` on `stock.view` broke
 nothing. A general rule now asserts that writing methods are not gated on `.view` permissions.
+
+### Step 4.8 — Phase 4 Definition-of-Done review ✅ (13/13)
+
+All 13 criteria met, each backed by a test watched to fail under mutation. 47 drills across the
+phase.
+
+**Criterion 3 was not met when the review began** — the review found it. `Module.Jobs()` returned
+nil, and nothing in production compared stock value against the inventory account. Both are now
+built: a nightly reconciliation sweep with a `Ledger` port answered by accounting through a
+mapping KEY, so inventory never learns an account code.
+
+Writing it produced a defect caught by its own test: without the port wired, `Balanced()` returned
+true — a false clean bill of health. `LedgerChecked` now distinguishes "I did not check" from "I
+checked and it was fine".

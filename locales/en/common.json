@@ -255,6 +255,7 @@
   "inventory.stock.transferred": "Stock transferred",
   "inventory.stock.view": "View stock",
   "jobs.accounting.ledger_integrity": "Check the accounting records",
+  "jobs.inventory.stock_reconciliation": "Check that stock value matches the inventory account",
   "locale.name.ar": "العربية",
   "locale.name.en": "English",
   "month.1": "January",

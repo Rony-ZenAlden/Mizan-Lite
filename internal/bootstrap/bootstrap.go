@@ -340,6 +340,9 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Inventory = inventory.NewService(db, inventory.Options{
 		Clock: opts.Clock, Bus: app.Bus, Settings: settings,
 		Actors: inventoryActors{}, Products: inventoryProducts{catalog: app.Catalog},
+		// The reconciliation's one port: what the books say. Which companies to sweep comes
+		// from inventory's own levels — a company with no stock has nothing to reconcile.
+		Ledger: inventoryLedger{accounting: app.Accounting},
 		Logger: opts.Logger,
 	})
 	inventoryModule := inventory.NewModule(app.Inventory)

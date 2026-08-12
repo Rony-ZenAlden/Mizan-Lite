@@ -631,3 +631,29 @@ func (r *Repos) SetSerialStatus(
 	}
 	return nil
 }
+
+// CompaniesWithStock lists every company that holds any stock.
+//
+// Read from this module's OWN table rather than through a port to org, for two reasons: a company
+// with no stock has nothing to reconcile, so this is the more precise question; and accounting's
+// integrity job answers the same question the same way, from its own ledger. A background job has
+// no user and therefore no current company, so it must ask something — and its own data is the
+// closest thing that knows.
+func (r *Repos) CompaniesWithStock(ctx context.Context) ([]id.ID, error) {
+	rows, err := r.db.Reader(ctx).QueryContext(ctx,
+		`SELECT DISTINCT company_id FROM stock_levels ORDER BY company_id`)
+	if err != nil {
+		return nil, r.wrap(err, "listing companies with stock")
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]id.ID, 0, 4)
+	for rows.Next() {
+		var companyID id.ID
+		if err = rows.Scan(&companyID); err != nil {
+			return nil, r.wrap(err, "reading a company id")
+		}
+		out = append(out, companyID)
+	}
+	return out, rows.Err()
+}

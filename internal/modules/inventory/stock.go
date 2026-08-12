@@ -29,6 +29,11 @@ type MoveInput struct {
 
 	// SourceMovementID is the issue a return reverses (§D.3). Required for a return.
 	SourceMovementID id.ID
+
+	// LotID and SerialID are required when the product's tracking mode demands them, and
+	// refused when it does not.
+	LotID    id.ID
+	SerialID id.ID
 	// CountedMicro is the figure a physical count found. Only read for a count.
 	CountedMicro int64
 

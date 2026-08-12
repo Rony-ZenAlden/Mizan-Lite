@@ -91,6 +91,28 @@ var (
 	})
 )
 
+// The feature flags that gate lot and serial tracking (§21.2).
+//
+// A pharmacy needs lot expiry; a furniture store does not and must never encounter the concept.
+// Off by default, so the ordinary install is the simple one.
+var (
+	LotTracking = config.DeclareFlag(config.FlagDef{
+		Key:         "inventory.lot_tracking",
+		Default:     false,
+		Stability:   config.Stable,
+		Scopes:      []config.Scope{config.ScopeSystem, config.ScopeCompany},
+		Description: "flags.inventory.lot_tracking",
+	})
+
+	SerialTracking = config.DeclareFlag(config.FlagDef{
+		Key:         "inventory.serial_tracking",
+		Default:     false,
+		Stability:   config.Stable,
+		Scopes:      []config.Scope{config.ScopeSystem, config.ScopeCompany},
+		Description: "flags.inventory.serial_tracking",
+	})
+)
+
 // The costing methods §21.1 names. Only the first is implemented in v1.
 const (
 	MethodWAC      = "wac"
@@ -122,6 +144,19 @@ type Database interface {
 	database.UnitOfWork
 }
 
+// Products reports what inventory needs to know about a product.
+//
+// A PORT, not an import of catalog. Inventory needs one fact — how finely this product is
+// tracked — and the module-isolation rule (§10.3) says a module may reach another only through
+// its contract package. Declaring the narrow shape here and satisfying it in the composition
+// root keeps that true, and keeps this module testable with a two-line fake.
+//
+// The tracking mode lives on catalog's `products` table (Phase 3, 0016), where it was declared
+// with lot and serial values from the start so that turning one on is a data change.
+type Products interface {
+	TrackingOf(ctx context.Context, productID id.ID) (domain.Tracking, error)
+}
+
 // ActorResolver reports who is acting, if anyone is.
 //
 // Declared here rather than imported from audit, so that inventory does not depend on audit's
@@ -143,6 +178,7 @@ type Options struct {
 	Bus      event.Publisher
 	Settings *config.Settings
 	Actors   ActorResolver
+	Products Products
 	Logger   *slog.Logger
 }
 
@@ -154,6 +190,7 @@ type Service struct {
 	bus      event.Publisher
 	settings *config.Settings
 	actors   ActorResolver
+	products Products
 	logger   *slog.Logger
 }
 
@@ -164,7 +201,8 @@ func NewService(db Database, opts Options) *Service {
 	}
 	return &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock, bus: opts.Bus,
-		settings: opts.Settings, actors: opts.Actors, logger: opts.Logger,
+		settings: opts.Settings, actors: opts.Actors, products: opts.Products,
+		logger: opts.Logger,
 	}
 }
 
@@ -220,7 +258,9 @@ func (m *Module) Name() string { return "inventory" }
 
 // DependsOn names the modules whose tables this one references.
 func (m *Module) DependsOn() []string {
-	return []string{"org", "catalog", "identity"}
+	// Migration ORDER: stock_movements keys warehouses, products, variants, and users; a lot
+	// names the supplier it came from, for a recall.
+	return []string{"org", "catalog", "identity", "partner"}
 }
 
 // Migrations returns the module's schema.
@@ -255,8 +295,23 @@ func mustDefinition(key string) config.Definition {
 	return def
 }
 
-// FeatureFlags: none yet. Lot and serial tracking arrive in 4.5 behind flags.
-func (m *Module) FeatureFlags() []config.FlagDef { return nil }
+// FeatureFlags gate the CONCEPTS of lot and serial tracking (§21.2).
+//
+// The tables and columns exist for every install; what a furniture shop never sees is the idea.
+// A flag rather than a setting because these are progressive delivery of something the product
+// does (§17) — unlike "does this business tolerate negative stock", which is a fact about the
+// business and therefore lives on the warehouse row.
+func (m *Module) FeatureFlags() []config.FlagDef {
+	return []config.FlagDef{
+		mustFlag(LotTracking.Key()),
+		mustFlag(SerialTracking.Key()),
+	}
+}
+
+func mustFlag(key string) config.FlagDef {
+	def, _ := config.Default().LookupFlag(key)
+	return def
+}
 
 // Metadata: none. Stock is a customer's own data, never something the product ships.
 func (m *Module) Metadata() []metadata.SeedSpec { return nil }
@@ -280,6 +335,12 @@ type (
 	Type = domain.Type
 	// Discrepancy is one place a projection disagrees with the ledger.
 	Discrepancy = domain.Discrepancy
+	// Lot is a batch, with the dates that make it matter.
+	Lot = domain.Lot
+	// Serial is one physical unit.
+	Serial = domain.Serial
+	// Tracking is how finely a product is followed.
+	Tracking = domain.Tracking
 	// Level is a stored stock level.
 	Level = sqlite.Level
 )
@@ -296,6 +357,9 @@ const (
 	Revaluation   = domain.Revaluation
 	ReturnIn      = domain.ReturnIn
 )
+
+// Clock exposes the service's clock, so a test can rebuild the service with the same one.
+func (s *Service) Clock() clock.Clock { return s.clk }
 
 func (s *Service) requirePublisher() error {
 	if s.bus == nil {

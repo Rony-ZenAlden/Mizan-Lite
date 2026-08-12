@@ -553,3 +553,25 @@ func (r *Repos) UpdateStockUnit(ctx context.Context, productID, unitID id.ID) er
 	}
 	return nil
 }
+
+// ProductsByIDs reads products by identity.
+func (r *Repos) ProductsByIDs(
+	ctx context.Context, productID id.ID,
+) ([]domain.Product, error) {
+	rows, err := r.db.Reader(ctx).QueryContext(ctx,
+		`SELECT `+productColumns+` FROM products WHERE id = ?`, string(productID))
+	if err != nil {
+		return nil, r.wrap(err, "reading a product")
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]domain.Product, 0, 1)
+	for rows.Next() {
+		p, scanErr := scanProduct(rows)
+		if scanErr != nil {
+			return nil, r.wrap(scanErr, "reading a product")
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

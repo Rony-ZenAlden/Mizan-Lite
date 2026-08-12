@@ -144,6 +144,8 @@ func (s *Service) moveWithin(ctx context.Context, in MoveInput) (domain.Movement
 
 	movement.UnitCostMicro = in.UnitCostMicro
 	movement.SourceMovementID = in.SourceMovementID
+	movement.LotID = in.LotID
+	movement.SerialID = in.SerialID
 	movement.DocumentType = in.DocumentType
 	movement.DocumentID = in.DocumentID
 	movement.DocumentLineID = in.DocumentLineID
@@ -155,6 +157,19 @@ func (s *Service) moveWithin(ctx context.Context, in MoveInput) (domain.Movement
 	}
 	if movement.Type == domain.Count {
 		movement.BalanceAfterMicro = in.CountedMicro
+	}
+
+	// The tracking rules, in BOTH directions: a lot-tracked product moving without a lot is
+	// untraceable at a recall, and an untracked one moving WITH a lot has recorded something
+	// nothing reads while implying traceability that does not exist.
+	if s.products != nil {
+		mode, modeErr := s.products.TrackingOf(ctx, in.ProductID)
+		if modeErr != nil {
+			return domain.Movement{}, modeErr
+		}
+		if err = domain.RequireTracking(mode, movement); err != nil {
+			return domain.Movement{}, err
+		}
 	}
 
 	level, found, err := s.repos.LevelFor(ctx, in.VariantID, in.WarehouseID)
@@ -223,6 +238,26 @@ func (s *Service) moveWithin(ctx context.Context, in MoveInput) (domain.Movement
 		if err = s.repos.ConsumeLayers(ctx, in.VariantID, in.WarehouseID,
 			movement.QuantityMicro); err != nil {
 			return domain.Movement{}, err
+		}
+	}
+
+	// The lot-grain projection, maintained alongside the coarse one. Both are rebuildable from
+	// the same ledger; neither is the truth.
+	if !movement.LotID.IsZero() {
+		direction, dirErr := domain.DirectionOf(movement.Type)
+		if dirErr != nil {
+			return domain.Movement{}, dirErr
+		}
+		if direction != domain.Neutral {
+			levelID, levelErr := id.New()
+			if levelErr != nil {
+				return domain.Movement{}, levelErr
+			}
+			if err = s.repos.AdjustLotLevel(ctx, levelID, in.CompanyID, in.WarehouseID,
+				in.VariantID, movement.LotID,
+				int64(direction)*movement.QuantityMicro); err != nil {
+				return domain.Movement{}, err
+			}
 		}
 	}
 

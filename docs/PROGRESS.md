@@ -1035,3 +1035,18 @@ the authority, and per-warehouse is the right grain anyway.
 
 5 mutation drills, all failing as required — including a matched pair for the warehouse flag,
 since a flag read in only one direction is a flag half-tested.
+
+### Step 4.5 — Lots, serials, and expiry ✅
+
+Tables and columns for every install; the CONCEPT behind feature flags, so a furniture shop
+never meets it. FEFO picking for lots (distinct from FIFO cost layers), expiry checked at issue
+rather than receipt, unusable batches skipped rather than refused, and the tracking rule enforced
+in both directions. A serial is an identity, not a quantity, and keeps its row after sale for the
+warranty claim.
+
+`nilerr` caught a real defect for the second time in this codebase: the tracking port's first
+draft would have let a database fault silently downgrade a lot-tracked product to untracked.
+
+7 mutation drills. One was a bad MUTATION (the sort still ran), and two found tests that could
+not distinguish a schema guarantee from the service check masking it — the fourth occurrence of
+Phase 3's rule, recognised and fixed before the drill finished.

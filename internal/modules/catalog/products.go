@@ -494,3 +494,22 @@ func (s *Service) MarkVariantHistory(ctx context.Context, variantID id.ID) error
 		return s.repos.MarkVariantHistory(txCtx, variantID)
 	})
 }
+
+// ProductByID finds one product by identity.
+//
+// Exists for the composition root's inventory port: a stock movement holds a product id and
+// needs to know how finely that product is tracked. Looking it up by CODE would mean the caller
+// carrying a code it does not have.
+func (s *Service) ProductByID(
+	ctx context.Context, productID id.ID,
+) (domain.Product, error) {
+	products, err := s.repos.ProductsByIDs(ctx, productID)
+	if err != nil {
+		return domain.Product{}, err
+	}
+	if len(products) == 0 {
+		return domain.Product{}, errs.NotFound(CodeUnknownProduct,
+			"there is no product with that identity").WithParam("id", string(productID))
+	}
+	return products[0], nil
+}

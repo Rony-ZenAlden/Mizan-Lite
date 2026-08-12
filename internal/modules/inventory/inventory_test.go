@@ -18,6 +18,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	"github.com/mizan-erp/mizan/internal/modules/inventory/domain"
 	"github.com/mizan-erp/mizan/internal/modules/org"
+	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
 	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/config"
@@ -60,6 +61,8 @@ func newFixture(t *testing.T) fixture {
 		profile.NewModule(nil).Migrations(),
 		// Identity too: a movement records who made it, so stock_movements keys users.
 		identity.NewModule(nil).Migrations(),
+		// Partner too: a lot names the supplier it came from, for a recall.
+		partner.NewModule(nil).Migrations(),
 		accounting.NewModule(nil).Migrations(),
 		tax.NewModule(nil).Migrations(),
 		catalog.NewModule(nil).Migrations(),
@@ -129,6 +132,25 @@ func newFixture(t *testing.T) fixture {
 		companyID: provisioned.CompanyID, warehouseID: provisioned.WarehouseID, ctx: ctx,
 		product: product, variant: variant,
 	}
+}
+
+// secondVariant adds another variant of the same product, for the tests that must distinguish
+// "unique per variant" from "unique per company".
+func (f fixture) secondVariant(t *testing.T) id.ID {
+	t.Helper()
+	identifier, err := id.New()
+	if err != nil {
+		t.Fatalf("id.New: %v", err)
+	}
+	if _, err = f.store.Writer(f.ctx).ExecContext(f.ctx, `
+		INSERT INTO product_variants (
+			id, product_id, sku, is_default, combination, has_history, is_active,
+			row_version, created_at, updated_at
+		) VALUES (?, ?, 'WIDGET-2', 0, 'SIZE:L', 0, 1, 1, '2026-01-01', '2026-01-01')`,
+		string(identifier), string(f.product.ID)); err != nil {
+		t.Fatalf("creating a second variant: %v", err)
+	}
+	return identifier
 }
 
 // move records a movement with the fixture's product and warehouse.

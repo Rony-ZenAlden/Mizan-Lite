@@ -440,3 +440,73 @@ comments that name the phase.
 
 Drills 22 and 23 are deliberately a pair: a flag read in only one direction is a flag half-tested,
 and the default being `false` means a single test could pass while the read did nothing at all.
+
+### Step 4.5 — Lots, serials, and expiry
+
+**Delivered.** `0021_lots_serials.sql` (`stock_lots`, `stock_lot_levels`, `stock_serials`, and
+`lot_id`/`serial_id` on movements), the tracking domain, the repositories, the service methods,
+two feature flags, and a `Products` port satisfied by catalog in the composition root.
+
+**D1 — FEFO for lots, FIFO for cost layers, and they are not the same ordering.** Cost layers are
+consumed in *receipt* order (§D.2); physical lots in *expiry* order. Conflating them is how a
+wholesaler ships the batch that expires next week while holding one that expires next year, and
+then writes the second one off. Lots with no expiry sort **last** — a batch that never expires can
+wait.
+
+**D2 — expiry is checked at ISSUE, not at receipt.** A batch expiring in a month is perfectly good
+today, and refusing to receive it would stop a delivery for nothing. What must not happen is
+shipping it after the date. A lot expiring *today* is still good today — off by one here throws
+away a day's stock, every day.
+
+**D3 — an unusable lot is SKIPPED, not refused.** The caller asked for a quantity, not for a
+particular batch; skipping and taking from the next is what a picker does. When the usable lots
+cannot cover the request, the shortfall names what is **usable** — "you have 3 of the 10 you
+asked for" is actionable, "lot 47 is expired" is not.
+
+**D4 — the tracking rule runs in BOTH directions.** A lot-tracked product moving without a lot is
+the obvious failure. The reverse is the one that gets forgotten: a movement carrying a lot for a
+product that is *not* lot-tracked has recorded something nothing reads, while implying
+traceability that does not exist. A furniture shop must never see the concept, so its data must
+never carry it.
+
+**D5 — a serial is an IDENTITY, not a quantity.** A serialised movement moves exactly one unit;
+two of them is two movements. A sold serial keeps its row, because the warranty claim two years
+later needs to find it.
+
+**D6 — `Products` is a port, not an import of catalog.** Inventory needs one fact — how finely a
+product is tracked — and §10.3 says a module reaches another only through its contract package.
+The port is two lines to fake in a test and is satisfied from catalog in the composition root.
+
+**`nilerr` earned its keep for the second time.** The port's first draft returned "quantity" for
+*any* error, and the linter caught it — as it caught Phase 2's tax repository reading a database
+fault as "this company charges no tax". The failure prevented here: a transient database error
+would report a lot-tracked product as quantity-tracked, and the movement would be accepted
+**without a lot** — the batch becoming untraceable at exactly the moment traceability was being
+recorded. A product that does not *exist* still reads as `quantity` (the FK is about to fail with
+a clearer message); anything else propagates.
+
+**Mutation drills — 7 run, all now fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 24 | The FEFO sort removed | **Passed at first — the mutation was wrong.** See below. |
+| 25 | A lot with no expiry sorts first | `TestALotWithNoExpirySortsLast` fails |
+| 26 | Expired lots picked anyway | 4 tests fail |
+| 27 | A lot expiring today treated as expired | `TestALotIsGoodOnItsExpiryDate` fails |
+| 28 | The untracked direction unchecked | Domain and service tests fail |
+| 29 | Lot-number index weakened | **Passed at first — the test was wrong.** |
+| 30 | Serials unique per variant, not per company | **Passed at first — the test was wrong.** |
+
+**Drill 24 was a bad mutation, not a bad test.** Inserting a `return false` comparator *before*
+the real `SliceStable` call left the real one running afterwards, so nothing changed. Replacing
+the comparator's body made it fail two domain tests immediately. Worth recording because it is a
+distinct failure mode from the others: **a drill that passes may mean the mutation missed**, and
+checking that the change actually took effect is the first thing to do — as 3.1 also learned when
+a patch silently failed to apply.
+
+**Drills 29 and 30 are the Phase 3 lesson, fourth occurrence.** `CreateLot` looks up the number
+and refuses a duplicate before the index is consulted, so weakening the index changed nothing a
+test could see. And the serial test used one variant, so it could not tell `(company_id, …)` from
+`(variant_id, …)`. Both now have tests that can: one writes straight to the table, the other uses
+**two variants**. The rule holds — *a test must name the mechanism it is about* — and it is now
+cheap to apply, because I recognised the shape before the drill finished running.

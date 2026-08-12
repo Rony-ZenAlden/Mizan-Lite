@@ -4,8 +4,11 @@ import (
 	"context"
 
 	"github.com/mizan-erp/mizan/internal/api/appctx"
+	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
+	"github.com/mizan-erp/mizan/internal/modules/catalog"
+	catalogdomain "github.com/mizan-erp/mizan/internal/modules/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
 )
@@ -74,4 +77,44 @@ func (inventoryActors) Actor(ctx context.Context) (inventory.Actor, bool) {
 		return inventory.Actor{}, false
 	}
 	return inventory.Actor{UserID: a.UserID, BranchID: a.BranchID}, true
+}
+
+// inventoryProducts satisfies inventory's Products port from the catalog service.
+//
+// The composition root is where a module's narrow port meets the module that can answer it —
+// which is what keeps inventory from importing catalog and breaking module isolation (§10.3).
+type inventoryProducts struct{ catalog *catalog.Service }
+
+var _ inventory.Products = inventoryProducts{}
+
+// TrackingOf reports how finely a product is tracked.
+//
+// # A missing product and a broken database are NOT the same answer
+//
+// The first draft returned "quantity" for any error at all, and golangci-lint's `nilerr` caught
+// it — the second time that rule has found a real defect in this codebase, after Phase 2's tax
+// repository read a database fault as "this company charges no tax".
+//
+// The failure it prevents here: a transient database error would report a lot-tracked product as
+// quantity-tracked, and the movement would then be accepted WITHOUT a lot. The batch becomes
+// untraceable, silently, at exactly the moment traceability was being recorded — and nothing in
+// the trail says why.
+//
+// So a product that does not EXIST reads as `quantity`, which is defensible: the movement is
+// about to fail on its foreign key with a message naming the product, and that is clearer than a
+// tracking question failing first. Any other error propagates and stops the movement.
+func (p inventoryProducts) TrackingOf(
+	ctx context.Context, productID id.ID,
+) (inventory.Tracking, error) {
+	if p.catalog == nil {
+		return inventory.Tracking(catalogdomain.TrackQuantity), nil
+	}
+	product, err := p.catalog.ProductByID(ctx, productID)
+	if err != nil {
+		if errs.CategoryOf(err) == errs.CategoryNotFound {
+			return inventory.Tracking(catalogdomain.TrackQuantity), nil
+		}
+		return "", err
+	}
+	return inventory.Tracking(product.Tracking), nil
 }

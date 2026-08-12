@@ -339,7 +339,8 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// setting rather than a rewrite (§D.1).
 	app.Inventory = inventory.NewService(db, inventory.Options{
 		Clock: opts.Clock, Bus: app.Bus, Settings: settings,
-		Actors: inventoryActors{}, Logger: opts.Logger,
+		Actors: inventoryActors{}, Products: inventoryProducts{catalog: app.Catalog},
+		Logger: opts.Logger,
 	})
 	inventoryModule := inventory.NewModule(app.Inventory)
 

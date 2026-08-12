@@ -50,6 +50,13 @@ func nullableID(v id.ID) any {
 	return string(v)
 }
 
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func text(v any) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -444,4 +451,183 @@ func (r *Repos) WarehouseAllowsNegative(
 		return false, r.wrap(err, "reading a warehouse's negative-stock policy")
 	}
 	return allows == 1, nil
+}
+
+// ── lots and serials ────────────────────────────────────────────────────────────
+
+// InsertLot records a batch.
+func (r *Repos) InsertLot(ctx context.Context, companyID id.ID, l domain.Lot) error {
+	now := r.now()
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		INSERT INTO stock_lots (
+			id, company_id, variant_id, lot_number, expires_on, manufactured_on,
+			supplier_id, is_quarantined, is_active, row_version, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		string(l.ID), string(companyID), string(l.VariantID), l.Number,
+		nullable(l.ExpiresOn), nullable(l.ManufacturedOn), nullableID(l.SupplierID),
+		boolToInt(l.IsQuarantined), boolToInt(l.IsActive), now, now)
+	if err != nil {
+		return r.wrap(err, "recording a lot")
+	}
+	return nil
+}
+
+// LotByNumber finds a batch by the number printed on the box.
+func (r *Repos) LotByNumber(
+	ctx context.Context, variantID id.ID, number string,
+) (domain.Lot, bool, error) {
+	var (
+		l                       domain.Lot
+		expires, made, supplier any
+		quarantined, active     int
+	)
+	err := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT id, variant_id, lot_number, expires_on, manufactured_on, supplier_id,
+		       is_quarantined, is_active
+		FROM stock_lots WHERE variant_id = ? AND lot_number = ?`,
+		string(variantID), number).
+		Scan(&l.ID, &l.VariantID, &l.Number, &expires, &made, &supplier,
+			&quarantined, &active)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Lot{}, false, nil
+	}
+	if err != nil {
+		return domain.Lot{}, false, r.wrap(err, "reading a lot")
+	}
+	l.ExpiresOn = text(expires)
+	l.ManufacturedOn = text(made)
+	l.SupplierID = id.ID(text(supplier))
+	l.IsQuarantined = quarantined == 1
+	l.IsActive = active == 1
+	return l, true, nil
+}
+
+// LotStock lists a variant's lots in a warehouse, with what is left of each.
+//
+// Ordered by expiry so that a caller which forgets to sort still picks sensibly — but the FEFO
+// decision belongs to the domain's Pick, which sorts again. Two orderings sounds redundant; it
+// is not. This one is an index-friendly default for the query, and that one is the RULE, tested
+// against a table. If the query's order were the only one, the rule would be untestable without
+// a database.
+func (r *Repos) LotStock(
+	ctx context.Context, variantID, warehouseID id.ID,
+) ([]domain.LotStock, error) {
+	rows, err := r.db.Reader(ctx).QueryContext(ctx, `
+		SELECT l.id, l.variant_id, l.lot_number, l.expires_on, l.manufactured_on,
+		       l.supplier_id, l.is_quarantined, l.is_active, ll.qty_on_hand_micro
+		FROM stock_lot_levels ll
+		JOIN stock_lots l ON l.id = ll.lot_id
+		WHERE ll.variant_id = ? AND ll.warehouse_id = ? AND ll.qty_on_hand_micro > 0
+		ORDER BY l.expires_on IS NULL, l.expires_on, l.created_at`,
+		string(variantID), string(warehouseID))
+	if err != nil {
+		return nil, r.wrap(err, "listing lot stock")
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]domain.LotStock, 0, 8)
+	for rows.Next() {
+		var (
+			entry                   domain.LotStock
+			expires, made, supplier any
+			quarantined, active     int
+		)
+		if err = rows.Scan(&entry.Lot.ID, &entry.Lot.VariantID, &entry.Lot.Number,
+			&expires, &made, &supplier, &quarantined, &active,
+			&entry.QuantityMicro); err != nil {
+			return nil, r.wrap(err, "reading lot stock")
+		}
+		entry.Lot.ExpiresOn = text(expires)
+		entry.Lot.ManufacturedOn = text(made)
+		entry.Lot.SupplierID = id.ID(text(supplier))
+		entry.Lot.IsQuarantined = quarantined == 1
+		entry.Lot.IsActive = active == 1
+		out = append(out, entry)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, r.wrap(err, "listing lot stock")
+	}
+	return out, nil
+}
+
+// AdjustLotLevel folds a movement into the lot-grain projection.
+func (r *Repos) AdjustLotLevel(
+	ctx context.Context, levelID, companyID, warehouseID, variantID, lotID id.ID, delta int64,
+) error {
+	now := r.now()
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		INSERT INTO stock_lot_levels (
+			id, company_id, warehouse_id, variant_id, lot_id, qty_on_hand_micro,
+			row_version, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+		ON CONFLICT (lot_id, warehouse_id) DO UPDATE SET
+			qty_on_hand_micro = stock_lot_levels.qty_on_hand_micro + excluded.qty_on_hand_micro,
+			row_version = stock_lot_levels.row_version + 1,
+			updated_at = excluded.updated_at`,
+		string(levelID), string(companyID), string(warehouseID), string(variantID),
+		string(lotID), delta, now, now)
+	if err != nil {
+		return r.wrap(err, "updating a lot's level")
+	}
+	return nil
+}
+
+// InsertSerial records one physical unit.
+func (r *Repos) InsertSerial(ctx context.Context, companyID id.ID, s domain.Serial) error {
+	now := r.now()
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		INSERT INTO stock_serials (
+			id, company_id, variant_id, serial_number, lot_id, warehouse_id, status,
+			partner_id, row_version, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		string(s.ID), string(companyID), string(s.VariantID), s.Number,
+		nullableID(s.LotID), nullableID(s.WarehouseID), s.Status,
+		nullableID(s.PartnerID), now, now)
+	if err != nil {
+		return r.wrap(err, "recording a serial")
+	}
+	return nil
+}
+
+// SerialByNumber finds one physical unit.
+func (r *Repos) SerialByNumber(
+	ctx context.Context, companyID id.ID, number string,
+) (domain.Serial, bool, error) {
+	var (
+		s                       domain.Serial
+		lot, warehouse, partner any
+	)
+	err := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT id, variant_id, serial_number, lot_id, warehouse_id, status, partner_id
+		FROM stock_serials WHERE company_id = ? AND serial_number = ?`,
+		string(companyID), number).
+		Scan(&s.ID, &s.VariantID, &s.Number, &lot, &warehouse, &s.Status, &partner)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Serial{}, false, nil
+	}
+	if err != nil {
+		return domain.Serial{}, false, r.wrap(err, "reading a serial")
+	}
+	s.LotID = id.ID(text(lot))
+	s.WarehouseID = id.ID(text(warehouse))
+	s.PartnerID = id.ID(text(partner))
+	return s, true, nil
+}
+
+// SetSerialStatus moves a serial's state and location.
+//
+// The row is never deleted: a serial that has been sold must still be findable for the warranty
+// claim two years later, and a deleted row cannot be found.
+func (r *Repos) SetSerialStatus(
+	ctx context.Context, serialID id.ID, status string, warehouseID, partnerID id.ID,
+) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		UPDATE stock_serials SET status = ?, warehouse_id = ?, partner_id = ?,
+			row_version = row_version + 1, updated_at = ?
+		WHERE id = ?`,
+		status, nullableID(warehouseID), nullableID(partnerID), r.now(), string(serialID))
+	if err != nil {
+		return r.wrap(err, "changing a serial's status")
+	}
+	return nil
 }

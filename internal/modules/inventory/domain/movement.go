@@ -111,6 +111,11 @@ type Movement struct {
 	// SourceMovementID is the issue a return reverses (§D.3).
 	SourceMovementID id.ID
 
+	// LotID and SerialID are set when the product's tracking mode demands them, and must be
+	// empty otherwise — see RequireTracking, which enforces both directions.
+	LotID    id.ID
+	SerialID id.ID
+
 	DocumentType   string
 	DocumentID     id.ID
 	DocumentLineID id.ID

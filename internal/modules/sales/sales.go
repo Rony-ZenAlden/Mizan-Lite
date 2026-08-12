@@ -96,6 +96,10 @@ type Options struct {
 	Bus     event.Publisher
 	Actors  ActorResolver
 	Catalog Catalog
+	Pricing Pricing
+	Tax     Tax
+	Stock   Stock
+	Credit  Credit
 	Logger  *slog.Logger
 }
 
@@ -107,6 +111,10 @@ type Service struct {
 	bus     event.Publisher
 	actors  ActorResolver
 	catalog Catalog
+	pricing Pricing
+	tax     Tax
+	stock   Stock
+	credit  Credit
 	logger  *slog.Logger
 }
 
@@ -117,7 +125,9 @@ func NewService(db Database, opts Options) *Service {
 	}
 	return &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock,
-		bus: opts.Bus, actors: opts.Actors, catalog: opts.Catalog, logger: opts.Logger,
+		bus: opts.Bus, actors: opts.Actors, catalog: opts.Catalog,
+		pricing: opts.Pricing, tax: opts.Tax, stock: opts.Stock, credit: opts.Credit,
+		logger: opts.Logger,
 	}
 }
 

@@ -424,3 +424,21 @@ func (r *Repos) Contacts(ctx context.Context, partnerID id.ID) ([]domain.Contact
 	}
 	return out, nil
 }
+
+// PartnerByID finds one partner by identity.
+func (r *Repos) PartnerByID(
+	ctx context.Context, companyID, partnerID id.ID,
+) (domain.Partner, bool, error) {
+	row := r.db.Reader(ctx).QueryRowContext(ctx,
+		`SELECT `+partnerColumns+` FROM partners WHERE company_id = ? AND id = ?`,
+		string(companyID), string(partnerID))
+
+	partner, err := scanPartner(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Partner{}, false, nil
+	}
+	if err != nil {
+		return domain.Partner{}, false, r.wrap(err, "reading a partner")
+	}
+	return partner, true, nil
+}

@@ -259,6 +259,7 @@
   "sales.no_series": "That number series cannot issue a number.",
   "sales.not_draft": "That document is no longer a draft.",
   "sales.number_too_long": "That number series produces numbers too long to store.",
+  "sales.port_missing": "Sales is not fully configured and cannot post documents.",
   "sales.publisher_missing": "Sales could not be started because the event publisher is missing.",
   "sales.quotation_moves_nothing": "A quotation moves no stock and needs no warehouse.",
   "sales.storage": "The sales data could not be read or saved.",

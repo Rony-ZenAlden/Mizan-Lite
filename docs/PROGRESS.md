@@ -1112,3 +1112,16 @@ sold. Dual quantity, with the conversion done inside catalog, which owns units: 
 7 drills. Two passed because posting does not exist yet, so nothing could produce a posted
 document through the service and the draft/posted CHECK had nothing exercising it. Two tests now
 write straight to the table — the fifth occurrence of the Phase 3 rule.
+
+### Step 5.3 — Posting ✅
+
+One transaction doing eight things, with the number allocated LAST so a failure anywhere earlier
+consumes none. Four narrow ports, each a few lines to fake — which is what makes the most complex
+transaction in the system testable without standing up five modules.
+
+**Phase 2's `sale_revenue` and `sale_cost` rules fired for the first time**, three phases after
+they were seeded. Phase 3's price resolution and Phase 4's costing port both got their first
+caller. Nothing had to be reshaped to fit.
+
+7 drills, 6 failing as required. The seventh is deferred to 5.4 with its reason recorded: credit
+notes do not exist yet, so the branch it targets has no caller.

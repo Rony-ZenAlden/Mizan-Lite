@@ -337,3 +337,60 @@ func (r *Repos) SetDocumentStatus(
 	}
 	return nil
 }
+
+// CompanyOf reports which company a document belongs to.
+//
+// Not carried on the domain Document: it is a fact about where the row lives rather than about
+// the sale, and every caller that needs it is already holding the document's id.
+func (r *Repos) CompanyOf(ctx context.Context, documentID id.ID) (id.ID, error) {
+	var companyID id.ID
+	err := r.db.Writer(ctx).QueryRowContext(ctx,
+		`SELECT company_id FROM sales_documents WHERE id = ?`, string(documentID)).
+		Scan(&companyID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return id.ID(""), errs.NotFound(domain.CodeInvalidDocument,
+			"there is no sales document with that identity")
+	}
+	if err != nil {
+		return id.ID(""), r.wrap(err, "reading a document's company")
+	}
+	return companyID, nil
+}
+
+// UpdateLineOnPost writes the money a line resolved to.
+//
+// Only the columns posting fills: the snapshot of what things were CALLED was written when the
+// line was added and is not touched here. Two writes of the same fact would be two chances for
+// them to differ.
+func (r *Repos) UpdateLineOnPost(ctx context.Context, l domain.Line) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		UPDATE sales_lines SET
+			unit_price_minor = ?, price_source = ?, price_list_code = ?,
+			tax_rate_micro = ?, tax_code = ?, tax_amount_minor = ?,
+			net_minor = ?, total_minor = ?, cost_micro = ?, movement_id = ?,
+			row_version = row_version + 1, updated_at = ?
+		 WHERE id = ?`,
+		l.UnitPriceMinor, nullable(l.PriceSource), nullable(l.PriceListCode),
+		l.TaxRateMicro, nullable(l.TaxCode), l.TaxAmountMinor,
+		l.NetMinor, l.TotalMinor, l.CostMicro, nullableID(l.MovementID),
+		r.now(), string(l.ID))
+	if err != nil {
+		return r.wrap(err, "writing a posted line")
+	}
+	return nil
+}
+
+// SetDocumentTotals writes what a document came to.
+func (r *Repos) SetDocumentTotals(ctx context.Context, d domain.Document) error {
+	_, err := r.db.Writer(ctx).ExecContext(ctx, `
+		UPDATE sales_documents SET
+			net_minor = ?, tax_minor = ?, discount_minor = ?, total_minor = ?, cost_minor = ?,
+			row_version = row_version + 1, updated_at = ?
+		 WHERE id = ?`,
+		d.NetMinor, d.TaxMinor, d.DiscountMinor, d.TotalMinor, d.CostMinor,
+		r.now(), string(d.ID))
+	if err != nil {
+		return r.wrap(err, "writing a document's totals")
+	}
+	return nil
+}

@@ -353,7 +353,14 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// caller. Numbers are allocated at posting, inside the document's own transaction.
 	app.Sales = sales.NewService(db, sales.Options{
 		Clock: opts.Clock, Bus: app.Bus, Actors: salesActors{},
-		Catalog: salesCatalog{catalog: app.Catalog}, Logger: opts.Logger,
+		Catalog: salesCatalog{catalog: app.Catalog},
+		// The four ports posting needs. Each adapter is a few lines: the ports sales declared
+		// are narrower than the services behind them, and this is where the two shapes meet.
+		Pricing: salesPricing{pricing: app.Pricing},
+		Tax:     salesTax{tax: app.Tax, currency: app.Currency},
+		Stock:   salesStock{inventory: app.Inventory},
+		Credit:  salesCredit{partner: app.Partner},
+		Logger:  opts.Logger,
 	})
 	salesModule := sales.NewModule(app.Sales)
 

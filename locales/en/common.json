@@ -382,6 +382,7 @@
   "sales.document.line_added": "Line added",
   "sales.document.line_removed": "Line removed",
   "sales.document.post": "Post sales documents",
+  "sales.document.posted": "Sales document posted",
   "sales.document.resumed": "Sale resumed",
   "sales.document.view": "View sales documents",
   "sales.series": "Number series",

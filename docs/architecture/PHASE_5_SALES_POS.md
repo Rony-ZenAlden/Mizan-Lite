@@ -349,3 +349,69 @@ exercising it. Two tests now write straight to the table.
 Worth noting what those tests assert, because it is more than "a constraint exists": a **draft
 holding a number** means somebody consumed one and abandoned it, and a **posted document without
 one** means a posting skipped allocation entirely. Both halves of §9.4, made unrepresentable.
+
+### Step 5.3 — Posting
+
+**Delivered.** Four narrow ports (`Pricing`, `Tax`, `Stock`, `Credit`), their composition-root
+adapters, and `Post` — one transaction doing eight things.
+
+**This is the step the phase was built for, and every earlier seam held.** Phase 2's
+`sale_revenue` and `sale_cost` rules, seeded three phases ago and never fired, now write a journal
+entry from a sale. Phase 3's price resolution and Phase 4's costing port both got their first
+caller. Nothing had to be reshaped to fit.
+
+**D1 — the order of the eight steps is not arbitrary.**
+
+```
+1 refuse anything that is not a postable draft
+2 resolve each line's price, and record which list answered
+3 compute each line's tax, and record the RATE
+4 issue the stock, and take back what it cost us
+5 total the document from its lines
+6 check the credit limit against the total
+7 allocate the number          ← LAST of the writes
+8 publish the event the posting rules turn into an entry
+```
+
+Price before tax, because tax is computed on the net. Stock before totals, because the cost comes
+back from the movement. Credit after totals, because the limit is checked against what the
+customer will actually owe. **The number last**, so a failure anywhere earlier consumes none —
+§9.4's rule expressed as an ordering rather than as a comment.
+
+**D2 — the ports are narrower than the services behind them.** `Pricing` here is one method;
+`pricing.Service` has eight. A port mirroring the service would make every future change there a
+change here. It also makes posting — the most complex transaction in the system — testable
+against fakes of a few lines each, which is why its failure modes are reachable without standing
+up five modules.
+
+**D3 — the cost comes back from the stock movement.** Only inventory knows it: the costing port
+(4.2) decides whether the answer is an average or a layer, and sales must not learn which. Faking
+inventory in these tests would have made the most important number in the transaction a constant
+the test chose, so the real service is wired.
+
+**D4 — a credit note is a separate ACTION, not an invoice with negative amounts.** The posting
+engine refuses negatives — a negative would flip a line's side silently, and "debit XOR credit,
+both non-negative" is what makes an entry checkable.
+
+**Mutation drills — 7 run, 6 fail as required.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 14 | The number is allocated first | 2 tests fail |
+| 15 | The credit limit is never checked | `…RollsBackTheStockAndTheNumber` fails |
+| 16 | The cost is not taken from the movement | 3 tests fail |
+| 17 | The price reason is not recorded | `…WhichPriceListAnswered…` fails |
+| 18 | The journal entry is never published | 4 tests fail |
+| 19 | A quotation moves stock | `…MovesNoStock` fails |
+| 20 | A credit note publishes the invoice action | **Passed — deferred to 5.4.** |
+
+**Drill 20 passed for a structural reason, and it is recorded rather than papered over.** Credit
+notes are 5.4's step; nothing posts one yet, so the branch choosing `ActionCreditNotePosted` has
+no caller and no test can distinguish it. Writing a half-test now to satisfy the drill would be
+pinning a mechanism whose real use does not exist. **5.4 must close it**, and the DoD review will
+check that it did.
+
+**One test fixture was wrong, and the code was right.** `receive` first put stock on the shelf
+with no document, and inventory correctly posted it as a stock increase (Phase 4.3's rule) — so a
+test expecting inventory at −120 found 480, because the receipt had debited 600 first. The
+fixture now receives against a purchase bill, which is both realistic and what isolates the sale.

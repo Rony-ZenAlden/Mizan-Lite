@@ -415,3 +415,21 @@ func (s *Service) Contacts(ctx context.Context, partnerID id.ID) ([]domain.Conta
 
 // upper normalises a code the way every code in this module is stored.
 func upper(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
+
+// PartnerByID finds one partner by identity.
+//
+// Exists for the composition root's sales port: a posting holds a partner id and needs to check a
+// credit limit. Looking it up by CODE would mean the caller carrying a code it does not have.
+func (s *Service) PartnerByID(
+	ctx context.Context, companyID, partnerID id.ID,
+) (domain.Partner, error) {
+	found, ok, err := s.repos.PartnerByID(ctx, companyID, partnerID)
+	if err != nil {
+		return domain.Partner{}, err
+	}
+	if !ok {
+		return domain.Partner{}, errs.NotFound(CodeUnknownPartner,
+			"there is no partner with that identity").WithParam("id", string(partnerID))
+	}
+	return found, nil
+}

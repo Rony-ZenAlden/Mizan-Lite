@@ -16,6 +16,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
+	inventorydomain "github.com/mizan-erp/mizan/internal/modules/inventory/domain"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
@@ -39,6 +40,8 @@ type fixture struct {
 
 	// Populated by newSellingFixture, which adds a catalog.
 	catalog      *catalog.Service
+	inventory    *inventory.Service
+	partnerID    id.ID
 	variant      catalogdomain.Variant
 	heavyVariant catalogdomain.Variant
 	kilogramID   id.ID
@@ -357,4 +360,137 @@ func TestCreatingASeriesIsAudited(t *testing.T) {
 	if len(entries) != 1 || entries[0].Action != sales.ActionSeriesCreated {
 		t.Errorf("entries = %+v, want one series-created", entries)
 	}
+}
+
+// newPostingFixture wires everything posting needs: a catalog, real inventory, a number series,
+// and fakes for pricing and tax.
+//
+// Inventory is REAL because the cost that reaches a line must come from the costing port — faking
+// it would make the most important number in the transaction a constant this test chose.
+func newPostingFixture(t *testing.T, pricing sales.Pricing, taxes sales.Tax) fixture {
+	t.Helper()
+	f := newSellingFixture(t)
+
+	inventorySvc := inventory.NewService(f.store, inventory.Options{
+		Clock: clock.System(), Bus: f.bus,
+	})
+	f.inventory = inventorySvc
+
+	f.svc = sales.NewService(f.store, sales.Options{
+		Clock: clock.System(), Bus: f.bus,
+		Catalog: realCatalog{svc: f.catalog},
+		Pricing: pricing, Tax: taxes,
+		Stock:  realStock{svc: inventorySvc},
+		Credit: noCredit{},
+	})
+	f.series(t, sales.SeriesInvoice, "INV-", 6)
+	f.series(t, sales.SeriesCreditNote, "CN-", 6)
+	f.series(t, sales.SeriesQuotation, "QT-", 6)
+
+	// A named customer, so the credit check has somebody to check. A walk-in has no record and
+	// therefore no limit — which is most of a shop's trade and must not require one.
+	partnerID, err := id.New()
+	if err != nil {
+		t.Fatalf("id.New: %v", err)
+	}
+	if _, err = f.store.Writer(f.ctx).ExecContext(f.ctx, `
+		INSERT INTO partners (
+			id, company_id, code, name, is_customer, is_supplier, partner_type,
+			payment_terms_days, credit_limit_minor, is_active, has_history,
+			row_version, created_at, updated_at
+		) VALUES (?, ?, 'SHOP', 'Corner Shop', 1, 0, 'company', 30, 0, 1, 0, 1,
+		          '2026-01-01', '2026-01-01')`,
+		string(partnerID), string(f.companyID)); err != nil {
+		t.Fatalf("creating a customer: %v", err)
+	}
+	f.partnerID = partnerID
+	return f
+}
+
+// withCredit rebuilds the service with a different credit check.
+func (f fixture) withCredit(t *testing.T, credit sales.Credit) *sales.Service {
+	t.Helper()
+	return sales.NewService(f.store, sales.Options{
+		Clock: clock.System(), Bus: f.bus,
+		Catalog: realCatalog{svc: f.catalog},
+		Pricing: fixedPricing{priceMinor: 100}, Tax: fixedTax{rateMicro: 0},
+		Stock: realStock{svc: f.inventory}, Credit: credit,
+	})
+}
+
+// receive puts stock on the shelf, so a sale has something to sell.
+//
+// Against a purchase BILL, deliberately. Phase 4.3's rule is that a movement with a document is
+// posted by that document's module — so this receipt writes no journal entry of its own, and the
+// balances a sale test reads contain only the sale.
+//
+// The first version of this helper received with no document, and inventory correctly posted it
+// as a stock increase: a test expecting inventory at −120 found 480, because the receipt had
+// debited 600 first. The rule was right; the fixture was measuring two things at once.
+func (f fixture) receive(t *testing.T, qty, unitCost int64) {
+	t.Helper()
+	if _, err := f.inventory.Move(f.ctx, inventory.MoveInput{
+		CompanyID: f.companyID, WarehouseID: f.warehouseID,
+		ProductID: f.variant.ProductID, VariantID: f.variant.ID,
+		Type: inventorydomain.Receipt, QuantityMicro: qty, UnitCostMicro: unitCost,
+		DocumentType: "purchasing.bill", DocumentID: f.variant.ID,
+	}); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+}
+
+// booked wires accounting onto the same bus, with the shipped chart and posting rules applied —
+// so a sale travels the real path: publish → rule → journal entry → trial balance.
+func (f fixture) booked(t *testing.T) *accounting.Service {
+	t.Helper()
+
+	svc, err := accounting.NewService(f.store, accounting.Options{
+		Clock: clock.System(), Bus: f.bus,
+	})
+	if err != nil {
+		t.Fatalf("accounting.NewService: %v", err)
+	}
+	if err = accounting.NewModule(svc).Subscribe(f.bus, nil); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	if err = svc.ApplyChart(f.ctx, f.companyID, "generic_trading"); err != nil {
+		t.Fatalf("ApplyChart: %v", err)
+	}
+	if err = svc.ApplyRules(f.ctx, f.companyID, "generic_trading"); err != nil {
+		t.Fatalf("ApplyRules: %v", err)
+	}
+	return svc
+}
+
+// balances reads every account's net movement, keyed by code.
+//
+// Net movement rather than Closing, which is cumulative: adding Closing across periods would
+// count each earlier period once more for every later one. Every account here starts at zero, so
+// total movement is the balance.
+func (f fixture) balances(t *testing.T, books *accounting.Service) map[string]int64 {
+	t.Helper()
+
+	years, err := books.Years(f.ctx, f.companyID)
+	if err != nil {
+		t.Fatalf("Years: %v", err)
+	}
+	if len(years) == 0 {
+		t.Fatal("the company has no fiscal year")
+	}
+	periods, err := books.Periods(f.ctx, years[0].ID)
+	if err != nil {
+		t.Fatalf("Periods: %v", err)
+	}
+
+	out := map[string]int64{}
+	for _, period := range periods {
+		rows, tbErr := books.TrialBalance(f.ctx, f.companyID, period.ID)
+		if tbErr != nil {
+			t.Fatalf("TrialBalance: %v", tbErr)
+		}
+		for _, row := range rows {
+			out[row.AccountCode] += row.Debit - row.Credit
+		}
+	}
+	return out
 }

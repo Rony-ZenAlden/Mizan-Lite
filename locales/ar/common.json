@@ -382,6 +382,7 @@
   "sales.document.line_added": "تمت إضافة سطر",
   "sales.document.line_removed": "تمت إزالة سطر",
   "sales.document.post": "ترحيل مستندات المبيعات",
+  "sales.document.posted": "تم ترحيل مستند مبيعات",
   "sales.document.resumed": "تم استئناف البيع",
   "sales.document.view": "عرض مستندات المبيعات",
   "sales.series": "سلسلة الترقيم",

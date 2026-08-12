@@ -1,0 +1,54 @@
+{
+  "code": "receipt",
+  "media": "receipt",
+  "blocks": [
+    { "kind": "text", "text": "{company}", "align": "center", "bold": true, "large": true },
+    { "kind": "text", "text": "{branch}", "align": "center", "omitWhenEmpty": true },
+    { "kind": "text", "text": "{address}", "align": "center", "omitWhenEmpty": true },
+    { "kind": "text", "text": "{phone}", "align": "center", "omitWhenEmpty": true },
+
+    { "kind": "pair", "text": "{taxNumberLabel}", "value": "{taxNumber}",
+      "omitWhenEmpty": true },
+
+    { "kind": "rule" },
+
+    { "kind": "pair", "text": "{numberLabel}", "value": "{number}", "bold": true },
+    { "kind": "pair", "text": "{dateLabel}", "value": "{date}" },
+    { "kind": "pair", "text": "{customerLabel}", "value": "{customer}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{servedByLabel}", "value": "{servedBy}", "omitWhenEmpty": true },
+
+    { "kind": "rule" },
+
+    {
+      "kind": "rows",
+      "columns": [
+        { "field": "item",     "header": "{itemHeader}",  "align": "start", "width": 46 },
+        { "field": "quantity", "header": "{qtyHeader}",   "align": "end",   "width": 14 },
+        { "field": "price",    "header": "{priceHeader}", "align": "end",   "width": 18 },
+        { "field": "total",    "header": "{totalHeader}", "align": "end",   "width": 22 }
+      ]
+    },
+
+    { "kind": "rule" },
+
+    { "kind": "pair", "text": "{netLabel}", "value": "{net}" },
+    { "kind": "pair", "text": "{discountLabel}", "value": "{discount}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{taxLabel}", "value": "{tax}" },
+    { "kind": "pair", "text": "{grandTotalLabel}", "value": "{total}", "bold": true,
+      "large": true },
+
+    { "kind": "space", "lines": 1 },
+
+    { "kind": "pair", "text": "{paidLabel}", "value": "{paid}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{changeLabel}", "value": "{change}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{outstandingLabel}", "value": "{outstanding}",
+      "omitWhenEmpty": true },
+
+    { "kind": "rule" },
+
+    { "kind": "barcode", "text": "{number}", "symbology": "barcode", "align": "center",
+      "omitWhenEmpty": true },
+    { "kind": "space", "lines": 1 },
+    { "kind": "text", "text": "{footer}", "align": "center", "omitWhenEmpty": true }
+  ]
+}

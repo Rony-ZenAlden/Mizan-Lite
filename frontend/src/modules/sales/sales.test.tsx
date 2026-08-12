@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/app/session/session";
 import { POSTerminal } from "@/modules/sales/POSTerminal";
 import { InvoicesScreen } from "@/modules/sales/InvoicesScreen";
+import { InvoiceDetail } from "@/modules/sales/InvoiceDetail";
+import { printHTML } from "@/modules/sales/print";
 import { compareMinor, parseMinor, subtractMinor } from "@/modules/accounting/money";
 import { renderApp, SIGNED_IN } from "@/test/appRender";
 import * as wails from "@/lib/wails";
@@ -25,6 +27,7 @@ vi.mock("@/lib/wails", async () => {
     postSale: vi.fn(),
     takePayment: vi.fn(),
     salesDocuments: vi.fn(),
+    printSalesDocument: vi.fn(),
   };
 });
 
@@ -66,7 +69,13 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  // printHTML appends to document.body, which testing-library's cleanup does not own. Left
+  // alone they accumulate across tests and make DOM queries answer for the wrong test.
+  document.querySelectorAll("iframe").forEach((frame) => frame.remove());
+});
 
 // ── the money arithmetic ────────────────────────────────────────────────────────
 //
@@ -319,5 +328,98 @@ describe("the invoice list", () => {
     // is exactly one "Settled" on the screen, so the draft did not quietly become one.
     expect(screen.getByText("Not yet numbered")).toBeInTheDocument();
     expect(screen.getAllByText("Settled")).toHaveLength(1);
+  });
+});
+
+// ── printing ────────────────────────────────────────────────────────────────────
+
+describe("printing", () => {
+  const POSTED = {
+    ...SALE,
+    document: { ...SALE.document, status: "posted", number: "INV-0042" },
+    editable: false,
+  };
+
+  beforeEach(() => {
+    vi.mocked(wails.salesDocument).mockResolvedValue(POSTED);
+    useSessionStore.getState().setSession({
+      ...SIGNED_IN,
+      permissions: [wails.PERMISSIONS.saleView, wails.PERMISSIONS.salePrint],
+    });
+  });
+
+  it("offers no print button on a draft", async () => {
+    // A draft has no number, no tax point, and no agreement behind it. Offering a control that
+    // always refuses teaches people the software is broken.
+    vi.mocked(wails.salesDocument).mockResolvedValue(SALE);
+
+    renderApp(<InvoiceDetail documentId="d1" onBack={() => {}} />);
+
+    expect(await screen.findByText("Bag of cement")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Print" })).not.toBeInTheDocument();
+  });
+
+  it("hides printing from someone who may only view", async () => {
+    // A printed invoice LEAVES THE BUILDING. Looking up what a customer owes and producing a
+    // document on company letterhead are different acts.
+    useSessionStore.getState().setSession({
+      ...SIGNED_IN,
+      permissions: [wails.PERMISSIONS.saleView],
+    });
+
+    renderApp(<InvoiceDetail documentId="d1" onBack={() => {}} />);
+
+    expect(await screen.findByText("INV-0042")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Print" })).not.toBeInTheDocument();
+  });
+
+  it("asks for the paper each template was designed for", async () => {
+    // An 80mm receipt laid out on A4 wastes most of a page; an A4 invoice squeezed onto a roll
+    // is unreadable. The template and the paper are one decision, made here rather than left to
+    // whoever clicks.
+    vi.mocked(wails.printSalesDocument).mockResolvedValue({
+      html: "<!doctype html><html><body>INV-0042</body></html>",
+      number: "INV-0042",
+    });
+
+    const user = userEvent.setup();
+    renderApp(<InvoiceDetail documentId="d1" onBack={() => {}} />);
+
+    await user.click(await screen.findByRole("button", { name: "Print" }));
+    await waitFor(() =>
+      expect(wails.printSalesDocument).toHaveBeenCalledWith("d1", "invoice", "A4"),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Print receipt" }));
+    await waitFor(() =>
+      expect(wails.printSalesDocument).toHaveBeenCalledWith("d1", "receipt", "80mm"),
+    );
+  });
+
+  it("prints from inside the page, and cleans the frame up afterwards", async () => {
+    // A popup is blocked, steals focus, and leaves the operator on a blank tab. At a till with
+    // a queue that is the difference between serving the next customer and hunting for a
+    // window.
+    const printed = vi.fn();
+    vi.spyOn(HTMLIFrameElement.prototype, "contentWindow", "get").mockReturnValue({
+      focus: vi.fn(),
+      print: printed,
+      addEventListener: (_: string, handler: () => void) => handler(),
+    } as unknown as Window);
+
+    const before = new Set(document.querySelectorAll("iframe"));
+    printHTML("<!doctype html><html><body>INV-0042</body></html>");
+
+    // THIS call's frame, not "any iframe on the page". An earlier test in this file prints too,
+    // and jsdom never fires load on a srcdoc frame — so a broad query finds a leftover and the
+    // assertion passes or fails for reasons that have nothing to do with the code.
+    const frame = [...document.querySelectorAll("iframe")].find((each) => !before.has(each));
+    expect(frame).toBeDefined();
+    frame?.dispatchEvent(new Event("load"));
+
+    expect(printed).toHaveBeenCalledTimes(1);
+    // afterprint fired synchronously in the fake, so the frame is already detached. A till left
+    // open for a fortnight must not accumulate one frame per receipt.
+    expect(frame?.isConnected).toBe(false);
   });
 });

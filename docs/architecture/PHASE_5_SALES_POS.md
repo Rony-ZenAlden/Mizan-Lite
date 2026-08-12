@@ -756,3 +756,115 @@ focus, and asserts it comes back.
 appeared before anything knew whether a shift existed. A scanner does not wait to be told the
 screen was provisional — an operator scanning into that window has items on a sale about to be
 replaced. Pending is now handled first and separately, as its own state.
+
+### Step 5.9 — printing
+
+**Delivered.** `internal/platform/printing` (the document model and two renderers), two shipped
+templates as JSON seeds, `Sales.Print`, and the browser print path with golden-file tests.
+
+**This step closes §33.1 open question 3** — "receipt printing targets: thermal ESC/POS (58/80mm),
+A4/A5 documents, or both?"
+
+**The answer is BOTH, and the way to have both without two products is one intermediate.** A
+template and a bag of values resolve to a `Document` of blocks; the DEVICE decides how to realise
+it. A receipt and an A4 invoice of the same sale then cannot disagree, because disagreeing would
+require two templates to drift, not two renderers.
+
+```
+template + data ──▶ Document ──┬──▶ HTML  (browser print: A4, A5, 80mm, 58mm)
+                               └──▶ ESC/POS bytes (straight to a till printer)
+```
+
+**D1 — HTML is the primary path, and Arabic is the reason.** Bidirectional text, contextual
+letter shaping, and line breaking are decades of work sitting inside every browser and inside
+nothing a Go program can reach offline. Wails ships one. `@page` makes the same markup serve A4
+and an 80mm roll.
+
+**D2 — ESC/POS is the fast path, not the fallback,** and it REFUSES non-Latin text rather than
+printing question marks. Text mode selects a single-byte code page; no Arabic one is reliably
+present, and none could express letter shaping — the correct output for Arabic is a raster image.
+A receipt of mojibake looks like a *printer fault*, so somebody reprints it and the second one is
+identical. The check runs over the whole document before a single byte is emitted, because a
+printer that has consumed half a receipt cannot be un-printed.
+
+**D3 — the printing package must never learn what an invoice is.** It knows blocks, fields, rows,
+and alignment; sales supplies the vocabulary. That is what makes a template *reference data*
+(Phase 0's table) — adding a layout for a new country is dropping in a JSON file.
+
+**D4 — `start`/`end`, never `left`/`right`.** On an Arabic receipt "start" is the right-hand edge.
+A template naming a physical side would need rewriting per language, which is the per-locale
+forking §22 exists to prevent.
+
+**D5 — a missing field is an ERROR, not a blank.** A placeholder nobody supplied is a template
+referring to something that does not exist, and the cost of guessing is a receipt with a blank
+where the total should be — handed over with the drawer already open, and not noticed until
+somebody complains. `omitWhenEmpty` is how a template *declares* a field optional, which is
+different from an omission.
+
+**D6 — the numeral system is a SETTING, not a consequence of the language.** §22.5 records that it
+varies by country and by customer; an Arabic invoice from a Gulf exporter usually carries Western
+digits. Inferring it from the locale would be right in Cairo and wrong in Dubai.
+
+**D7 — a draft cannot be printed.** It has no number, no tax point, and no agreement behind it.
+Printing one produces something that looks like an invoice and is not.
+
+**D8 — printing is gated separately from viewing.** A printed invoice leaves the building.
+
+**Mutation drills — 7 run, 0 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 54 | The line prints today's product name | **The reprint test** fails |
+| 55 | A draft can be printed | `…ADraftCannotBePrinted` fails |
+| 56 | Emptiness judged on the label too | `…ZeroOutstandingPrintsNothing` fails |
+| 57 | A missing field prints blank | `…MissingFieldIsRefused` fails |
+| 58 | The till printer accepts Arabic | 3 tests fail |
+| 59 | Large text gets full column count | golden + `…HalfTheColumns` fail |
+| 60 | The width remainder is dropped | `…SharesAreNormalised` fails |
+
+### The test this phase was built for
+
+The phase design said it on day one: *"Reprinting a two-year-old invoice must reproduce it
+byte-identically"*, and *"the test that matters is not 'does the total add up' but 'does this
+invoice still print the same'"*.
+
+`TestAReprintSurvivesEveryChangeToMasterData` posts an invoice, prints it, then goes **behind the
+service** and renames the product, changes its SKU, and changes its unit code — and prints again.
+The bytes must be identical. It also asserts the invoice *did* carry the old name, so it cannot
+pass for the wrong reason.
+
+This is what `product_name`, `variant_sku`, and `uom_code` on the line table have been for since
+5.2. They looked redundant next to `variant_id` until something asked what a reprint should say.
+
+### What the tests found
+
+**`omitWhenEmpty` never fired on any row with a label.** Emptiness was judged over every
+placeholder in a block, and a label always resolves — so an optional row could not be dropped. A
+fully settled receipt would have read "Outstanding 0.00", which anybody scanning it reads as a
+debt. Emptiness is now judged on the **value**; a table is judged on its **rows**, for the same
+reason — headers are furniture.
+
+**Column shares summed to 99, then got re-rounded into characters and summed to 47 of 48.** Two
+roundings, the second undoing the first. `Widths` now allocates against the caller's actual total
+— percentages for HTML, characters for ESC/POS — with the leftover going to the largest
+remainder. Every amount now reaches the paper's edge.
+
+**A fourth name collision.** The block kind `Code` was read as an error code by the i18n coverage
+gate, because every `Code*` identifier in this codebase is one. Renamed `Barcode` — the newcomer
+moves, as in the other three.
+
+### A process failure worth recording
+
+The drill script backed files up as `/tmp/$(basename $f).bak`. Two files in this step are named
+`printing.go`, so the second backup **silently overwrote the first**, and a later restore wrote
+the sales file over the platform one — which was untracked, so git could not recover it. It was
+rewritten from scratch.
+
+This is the second time a drill has damaged the tree (5.5 was the first). Both times the cause was
+a restore path that was not unique to the file. **Backups get a path derived from the full path,
+never the basename.**
+
+A second, smaller one: the drill loop grepped `^\s*--- FAIL`, and BSD grep does not support `\s`.
+Two drills whose only failures were *nested subtests* appeared to produce no output at all — one
+of which read as a passing drill until it was checked directly. A verification harness that
+silently drops evidence is worse than none.

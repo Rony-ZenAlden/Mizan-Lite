@@ -1209,3 +1209,31 @@ collapsed into one.
 
 The tests also found a real defect: the till rendered as sellable during the shift query's pending
 window, so a scan could land on a sale about to be replaced.
+
+### Step 5.9 — printing ✅
+
+Closes §33.1 open question 3. The answer to "thermal, A4, or both" is BOTH, through one
+intermediate: a template and its values resolve to a `Document` of blocks, and the device decides
+how to realise it — HTML for the browser (A4 through 80mm) or ESC/POS bytes for a till printer. A
+receipt and an invoice of the same sale cannot disagree, because that would take two templates
+drifting, not two renderers.
+
+HTML is primary because of Arabic: bidi, letter shaping and line breaking sit inside the browser
+Wails already ships and inside nothing a Go program can reach offline. ESC/POS is the fast path
+and REFUSES non-Latin text rather than printing question marks — mojibake reads as a printer
+fault, so it gets reprinted identically. The platform package never learns what an invoice is,
+which is what makes a template reference data.
+
+**The test this phase was built for now exists.** A posted invoice is printed, the product is
+renamed, its SKU and unit code changed, and it is printed again — the bytes must be identical.
+That is what the snapshot columns on the line table have been for since 5.2.
+
+The tests found two real defects: `omitWhenEmpty` never fired on any row with a label, so a
+settled receipt would have read "Outstanding 0.00"; and column widths were rounded twice, laying
+a 48-column receipt out across 47.
+
+**A drill damaged the tree for the second time.** Backups keyed on `basename` collided between two
+files both named `printing.go`, and the restore wrote one over the other — untracked, so git could
+not help. Backup paths must derive from the full path. A companion failure: BSD grep has no `\s`,
+so drills whose only failures were nested subtests looked like they produced no output, and one
+read as a passing drill until checked directly.

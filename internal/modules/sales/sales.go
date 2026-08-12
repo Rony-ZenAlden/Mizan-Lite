@@ -100,7 +100,9 @@ type Options struct {
 	Tax     Tax
 	Stock   Stock
 	Credit  Credit
-	Logger  *slog.Logger
+	// Messages translates printed labels. Optional.
+	Messages Translator
+	Logger   *slog.Logger
 }
 
 // Service is the sales module's application layer.
@@ -115,7 +117,10 @@ type Service struct {
 	tax     Tax
 	stock   Stock
 	credit  Credit
-	logger  *slog.Logger
+	// messages translates the labels on a printed document. Optional: a service built without
+	// one prints keys, which is visible and harmless, rather than refusing to construct.
+	messages Translator
+	logger   *slog.Logger
 }
 
 // NewService builds the service.
@@ -127,7 +132,8 @@ func NewService(db Database, opts Options) *Service {
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock,
 		bus: opts.Bus, actors: opts.Actors, catalog: opts.Catalog,
 		pricing: opts.Pricing, tax: opts.Tax, stock: opts.Stock, credit: opts.Credit,
-		logger: opts.Logger,
+		messages: opts.Messages,
+		logger:   opts.Logger,
 	}
 }
 
@@ -278,6 +284,7 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermSaleDraft, Description: "permissions.sales.document.draft"},
 		{Code: PermSalePost, Description: "permissions.sales.document.post"},
 		{Code: PermSaleCancel, Description: "permissions.sales.document.cancel"},
+		{Code: PermSalePrint, Description: "permissions.sales.document.print"},
 		{Code: PermSeriesManage, Description: "permissions.sales.series.manage"},
 		{Code: PermShiftOpen, Description: "permissions.pos.shift.open"},
 		{Code: PermShiftClose, Description: "permissions.pos.shift.close"},

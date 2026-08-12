@@ -1,0 +1,50 @@
+{
+  "code": "invoice",
+  "media": "document",
+  "blocks": [
+    { "kind": "text", "text": "{company}", "bold": true, "large": true },
+    { "kind": "text", "text": "{address}", "omitWhenEmpty": true },
+    { "kind": "text", "text": "{phone}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{taxNumberLabel}", "value": "{taxNumber}",
+      "omitWhenEmpty": true },
+
+    { "kind": "space", "lines": 1 },
+    { "kind": "text", "text": "{documentTitle}", "align": "center", "bold": true,
+      "large": true },
+    { "kind": "space", "lines": 1 },
+
+    { "kind": "pair", "text": "{numberLabel}", "value": "{number}", "bold": true },
+    { "kind": "pair", "text": "{dateLabel}", "value": "{date}" },
+    { "kind": "pair", "text": "{customerLabel}", "value": "{customer}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{customerTaxLabel}", "value": "{customerTaxNumber}",
+      "omitWhenEmpty": true },
+
+    { "kind": "space", "lines": 1 },
+
+    {
+      "kind": "rows",
+      "columns": [
+        { "field": "line",     "header": "#",             "align": "start", "width": 5 },
+        { "field": "sku",      "header": "{skuHeader}",   "align": "start", "width": 15 },
+        { "field": "item",     "header": "{itemHeader}",  "align": "start", "width": 32 },
+        { "field": "quantity", "header": "{qtyHeader}",   "align": "end",   "width": 12 },
+        { "field": "price",    "header": "{priceHeader}", "align": "end",   "width": 14 },
+        { "field": "tax",      "header": "{taxHeader}",   "align": "end",   "width": 10 },
+        { "field": "total",    "header": "{totalHeader}", "align": "end",   "width": 12 }
+      ]
+    },
+
+    { "kind": "space", "lines": 1 },
+
+    { "kind": "pair", "text": "{netLabel}", "value": "{net}" },
+    { "kind": "pair", "text": "{discountLabel}", "value": "{discount}", "omitWhenEmpty": true },
+    { "kind": "pair", "text": "{taxLabel}", "value": "{tax}" },
+    { "kind": "rule" },
+    { "kind": "pair", "text": "{grandTotalLabel}", "value": "{total}", "bold": true },
+    { "kind": "pair", "text": "{outstandingLabel}", "value": "{outstanding}",
+      "omitWhenEmpty": true },
+
+    { "kind": "space", "lines": 2 },
+    { "kind": "text", "text": "{footer}", "align": "center", "omitWhenEmpty": true }
+  ]
+}

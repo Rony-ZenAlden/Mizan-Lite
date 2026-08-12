@@ -1,6 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
-import { salesDocument, type SalesLine } from "@/lib/wails";
+import { printSalesDocument, salesDocument, type SalesLine } from "@/lib/wails";
+import { Can } from "@/app/session/Can";
+import { PERMISSIONS } from "@/lib/wails";
+import { printHTML } from "./print";
 import { Alert, Badge, Button, EmptyState, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
@@ -27,9 +31,23 @@ export function InvoiceDetail({
   const { t } = useTranslation();
   const errorText = useErrorText();
 
+  const [failure, setFailure] = useState<unknown>(null);
+
   const detail = useQuery({
     queryKey: ["sales", "document", documentId],
     queryFn: () => salesDocument(documentId),
+  });
+
+  // Rendered by Go and printed by the browser. Not cached: a document reprinted after a payment
+  // must show what is owed NOW, and a stale receipt is worse than a slow one.
+  const print = useMutation({
+    mutationFn: (template: string) =>
+      printSalesDocument(documentId, template, template === "receipt" ? "80mm" : "A4"),
+    onSuccess: (rendered) => {
+      setFailure(null);
+      printHTML(rendered.html);
+    },
+    onError: setFailure,
   });
 
   if (detail.isPending) {
@@ -44,11 +62,37 @@ export function InvoiceDetail({
 
   return (
     <section className="flex flex-col gap-4">
-      <div>
+      <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={onBack}>
           {t("common.back")}
         </Button>
+        {/* Printing is gated separately from viewing: a printed invoice leaves the building.
+            A draft offers nothing to print, because a draft is not a document yet. */}
+        {detail.data?.document.status === "posted" && (
+          <Can permission={PERMISSIONS.salePrint}>
+            <span className="flex gap-2">
+              <Button
+                variant="secondary"
+                disabled={print.isPending}
+                onClick={() => print.mutate("invoice")}
+              >
+                {print.isPending ? t("sales.printing") : t("sales.print")}
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={print.isPending}
+                onClick={() => print.mutate("receipt")}
+              >
+                {t("sales.printReceipt")}
+              </Button>
+            </span>
+          </Can>
+        )}
       </div>
+
+      {failure !== null && (
+        <Alert tone="danger" title={t("sales.printFailed")}>{errorText(failure)}</Alert>
+      )}
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">

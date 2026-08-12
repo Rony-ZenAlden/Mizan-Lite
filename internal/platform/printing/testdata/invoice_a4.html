@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<title>Invoice INV-0042</title>
+<style>
+@page { size: A4; margin: 12mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Naskh Arabic", "Noto Sans", sans-serif;
+  color: #000; background: #fff;
+  font-variant-numeric: tabular-nums;
+}
+/* Arabic needs more vertical breathing room than Latin at the same size (§22.3): its
+   ascenders and descenders are taller and its diacritics sit outside the x-height. */
+html[dir="rtl"] body { line-height: 1.8; }
+html[dir="ltr"] body { line-height: 1.45; }
+
+.sheet { padding: 0; }
+body.thermal { font-size: 11px; }
+body.thermal .sheet { width: 100%; }
+body.document { font-size: 12px; }
+body.document .sheet { max-width: 186mm; margin: 0 auto; }
+
+/* start/end rather than left/right, so one template serves both directions. */
+.align-start  { text-align: start; }
+.align-center { text-align: center; }
+.align-end    { text-align: end; }
+
+.text, .pair, .code { margin: 0; padding: 1px 0; }
+.pair { display: flex; justify-content: space-between; gap: 8px; }
+.bold  { font-weight: 700; }
+.large { font-size: 1.6em; font-weight: 700; }
+.rule  { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
+.space { height: 6px; }
+.code  { text-align: center; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+table.rows { width: 100%; border-collapse: collapse; margin: 4px 0; }
+table.rows th { border-bottom: 1px solid #000; padding: 2px 3px; font-weight: 600; }
+table.rows td { padding: 2px 3px; vertical-align: top; }
+body.document table.rows tbody tr:nth-child(even) { background: #f4f4f4; }
+
+/* A page break between an item and its price is a document somebody has to re-read. */
+table.rows tr { break-inside: avoid; }
+.pair, .code { break-inside: avoid; }
+
+@media print {
+  /* Backgrounds are off by default in print. The zebra striping is decoration; the layout
+     must not depend on it, and it is not asked for. */
+  body.document table.rows tbody tr:nth-child(even) { background: transparent; }
+}
+</style>
+</head>
+<body class="document">
+<main class="sheet">
+<div class="text align-center bold">Al Noor Trading</div>
+<hr class="rule">
+<div class="pair align-start"><span>Invoice</span><span>INV-0042</span></div>
+<table class="rows">
+<thead><tr><th class="align-start" style="width:60%">Item</th><th class="align-end" style="width:40%">Amount</th></tr></thead>
+<tbody>
+<tr><td class="align-start">Bag of cement</td><td class="align-end">34.50</td></tr>
+<tr><td class="align-start">Steel rod 12mm</td><td class="align-end">1,200.00</td></tr>
+</tbody>
+</table>
+<hr class="rule">
+<div class="pair align-start bold large"><span>TOTAL</span><span>1,234.50</span></div>
+</main>
+</body>
+</html>

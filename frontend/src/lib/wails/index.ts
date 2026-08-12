@@ -293,6 +293,7 @@ export const PERMISSIONS = {
   saleCancel: "sales.document.cancel",
   shiftOpen: "pos.shift.open",
   shiftClose: "pos.shift.close",
+  salePrint: "sales.document.print",
 } as const;
 
 // ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
@@ -885,4 +886,25 @@ export function closeShift(
 
 export function currentShift(terminal: string): Promise<Shift> {
   return call<Shift>("Sales", "CurrentShift", terminal);
+}
+
+/** A rendered document: a complete, self-contained page. */
+export interface PrintedDocument {
+  html: string;
+  number: string;
+}
+
+/**
+ * Renders a sales document for printing.
+ *
+ * The BROWSER prints it, which is why HTML comes back rather than the printer being driven from
+ * Go: bidirectional text and Arabic letter shaping are decades of work sitting inside the webview
+ * and inside nothing a Go program can reach offline.
+ */
+export function printSalesDocument(
+  documentId: string,
+  template: string,
+  paper: string,
+): Promise<PrintedDocument> {
+  return call<PrintedDocument>("Sales", "Print", documentId, template, paper);
 }

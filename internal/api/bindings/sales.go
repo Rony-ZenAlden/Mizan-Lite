@@ -8,8 +8,10 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/policy"
 	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/kernel/locale"
 	"github.com/mizan-erp/mizan/internal/modules/sales"
 	"github.com/mizan-erp/mizan/internal/modules/sales/domain"
+	"github.com/mizan-erp/mizan/internal/platform/printing"
 )
 
 // SalesDocumentDTO is one document in a list.
@@ -116,6 +118,10 @@ func salesPolicies() map[string]policy.Policy {
 		"OpenShift":    policy.Requires(sales.PermShiftOpen),
 		"CloseShift":   policy.Requires(sales.PermShiftClose),
 		"CurrentShift": policy.Requires(sales.PermShiftOpen),
+		// Printing is gated separately from viewing, and the separation is not pedantry: a
+		// printed invoice LEAVES THE BUILDING. Somebody who may look up what a customer owes is
+		// not automatically somebody who may produce a document on company letterhead.
+		"Print": policy.Requires(sales.PermSalePrint),
 	}
 }
 
@@ -516,4 +522,74 @@ func currentBranch(ctx context.Context, app *bootstrap.App) (id.ID, error) {
 		return actor.BranchID, nil
 	}
 	return app.Org.DefaultBranchID(ctx)
+}
+
+// PrintedDocumentDTO is a document rendered for printing.
+type PrintedDocumentDTO struct {
+	// HTML is a complete, self-contained page. The shell opens it in a hidden frame and calls
+	// print(); nothing about it reaches the network.
+	HTML string `json:"html"`
+	// Number names the file if the user prints to PDF.
+	Number string `json:"number"`
+}
+
+// Print renders one sales document for the browser to print.
+//
+// # Why HTML comes back rather than the printer being driven from here
+//
+// Arabic. Bidirectional text, contextual letter shaping, and line breaking are decades of work
+// sitting inside the browser Wails already ships, and inside nothing a Go program can reach
+// offline. Handing the page back and letting the webview print it is the only way this product
+// prints an Arabic invoice a customer would accept.
+//
+// The ESC/POS path exists for the till, where speed matters more than script coverage, and it
+// refuses non-Latin text rather than printing question marks.
+func (s *Sales) Print(documentID, template, paper string) envelope.Result[PrintedDocumentDTO] {
+	ctx, app, err := s.guard("Print")
+	if err != nil {
+		return envelope.Fail[PrintedDocumentDTO](err)
+	}
+
+	company, err := app.Org.Company(ctx)
+	if err != nil {
+		return envelope.Fail[PrintedDocumentDTO](err)
+	}
+	// The currency's own scale, not a hard-coded 2. A currency with no minor unit printed to
+	// two decimals multiplies every figure on the invoice by a hundred.
+	functional, err := app.Currency.Functional(ctx)
+	if err != nil {
+		return envelope.Fail[PrintedDocumentDTO](err)
+	}
+	preferred := locale.FromContext(ctx)
+
+	rendered, err := app.Sales.Print(ctx, sales.PrintRequest{
+		DocumentID: id.ID(documentID), Template: template,
+		Locale: preferred, Direction: string(preferred.Direction()),
+		// The numeral system is a SETTING, not a consequence of the language: §22.5 records
+		// that it varies by country and by customer, and a Gulf exporter's Arabic invoice
+		// usually carries Western digits.
+		Digits: sales.PrintDigits.Get(ctx),
+		// Address and telephone are not on the company record yet, and nothing here invents
+		// them: the template drops the lines when they are blank, which is exactly what
+		// omitWhenEmpty is for.
+		Letterhead: sales.Letterhead{
+			Company: company.Name, TaxNumber: company.TaxNumber,
+		},
+		Decimals: int(functional.Decimals()),
+	})
+	if err != nil {
+		return envelope.Fail[PrintedDocumentDTO](err)
+	}
+
+	document, _, err := app.Sales.Document(ctx, id.ID(documentID))
+	if err != nil {
+		return envelope.Fail[PrintedDocumentDTO](err)
+	}
+
+	return envelope.Ok(PrintedDocumentDTO{
+		HTML: printing.HTML(rendered, printing.HTMLOptions{
+			Paper: paper, Title: document.Number,
+		}),
+		Number: document.Number,
+	})
 }

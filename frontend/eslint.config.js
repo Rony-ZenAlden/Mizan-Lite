@@ -41,6 +41,8 @@ export default [
         HTMLElement: "readonly",
         HTMLButtonElement: "readonly",
         HTMLInputElement: "readonly",
+        HTMLIFrameElement: "readonly",
+        Window: "readonly",
         URL: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",

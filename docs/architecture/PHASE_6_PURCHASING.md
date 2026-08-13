@@ -588,3 +588,66 @@ redundant code that makes a drill on the real path ambiguous is worse than no co
 stock when nothing is on hand. The guard is real for other callers, so it now has a test at the
 inventory layer that can only pass if that layer keeps it — the Phase 3 rule, applied where it
 belongs.
+
+---
+
+## Step 6.5 — landed costs
+
+**Delivered.** `0031_landed_costs.sql`, the charge domain and its allocation, the service, the
+`landed_cost` posting rule — and **`round.Allocate` promoted to the kernel**.
+
+### The allocator was written four times before it was written once
+
+Phase 6 needed largest-remainder allocation for freight. Three implementations already existed:
+
+| Where | Since | Why it could not be reused |
+|---|---|---|
+| `money.Money.Allocate` | Phase 0 | requires a currency; column widths and quantities are not money |
+| `inventory/domain.Allocate` | Phase 4 | lives in a MODULE; platform and other modules must not import one |
+| `printing.Widths` | Phase 5 | its own copy, written after checking the other two |
+
+At the fourth, *"look for the one an earlier phase already left"* stopped meaning **find the copy**
+and started meaning **stop making copies**. `round.Allocate` is in the kernel — the one place every
+layer can reach — and inventory, printing, and purchasing all delegate to it. The golden print
+files were unchanged by the swap, which is what makes the extraction safe to believe.
+
+**The extraction fixed a real defect.** The version it was lifted from implemented the
+even-spread case by writing `1` into the caller's slice. A caller that still needed those weights
+— to allocate a *second* charge across the same lines, which is exactly what landed costs do —
+got them back full of ones, and every charge after the first spread evenly regardless of value.
+
+### D1 — freight is not an expense
+
+A business that books it to one understates what its stock cost and overstates its margin on every
+sale. The goods on the shelf really did cost the invoice plus the lorry plus the customs officer,
+and a gross margin computed without them looks healthy and is not.
+
+### D2 — the basis is declared per charge
+
+Freight follows volume or weight — a lorry is full when it is full, whatever is in it. Customs
+follows value, because that is what duty is charged on. Forcing one basis makes the other wrong,
+and a shipment usually carries both kinds of charge at once.
+
+`weight` and `volume` are named in the enum and **refused at runtime**: they need product
+dimensions the catalog does not carry. A freight charge spread by value when the operator asked
+for weight is wrong in a way nobody would ever notice, so it fails loudly instead.
+
+### D3 — allocations are STORED, not recomputed
+
+The split depends on the receipt's line values *at the moment it was applied*. A later price
+correction (6.4) changes those values, and recomputing would silently restate a charge that has
+already reached the stock ledger and the books.
+
+It is also the answer to *"why is this item carried at that cost"* — the question a margin nobody
+expected always ends in.
+
+**Mutation drills — 6 run, 0 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 92 | The allocator drops its leftover units | 2 tests fail |
+| 93 | One line collects every leftover | 2 kernel tests fail |
+| 94 | The allocator rewrites the caller's weights | fails |
+| 95 | An unsupported basis is accepted | fails |
+| 96 | Every basis behaves like value | fails |
+| 97 | A charge can be applied twice | fails |

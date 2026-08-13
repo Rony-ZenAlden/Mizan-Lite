@@ -36,6 +36,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mizan-erp/mizan/internal/kernel/round"
+
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 )
 
@@ -400,13 +402,15 @@ func direction(value string) string {
 // the defect above, reappearing one level down. One allocation against the number the caller
 // actually needs has no second rounding to get wrong.
 //
-// # Why this does not call an existing allocator
+// # The allocator moved to the kernel in 6.5
 //
-// Two largest-remainder implementations already exist here — `money.Money.Allocate` and
-// inventory's `domain.Allocate` — and reusing one was the first thing checked. Neither fits:
-// `Money.Allocate` requires a currency, and these are column widths, not an amount of anything;
-// inventory's lives in a MODULE, and platform must never import one
-// (`platform-independent-of-modules`).
+// This function used to carry its own largest-remainder pass, with a comment explaining that
+// neither existing implementation fitted: `money.Money.Allocate` needs a currency, and
+// inventory's lives in a module platform must not import.
+//
+// Phase 6 needed a FOURTH copy for freight, at which point the right answer stopped being "find
+// the one that fits" and became "stop making copies". `round.Allocate` is in the kernel, which
+// every layer can reach, and this now delegates to it.
 func Widths(headers []Cell, total int) []int {
 	shares := make([]int, len(headers))
 	if len(headers) == 0 || total <= 0 {
@@ -432,27 +436,21 @@ func Widths(headers []Cell, total int) []int {
 		return shares
 	}
 
-	// Floor each ideal share, remembering the remainder that was dropped.
-	remainders := make([]int, len(headers))
-	allocated := 0
+	weights := make([]int64, len(headers))
 	for i, cell := range headers {
-		width := max(cell.Width, 0)
-		shares[i] = width * total / declared
-		remainders[i] = width * total % declared
-		allocated += shares[i]
+		weights[i] = int64(max(cell.Width, 0))
 	}
-
-	// Hand the leftover out, one point at a time, to the largest remainders. Ties go to the
-	// earlier column, so the result is deterministic — a golden file depends on it.
-	order := make([]int, len(headers))
-	for i := range order {
-		order[i] = i
+	parts, err := round.Allocate(int64(total), weights)
+	if err != nil {
+		// Only reachable with no columns or a negative width, both handled above. Falling back
+		// to an even spread is better than returning zeros, which would swallow every column.
+		for i := range shares {
+			shares[i] = total / len(shares)
+		}
+		return shares
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		return remainders[order[a]] > remainders[order[b]]
-	})
-	for i := 0; i < total-allocated; i++ {
-		shares[order[i%len(order)]]++
+	for i, part := range parts {
+		shares[i] = int(part)
 	}
 	return shares
 }

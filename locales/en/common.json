@@ -377,6 +377,7 @@
   "permissions.purchasing.bill.draft": "Enter supplier invoices",
   "permissions.purchasing.bill.post": "Post supplier invoices",
   "permissions.purchasing.bill.view": "View supplier invoices",
+  "permissions.purchasing.landed_cost.manage": "Manage landed costs",
   "permissions.purchasing.order.cancel": "Cancel purchase orders",
   "permissions.purchasing.order.draft": "Draft purchase orders",
   "permissions.purchasing.order.place": "Place purchase orders with suppliers",

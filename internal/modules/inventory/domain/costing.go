@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/kernel/round"
 )
 
 // Stable codes for costing.
@@ -328,70 +329,11 @@ func itoa(n int64) string {
 // Largest-remainder gives the leftover units to the lines with the largest fractional parts, so
 // the sum is the amount, exactly, always.
 func Allocate(amountMinor int64, weights []int64) ([]int64, error) {
-	if len(weights) == 0 {
-		return nil, errs.Validation(CodeInvalidMovement,
-			"there is nothing to allocate the amount across")
+	parts, err := round.Allocate(amountMinor, weights)
+	if err != nil {
+		// The kernel speaks in sentinel errors, because it sits below the coded-error
+		// vocabulary. Translated here, where the module's codes are the contract.
+		return nil, errs.Validation(CodeInvalidMovement, err.Error())
 	}
-
-	var total int64
-	for _, weight := range weights {
-		if weight < 0 {
-			return nil, errs.Validation(CodeInvalidMovement,
-				"an allocation weight cannot be negative")
-		}
-		total += weight
-	}
-	out := make([]int64, len(weights))
-	if total == 0 {
-		// Nothing to weigh by. Spreading evenly is the only defensible answer, and it still
-		// must tie exactly — so it goes through the same remainder pass below.
-		for i := range weights {
-			weights[i] = 1
-			total++
-		}
-	}
-
-	// Each part is the exact quotient; the remainders decide who gets the leftover units.
-	remainders := make([]*big.Int, len(weights))
-	var allocated int64
-
-	for i, weight := range weights {
-		numerator := new(big.Int).Mul(big.NewInt(amountMinor), big.NewInt(weight))
-		quotient, rest := new(big.Int).QuoRem(numerator, big.NewInt(total), new(big.Int))
-		if !quotient.IsInt64() {
-			return nil, errs.Internal(CodeInvalidMovement,
-				"that allocation is too large to represent")
-		}
-		out[i] = quotient.Int64()
-		allocated += out[i]
-		remainders[i] = new(big.Int).Abs(rest)
-	}
-
-	// Hand the leftover units to the largest fractional parts, biggest first. Each recipient is
-	// then taken out of the running, so a single line cannot collect them all.
-	leftover := amountMinor - allocated
-	step := int64(1)
-	if leftover < 0 {
-		step, leftover = -1, -leftover
-	}
-	for n := int64(0); n < leftover; n++ {
-		best := -1
-		for i, value := range remainders {
-			if value.Sign() < 0 {
-				continue
-			}
-			if best == -1 || value.Cmp(remainders[best]) > 0 {
-				best = i
-			}
-		}
-		if best == -1 {
-			// Every line has already taken a unit. Only reachable when the leftover exceeds the
-			// number of lines, which the arithmetic above forbids — but returning silently
-			// short would be worse than stopping.
-			break
-		}
-		out[best] += step
-		remainders[best] = big.NewInt(-1)
-	}
-	return out, nil
+	return parts, nil
 }

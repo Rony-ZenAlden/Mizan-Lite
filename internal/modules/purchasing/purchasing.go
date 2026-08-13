@@ -80,12 +80,13 @@ const (
 
 // Stable codes for this module's failures.
 const (
-	CodePublisherMissing = "purchasing.publisher_missing"
-	CodeUnknownOrder     = "purchasing.unknown_order"
-	CodeUnknownLine      = "purchasing.unknown_line"
-	CodeUnknownReceipt   = "purchasing.unknown_receipt"
-	CodeUnknownBill      = "purchasing.unknown_bill"
-	CodePortMissing      = "purchasing.port_missing"
+	CodePublisherMissing  = "purchasing.publisher_missing"
+	CodeUnknownOrder      = "purchasing.unknown_order"
+	CodeUnknownLine       = "purchasing.unknown_line"
+	CodeUnknownReceipt    = "purchasing.unknown_receipt"
+	CodeUnknownBill       = "purchasing.unknown_bill"
+	CodeUnknownLandedCost = "purchasing.unknown_landed_cost"
+	CodePortMissing       = "purchasing.port_missing"
 )
 
 // The series codes this module allocates from.
@@ -220,6 +221,8 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermBillView, Description: "permissions.purchasing.bill.view"},
 		{Code: PermBillDraft, Description: "permissions.purchasing.bill.draft"},
 		{Code: PermBillPost, Description: "permissions.purchasing.bill.post"},
+		{Code: PermLandedCostManage,
+			Description: "permissions.purchasing.landed_cost.manage"},
 	}
 }
 

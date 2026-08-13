@@ -246,6 +246,32 @@
       ]
     },
     {
+      "code": "landed_cost",
+      "event": "purchasing.landed_cost.applied",
+      "sequence": 1,
+      "description": "Freight, customs or clearing added to what the stock cost. It raises the inventory value and owes whoever charged it — the goods really did cost the invoice plus the lorry, and a margin computed without it looks healthy and is not.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.variance_stock_over",
+          "memo": "added to the cost of goods on hand"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.variance_expense_over",
+          "memo": "charge on goods already sold"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "carrier or agent"
+        }
+      ]
+    },
+    {
       "code": "supplier_payment",
       "event": "purchasing.payment.made",
       "sequence": 1,

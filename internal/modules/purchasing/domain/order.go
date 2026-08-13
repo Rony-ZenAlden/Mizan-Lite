@@ -32,6 +32,9 @@ const (
 	CodeNoSupplierInvoice  = "purchasing.no_supplier_invoice"
 	CodeQuantityMismatch   = "purchasing.quantity_mismatch"
 	CodeDuplicateInvoice   = "purchasing.duplicate_invoice"
+	CodeInvalidLandedCost  = "purchasing.invalid_landed_cost"
+	CodeUnsupportedBasis   = "purchasing.unsupported_basis"
+	CodeLandedApplied      = "purchasing.landed_cost_applied"
 )
 
 // The numeric scales this module works in (§E).

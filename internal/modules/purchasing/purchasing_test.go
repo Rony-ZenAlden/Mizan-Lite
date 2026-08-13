@@ -325,6 +325,18 @@ func (f fixture) receiveLine(t *testing.T, receiptID, orderLineID id.ID, quantit
 	}
 }
 
+// receiptOf finds the delivery a line belongs to.
+func (f fixture) receiptOf(t *testing.T, receiptLineID id.ID) id.ID {
+	t.Helper()
+	var receiptID string
+	if err := f.store.Reader(f.ctx).QueryRowContext(f.ctx,
+		`SELECT receipt_id FROM goods_receipt_lines WHERE id = ?`,
+		string(receiptLineID)).Scan(&receiptID); err != nil {
+		t.Fatalf("reading a line's delivery: %v", err)
+	}
+	return id.ID(receiptID)
+}
+
 func (f fixture) draft(t *testing.T) id.ID {
 	t.Helper()
 	order, err := f.svc.Draft(f.ctx, purchasing.NewOrderInput{

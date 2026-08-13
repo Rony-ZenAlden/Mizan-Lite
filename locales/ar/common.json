@@ -377,6 +377,7 @@
   "permissions.purchasing.bill.draft": "إدخال فواتير المورّدين",
   "permissions.purchasing.bill.post": "ترحيل فواتير المورّدين",
   "permissions.purchasing.bill.view": "عرض فواتير المورّدين",
+  "permissions.purchasing.landed_cost.manage": "إدارة تكاليف الشحن والتخليص",
   "permissions.purchasing.order.cancel": "إلغاء أوامر الشراء",
   "permissions.purchasing.order.draft": "إنشاء مسودات أوامر الشراء",
   "permissions.purchasing.order.place": "إرسال أوامر الشراء إلى المورّدين",

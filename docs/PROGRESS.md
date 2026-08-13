@@ -1352,3 +1352,23 @@ The proportion is capped at what this delivery brought in — on-hand stock incl
 
 Drill 86 found redundant code (deleted); drill 89 found a guard purchasing can never reach, which
 now has a test at the inventory layer that names the layer it is about.
+
+### Step 6.5 — landed costs ✅
+
+Freight, customs and clearing spread across the goods they brought in, so stock carries what it
+actually cost. A business that books them to an expense account overstates its margin on every
+sale, and the gross profit looks healthy while being wrong.
+
+**`round.Allocate` was promoted to the kernel.** Largest-remainder had been written three times —
+money (needs a currency), inventory (a module nothing else may import), printing (its own copy) —
+and Phase 6 needed a fourth. At that point "look for the one an earlier phase left" stopped
+meaning *find the copy* and started meaning *stop making copies*. The print golden files were
+unchanged by the swap, which is what makes the extraction believable.
+
+The extraction fixed a real defect: the original implemented its even-spread case by writing 1s
+into the CALLER's slice, so a second charge allocated across the same lines spread evenly
+regardless of value — which is exactly what landed costs do.
+
+The basis is declared per charge, because freight follows volume and customs follows value.
+`weight` and `volume` are named and REFUSED rather than substituted: a charge spread by value when
+somebody asked for weight is wrong in a way nobody would notice.

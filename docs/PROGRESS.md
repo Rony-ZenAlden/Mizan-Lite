@@ -1287,3 +1287,29 @@ factor of a thousand.
 everything that can fail — changes nothing, because the counter advance rolls back with the
 transaction. The ordering is not what keeps §9.4; the transaction is. Both comments corrected, and
 no test pins the ordering, because one would pass either way.
+
+### Step 6.2 — goods receipt, over-receipt tolerance, GRNI ✅
+
+A delivery is its own document because somebody signs for it: a dispute three months later is
+settled by "the second delivery, on the 14th, signed by Yusuf", not by an order line edited four
+times with no record of by whom. Goods can arrive against NO order — a replacement, or a
+cash-and-carry — and the match simply has one fewer side.
+
+The receipt posts to a new GRNI account: when goods arrive and no invoice has, the business
+genuinely holds an asset and genuinely owes for it. Receipts posting nothing would leave stock
+unvalued in the books until the invoice came, and a month-end landing in that window happens
+twelve times a year. The bill's rule was reworked to CLEAR GRNI rather than debit inventory —
+both changes are seed data.
+
+Tolerance is measured against what is OUTSTANDING, not what was ordered: otherwise five
+deliveries can each be 2% over and the total 10% over, with every note passing.
+
+**A drill uncovered a real defect by accident.** A §20.3 test asserted a redirected account
+received money; it received nothing, and so had GRNI — nothing had posted at all. A receipt
+against no order took its cost from the order line it did not have, so goods from a cash-and-carry
+entered stock worth NOTHING. The cost input is now a `*int64`: nil means "resolve it", an explicit
+zero means "genuinely free". A plain int64 collapses the two in the one direction that hurts.
+
+**Drill 73: whole units hid a real defect.** The tolerance arithmetic gives the same answer for
+every whole-unit quantity, so a mutation swapping multiply and divide passed — every test ordered
+whole widgets. They diverge where tolerance matters most: goods measured rather than counted.

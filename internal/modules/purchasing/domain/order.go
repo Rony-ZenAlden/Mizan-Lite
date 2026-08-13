@@ -23,6 +23,10 @@ const (
 	CodeNonPositiveQty     = "purchasing.non_positive_quantity"
 	CodeOverReceipt        = "purchasing.over_receipt"
 	CodeNothingOutstanding = "purchasing.nothing_outstanding"
+	CodeInvalidReceipt     = "purchasing.invalid_receipt"
+	CodeAlreadyConfirmed   = "purchasing.already_confirmed"
+	CodeNotConfirmed       = "purchasing.not_confirmed"
+	CodeAlreadyBilled      = "purchasing.already_billed"
 )
 
 // The numeric scales this module works in (§E).

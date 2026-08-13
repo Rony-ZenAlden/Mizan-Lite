@@ -79,6 +79,15 @@
       "system": true
     },
     {
+      "code": "2150",
+      "name": "Goods received not invoiced",
+      "name_key": "account.grni",
+      "parent": "2000",
+      "type": "liability",
+      "subtype": "payable",
+      "system": true
+    },
+    {
       "code": "2200",
       "name": "Tax payable",
       "name_key": "account.tax_payable",
@@ -183,6 +192,7 @@
     "COGS": "5100",
     "FX_GAIN_LOSS": "5800",
     "ROUNDING_DIFF": "5900",
-    "INVENTORY_ADJUSTMENT": "5600"
+    "INVENTORY_ADJUSTMENT": "5600",
+    "GRNI": "2150"
   }
 }

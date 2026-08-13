@@ -83,6 +83,7 @@ const (
 	CodePublisherMissing = "purchasing.publisher_missing"
 	CodeUnknownOrder     = "purchasing.unknown_order"
 	CodeUnknownLine      = "purchasing.unknown_line"
+	CodeUnknownReceipt   = "purchasing.unknown_receipt"
 	CodePortMissing      = "purchasing.port_missing"
 )
 
@@ -218,8 +219,15 @@ func (m *Module) Permissions() []auth.PermissionDef {
 	}
 }
 
-// Settings: none yet. The over-receipt tolerance arrives with 6.2, where it is used.
-func (m *Module) Settings() []config.Definition { return nil }
+// Settings: the over-receipt tolerance (6.2).
+func (m *Module) Settings() []config.Definition {
+	return []config.Definition{mustDefinition(OverReceiptTolerance.Key())}
+}
+
+func mustDefinition(key string) config.Definition {
+	def, _ := config.Default().Lookup(key)
+	return def
+}
 
 // FeatureFlags: none.
 func (m *Module) FeatureFlags() []config.FlagDef { return nil }

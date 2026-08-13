@@ -21,6 +21,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/purchasing"
 	"github.com/mizan-erp/mizan/internal/modules/sales"
 	"github.com/mizan-erp/mizan/internal/modules/tax"
+	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
@@ -29,13 +30,15 @@ import (
 )
 
 type fixture struct {
-	svc     *purchasing.Service
-	sales   *sales.Service
-	catalog *catalog.Service
-	audit   *audit.Service
-	bus     *eventbus.Bus
-	store   *database.Store
-	ctx     context.Context
+	svc       *purchasing.Service
+	inventory *inventory.Service
+	settings  *config.Settings
+	sales     *sales.Service
+	catalog   *catalog.Service
+	audit     *audit.Service
+	bus       *eventbus.Bus
+	store     *database.Store
+	ctx       context.Context
 
 	companyID   id.ID
 	branchID    id.ID
@@ -106,6 +109,17 @@ func (n platformNumbering) Allocate(
 ) (string, error) {
 	return n.alloc.Allocate(ctx, branchID, seriesCode)
 }
+
+// fixedScopes answers the scope questions settings resolution asks.
+//
+// The company scope is what makes the over-receipt tolerance settable per company rather than
+// only system-wide, which is the point of the setting: two companies in one install can trade in
+// different ways.
+type fixedScopes struct{ company, branch id.ID }
+
+func (s fixedScopes) CompanyID(context.Context) (id.ID, bool) { return s.company, true }
+func (s fixedScopes) BranchID(context.Context) (id.ID, bool)  { return s.branch, true }
+func (s fixedScopes) UserID(context.Context) (id.ID, bool)    { return "", false }
 
 // ── the fixture ─────────────────────────────────────────────────────────────────
 
@@ -213,8 +227,22 @@ func newFixture(t *testing.T) fixture {
 		t.Fatalf("creating a supplier: %v", err)
 	}
 
+	settings, err := config.Open(ctx, store, config.Options{
+		Scopes: fixedScopes{company: provisioned.CompanyID, branch: provisioned.BranchID},
+		Clock:  clock.System(),
+	})
+	if err != nil {
+		t.Fatalf("config.Open: %v", err)
+	}
+
+	// The settings instance travels on the CONTEXT, which is how `Setting.Get` finds it — the
+	// same path bootstrap uses. A fixture that skipped this would silently read every default
+	// and prove nothing about a shop that changed one.
+	ctx = config.Bind(ctx, settings)
+
 	f := fixture{
-		sales: salesSvc, catalog: catalogSvc, audit: auditSvc, bus: bus, store: store, ctx: ctx,
+		settings: settings,
+		sales:    salesSvc, catalog: catalogSvc, audit: auditSvc, bus: bus, store: store, ctx: ctx,
 		companyID: provisioned.CompanyID, branchID: provisioned.BranchID,
 		warehouseID: provisioned.WarehouseID, partnerID: partnerID,
 		variant: variant, sackVariant: sack,
@@ -227,11 +255,18 @@ func newFixture(t *testing.T) fixture {
 		Numbers: platformNumbering{alloc: numbering.New(store, clock.System())},
 	})
 
-	if _, err = salesSvc.CreateSeries(ctx, sales.NewSeriesInput{
-		CompanyID: provisioned.CompanyID, Code: purchasing.SeriesOrder,
-		Prefix: "PO-", Padding: 6,
-	}); err != nil {
-		t.Fatalf("CreateSeries: %v", err)
+	for _, series := range []struct{ code, prefix string }{
+		{purchasing.SeriesOrder, "PO-"},
+		{purchasing.SeriesReceipt, "GRN-"},
+		{purchasing.SeriesBill, "BILL-"},
+		{purchasing.SeriesPayment, "PAY-"},
+	} {
+		if _, err = salesSvc.CreateSeries(ctx, sales.NewSeriesInput{
+			CompanyID: provisioned.CompanyID, Code: series.code,
+			Prefix: series.prefix, Padding: 6,
+		}); err != nil {
+			t.Fatalf("CreateSeries(%s): %v", series.code, err)
+		}
 	}
 	return f
 }
@@ -239,6 +274,55 @@ func newFixture(t *testing.T) fixture {
 // allocatorFor builds an allocator over the fixture's store, for tests that rebuild the service.
 func allocatorFor(f fixture) *numbering.Allocator {
 	return numbering.New(f.store, clock.System())
+}
+
+// newStockedFixture adds a real inventory service, so a confirmed delivery really moves goods.
+//
+// Inventory is REAL rather than faked because the whole point of 6.2 is that a receipt reaches
+// the stock ledger — and because `inventory_layers`, written on every receipt since 4.2 and read
+// by nothing, gets its first genuine writer here.
+func newStockedFixture(t *testing.T) fixture {
+	t.Helper()
+	f := newFixture(t)
+
+	inventorySvc := inventory.NewService(f.store, inventory.Options{
+		Clock: clock.System(), Bus: f.bus,
+	})
+	f.inventory = inventorySvc
+
+	f.svc = purchasing.NewService(f.store, purchasing.Options{
+		Clock: clock.System(), Bus: f.bus,
+		Catalog: realCatalog{svc: f.catalog},
+		Pricing: fixedPricing{priceMicro: 10_000_000},
+		Tax:     fixedTax{rateMicro: 150_000},
+		Stock:   realStock{svc: inventorySvc},
+		Numbers: platformNumbering{alloc: numbering.New(f.store, clock.System())},
+	})
+	return f
+}
+
+func (f fixture) draftReceipt(t *testing.T, orderID id.ID) id.ID {
+	t.Helper()
+	receipt, err := f.svc.DraftReceipt(f.ctx, purchasing.NewReceiptInput{
+		CompanyID: f.companyID, BranchID: f.branchID, WarehouseID: f.warehouseID,
+		OrderID: orderID, PartnerID: f.partnerID, PartnerName: "Acme Supplies",
+		ReceiptDate: "2026-08-14", Currency: "SAR",
+		DeliveryNoteReference: "DN-99",
+	})
+	if err != nil {
+		t.Fatalf("DraftReceipt: %v", err)
+	}
+	return receipt.ID
+}
+
+func (f fixture) receiveLine(t *testing.T, receiptID, orderLineID id.ID, quantityMicro int64) {
+	t.Helper()
+	if _, err := f.svc.ReceiveLine(f.ctx, purchasing.ReceiveLineInput{
+		CompanyID: f.companyID, ReceiptID: receiptID, OrderLineID: orderLineID,
+		QuantityMicro: quantityMicro,
+	}); err != nil {
+		t.Fatalf("ReceiveLine: %v", err)
+	}
 }
 
 func (f fixture) draft(t *testing.T) id.ID {

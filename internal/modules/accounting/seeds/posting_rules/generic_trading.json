@@ -96,16 +96,36 @@
       ]
     },
     {
-      "code": "purchase",
-      "event": "purchasing.bill.posted",
+      "code": "goods_receipt",
+      "event": "purchasing.receipt.confirmed",
       "sequence": 1,
-      "description": "A purchase: stock arrives, recoverable tax is an asset, and we owe the supplier the total.",
+      "description": "Goods arrived before the invoice: stock rises and we accrue what we will owe. GRNI is cleared by the bill, so this entry and that one net to nothing when they agree.",
       "lines": [
         {
           "side": "debit",
           "account": "mapping:INVENTORY",
           "amount": "document.net",
           "memo": "stock received"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:GRNI",
+          "amount": "document.net",
+          "memo": "awaiting the supplier's invoice"
+        }
+      ]
+    },
+    {
+      "code": "purchase",
+      "event": "purchasing.bill.posted",
+      "sequence": 1,
+      "description": "A supplier's invoice for goods already received: it clears what the receipt accrued, claims the recoverable tax, and books the payable.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:GRNI",
+          "amount": "document.net",
+          "memo": "clears goods received not invoiced"
         },
         {
           "side": "debit",

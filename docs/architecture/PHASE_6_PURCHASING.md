@@ -329,3 +329,100 @@ rule, and the third time this project has taken that particular outcome.
 
 The first bad mutation of the phase came first: the initial D69 moved the call but left it after
 the failure point, so it proved nothing. Fifth bad mutation recorded.
+
+---
+
+## Step 6.2 — goods receipt: partial deliveries, over-receipt tolerance, GRNI
+
+**Delivered.** `0028_receipts.sql`, the receipt domain and tolerance rule, the service (draft,
+receive line, confirm, cancel, verify), the **GRNI account and mapping**, and the
+`goods_receipt` posting rule.
+
+### D1 — a receipt is its own document because somebody signs for it
+
+Marking quantities received on the order itself loses the one thing a delivery note is for: WHICH
+delivery. A dispute about a short shipment three months later is settled by *"the second delivery,
+on the 14th, signed by Yusuf"* — not by an order line whose received figure has been edited four
+times with no record of by whom.
+
+`order_id` is nullable, because every business takes goods against no order: a replacement for
+damaged stock, or a cash-and-carry purchase. The three-way match then has one fewer side.
+
+### D2 — the receipt posts, and it posts to GRNI
+
+When goods arrive and no invoice has, the business genuinely holds an asset and genuinely owes
+somebody for it. Both facts are true before the invoice exists.
+
+Receipts posting nothing would leave stock on the shelf with no value in the books for as long as
+the invoice takes — and a month-end landing in that window is not an edge case, it is twelve times
+a year. GRNI (`2150`) is a new account and mapping, because no existing one means this.
+
+The `purchase` rule was reworked to match: the bill now **clears GRNI** rather than debiting
+inventory, because the receipt already did that. Both changes are seed data.
+
+### D3 — no tax on a receipt
+
+Tax arrives with the INVOICE. Accruing it when goods arrive would put a recoverable asset on the
+books that no document supports, and a revenue authority asking for the invoice behind it would be
+told there isn't one.
+
+### D4 — the tolerance is measured against what is OUTSTANDING, not what was ordered
+
+An order for 100 delivered as 60 then 45 is not a 5% over-delivery on the second note; it is 5
+more than the 40 still owed, which is 12.5%. Measured against the ordered quantity instead, each
+of five deliveries could be 2% over and the total 10% over — with every individual note passing.
+That is the arithmetic a supplier who wants to over-ship relies on.
+
+The check runs **at entry**, where somebody is standing at a loading bay and can count again or
+telephone the supplier — not at confirmation, after twenty lines have been keyed.
+
+### D5 — `received_micro` is verified, never repaired
+
+4.3's discipline on a second projection. A projection that silently heals hides the bug that broke
+it, and the next thing it hides is the one that mattered.
+
+**Mutation drills — 7 run, 4 passed.** All four are now resolved.
+
+| # | Mutation | Result |
+|---|---|---|
+| 72 | The over-receipt check is skipped | 2 tests fail |
+| 73 | The tolerance divides before multiplying | **Passed → test strengthened** |
+| 74 | A receipt with no order enters stock unvalued | **Passed (bad mutation) → redone, fails** |
+| 75 | The received projection is never advanced | fails |
+| 76 | A confirmed delivery posts nothing | 3 tests fail |
+| 77 | The receipt rule accrues recoverable tax | **Passed — a genuine no-op** |
+| 78 | The verifier counts draft deliveries | **Passed → test written** |
+
+### The defect a drill uncovered by accident
+
+`TestPurchasingNamesNoAccounts` redirected GRNI to another account and asserted that account
+received the money. It received nothing — and so did GRNI. **Nothing had posted at all.**
+
+The cause: a receipt against no order took its unit cost from the order line it did not have, so
+the cost was zero, so the value was zero, so Phase 2 skipped every rule line and wrote no entry.
+**Goods from a cash-and-carry were entering stock worth nothing** — which understates inventory
+and overstates margin the day they are sold, surfacing months later as a gross profit nobody can
+explain.
+
+`ReceiveLineInput.UnitCostMicro` is now a `*int64`, because nil and zero are different answers and
+both are legitimate: nil means "resolve it from the purchase price list", and a pointer to zero
+means "these were genuinely FREE", which a warranty replacement is. A plain `int64` collapses the
+two, and the collapse has exactly one direction — stock entering at zero because nobody typed a
+price.
+
+### Drill 73: whole units hid a real defect
+
+Swapping `outstanding × percent / 10⁶` for `outstanding / 10⁶ × percent` gives the *same answer
+for every whole-unit quantity*, and every test ordered whole widgets. They diverge exactly where
+tolerance matters most — goods measured rather than counted. 1.5 kg outstanding at 2% allows
+0.03 kg; dividing first truncates to 1 kg and allows 0.02, so a delivery the business said was
+acceptable is refused at the loading bay.
+
+### Drill 77: two layers, individually inert
+
+A receipt accrues no recoverable tax because the service publishes no tax amount **and** the
+seeded rule has no tax line. Breaking either alone changes nothing — Phase 2 skips a rule line
+that resolves to zero, so a tax line with no tax behind it is indistinguishable from no tax line.
+
+No extra test was written. One that could fail on a single-layer mutation would have to assert
+something neither layer actually promises, and a test that pins nothing is worse than none (4.3).

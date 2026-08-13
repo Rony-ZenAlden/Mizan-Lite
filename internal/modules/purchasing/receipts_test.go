@@ -45,8 +45,24 @@ func (s realStock) ReturnToSupplier(
 	return purchasing.StockResult{}, nil // 6.6
 }
 
-func (s realStock) Revalue(context.Context, purchasing.RevaluationRequest) error {
-	return nil // 6.4
+func (s realStock) Revalue(ctx context.Context, r purchasing.RevaluationRequest) error {
+	_, err := s.svc.RevalueBy(ctx, inventory.RevalueInput{
+		CompanyID: r.CompanyID, WarehouseID: r.WarehouseID,
+		ProductID: r.ProductID, VariantID: r.VariantID,
+		DeltaMinor: r.DeltaMinor, Decimals: r.Decimals,
+		DocumentType: r.DocumentType, DocumentID: r.DocumentID, OccurredAt: r.OccurredAt,
+	})
+	return err
+}
+
+func (s realStock) OnHandMicro(
+	ctx context.Context, variantID, warehouseID id.ID,
+) (int64, error) {
+	state, err := s.svc.StockOf(ctx, variantID, warehouseID)
+	if err != nil {
+		return 0, err
+	}
+	return state.OnHandMicro, nil
 }
 
 // ── a delivery is what actually arrived ─────────────────────────────────────────
@@ -561,6 +577,8 @@ func (failingStock) ReturnToSupplier(
 }
 
 func (failingStock) Revalue(context.Context, purchasing.RevaluationRequest) error { return nil }
+
+func (failingStock) OnHandMicro(context.Context, id.ID, id.ID) (int64, error) { return 0, nil }
 
 func (f fixture) booked(t *testing.T) *accounting.Service {
 	t.Helper()

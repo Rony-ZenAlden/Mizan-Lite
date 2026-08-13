@@ -96,4 +96,16 @@ const (
 	// differs, never the modules knowledge of accounts (§20.3).
 	AmountVarianceOver  = "document.variance_over"
 	AmountVarianceUnder = "document.variance_under"
+
+	// The variance split by WHERE THE GOODS ARE (6.4). Goods still on the shelf are revalued;
+	// goods already sold had their cost posted at the old figure, in a period that may be
+	// closed, so their correction goes to an adjustment account instead.
+	//
+	// Four names rather than two signed ones, for the reason the pair above exists: the posting
+	// engine refuses negative amounts, and a negative would silently flip a line to the other
+	// side of the entry.
+	AmountVarianceStockOver    = "document.variance_stock_over"
+	AmountVarianceStockUnder   = "document.variance_stock_under"
+	AmountVarianceExpenseOver  = "document.variance_expense_over"
+	AmountVarianceExpenseUnder = "document.variance_expense_under"
 )

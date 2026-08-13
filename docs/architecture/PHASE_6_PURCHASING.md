@@ -512,3 +512,79 @@ catching it.
 | 83 | Posted bills never mark deliveries billed | 2 tests fail |
 | 84 | Another supplier's delivery can be billed | fails |
 | 85 | The rule drops both variance lines | 2 tests fail |
+
+---
+
+## Step 6.4 — price variance: revaluing what the bill disagrees about
+
+**Delivered.** `inventory.RevalueBy`, `domain.SplitByWhereTheGoodsAre`, the four-way variance
+posting, and `0030_revaluation_quantity.sql`.
+
+### The finding that justifies the whole phase
+
+**Phase 4's `Revaluation` movement could not be written.** The type existed since 4.2. The
+direction table knew it. The costing strategy had a `revalue` case. It appeared in the schema's
+`CHECK` list. And **every path to it ended in a validation error**, because two separate
+positive-quantity guards — one in the domain constructor, one in the table's `CHECK` — refused a
+movement of zero, which is the only kind a revaluation is.
+
+The seam was built, documented, unit-tested, and structurally unusable. It was found the moment
+something needed it.
+
+> **A seam is only proven by a caller.** Everything about this one looked right from the inside.
+
+The phase's Definition of Done asks whether Phase 4's seams needed reshaping to serve a real
+caller. For three of them the answer is no. For this one it is **yes**, and the reshaping is a
+table rebuild.
+
+### D1 — the caller states a VALUE; inventory decides the average
+
+A bill knows one thing: these goods are worth N more than we thought. It does not know — and must
+not learn — whether the business runs weighted average or FIFO, or what the current average is.
+That is the costing strategy's business and the whole point of the port Phase 4 built.
+
+`RevalueBy` converts a delta into whatever the strategy needs. Under WAC that is a new average:
+the delta spread across what is actually on hand.
+
+### D2 — the split is by WHERE THE GOODS ARE
+
+- **Still on the shelf** → revalue them. Fixes the balance sheet and every future sale.
+- **Already sold** → the cost of that sale posted at the old figure, in a period that may be
+  closed. §D.4 forbids reopening periods to restate costing and the same argument holds here, so
+  the correction goes to an adjustment account: visible and explainable, rather than history
+  rewritten.
+
+The proportion is **capped at what this delivery brought in**, because on-hand stock includes
+other receipts and revaluing those would correct goods at a price this bill says nothing about.
+
+### D3 — four variance amounts, at most two non-zero
+
+Stock and expense, each over and under. Four names rather than two signed ones, because the
+posting engine refuses negatives and a negative would silently flip a line to the other side of
+the entry.
+
+### D4 — the revaluation is a MOVEMENT, not only a journal line
+
+The stock ledger carries its own value, and the two must not disagree. A journal-only correction
+would leave the trial balance right and the stock valuation wrong — which surfaces at a stock
+count, months later, as a discrepancy nobody can trace.
+
+**Mutation drills — 6 run, 2 passed.** Both resolved.
+
+| # | Mutation | Result |
+|---|---|---|
+| 86 | The whole-on-hand shortcut removed | **Passed — redundant code, deleted** |
+| 87 | More than this delivery's quantity is revalued | fails |
+| 88 | Both halves rounded separately, losing a unit | fails |
+| 89 | A revaluation written against empty stock | **Passed → test written at the inventory layer** |
+| 90 | The currency scale ignored in the unit-cost conversion | 2 tests fail |
+| 91 | The revaluation exemption removed again | 3 tests fail |
+
+**Drill 86** deleted a `remaining == received` shortcut and nothing failed — because the
+proportional path already answers `variance × received / received`, which is the variance. Deleted:
+redundant code that makes a drill on the real path ambiguous is worse than no code.
+
+**Drill 89** showed a guard that purchasing can never reach: its own split returns nothing against
+stock when nothing is on hand. The guard is real for other callers, so it now has a test at the
+inventory layer that can only pass if that layer keeps it — the Phase 3 rule, applied where it
+belongs.

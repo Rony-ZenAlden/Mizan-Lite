@@ -155,3 +155,61 @@ func TestAPostedBillCannotBeEdited(t *testing.T) {
 		t.Errorf("code = %q, want %q", code, domain.CodeBillPosted)
 	}
 }
+
+// ── the variance split (6.4) ────────────────────────────────────────────────────
+
+func TestAVarianceGoesToStockWhenNothingHasBeenSold(t *testing.T) {
+	// The goods are on the shelf carrying the wrong cost. Revaluing them fixes both the balance
+	// sheet and every future sale.
+	split := domain.SplitByWhereTheGoodsAre(2_000, 10_000_000, 10_000_000)
+	if split.StockMinor != 2_000 || split.ExpenseMinor != 0 {
+		t.Fatalf("split = %+v, want all of it against stock", split)
+	}
+}
+
+func TestAVarianceGoesToExpenseWhenEverythingHasGone(t *testing.T) {
+	// There is no stock left carrying the wrong cost. The error is in a cost of sale that has
+	// already posted, in a period that may be closed — §D.4 forbids reopening periods to restate
+	// costing, and the same argument holds here.
+	split := domain.SplitByWhereTheGoodsAre(2_000, 10_000_000, 0)
+	if split.StockMinor != 0 || split.ExpenseMinor != 2_000 {
+		t.Fatalf("split = %+v, want all of it against expense", split)
+	}
+}
+
+func TestAVarianceIsSplitProportionallyAndLosesNothing(t *testing.T) {
+	// The general case. Both halves must tie to the whole, always — §D.3's trap 4 in a different
+	// costume: a proportional split that drops a minor unit puts it in nobody's account.
+	for _, test := range []struct {
+		variance, received, onHand int64
+	}{
+		{2_000, 10_000_000, 4_000_000},
+		{-2_000, 10_000_000, 4_000_000},
+		{1, 3_000_000, 1_000_000},
+		{9_999, 7_000_000, 3_000_000},
+		{-1, 3_000_000, 2_000_000},
+	} {
+		split := domain.SplitByWhereTheGoodsAre(test.variance, test.received, test.onHand)
+		if split.StockMinor+split.ExpenseMinor != test.variance {
+			t.Errorf("variance %d split into %d + %d, which does not sum to it",
+				test.variance, split.StockMinor, split.ExpenseMinor)
+		}
+	}
+}
+
+func TestOnlyThisDeliverysQuantityCanBeRevalued(t *testing.T) {
+	// `onHand` is the whole variant's stock, which may exceed this delivery because other
+	// receipts contribute to it. Attributing more than THIS delivery's quantity would revalue
+	// goods that came in at a price this bill says nothing about.
+	split := domain.SplitByWhereTheGoodsAre(2_000, 10_000_000, 500_000_000)
+	if split.StockMinor != 2_000 || split.ExpenseMinor != 0 {
+		t.Fatalf("split = %+v, want the whole variance and no more", split)
+	}
+}
+
+func TestAVarianceOfNothingSplitsIntoNothing(t *testing.T) {
+	split := domain.SplitByWhereTheGoodsAre(0, 10_000_000, 10_000_000)
+	if split.StockMinor != 0 || split.ExpenseMinor != 0 {
+		t.Fatalf("split = %+v, want nothing", split)
+	}
+}

@@ -93,6 +93,12 @@ type Stock interface {
 	Receive(ctx context.Context, r StockRequest) (StockResult, error)
 	ReturnToSupplier(ctx context.Context, r StockRequest) (StockResult, error)
 	Revalue(ctx context.Context, r RevaluationRequest) error
+	// OnHandMicro reports how much of a variant is in a warehouse now.
+	//
+	// Needed to decide how much of a price correction can still reach the shelf. It is a
+	// QUANTITY, not a value: purchasing must not learn what the goods are carried at, because
+	// that is the costing strategy's business.
+	OnHandMicro(ctx context.Context, variantID, warehouseID id.ID) (int64, error)
 }
 
 // StockRequest is one movement purchasing asks for.
@@ -131,11 +137,16 @@ type StockResult struct {
 // Phase 4 built `domain.Revaluation` in 4.2 — Neutral direction, value without quantity — and
 // nothing has called it. A bill that disagrees with the order it bills is its first caller.
 type RevaluationRequest struct {
-	CompanyID    id.ID
-	WarehouseID  id.ID
-	ProductID    id.ID
-	VariantID    id.ID
-	DeltaMinor   int64
+	CompanyID   id.ID
+	WarehouseID id.ID
+	ProductID   id.ID
+	VariantID   id.ID
+	// DeltaMinor is how much more (or less) the stock on hand is worth. A VALUE, not a new
+	// average: purchasing states what changed and inventory decides what that does to the
+	// average, which is the whole point of the costing port.
+	DeltaMinor int64
+	// Decimals is the currency's minor-unit scale.
+	Decimals     int
 	DocumentType string
 	DocumentID   id.ID
 	OccurredAt   string

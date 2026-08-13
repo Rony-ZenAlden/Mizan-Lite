@@ -5,6 +5,8 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/inventory"
+	inventorydomain "github.com/mizan-erp/mizan/internal/modules/inventory/domain"
 	"github.com/mizan-erp/mizan/internal/modules/purchasing"
 	purchasingdomain "github.com/mizan-erp/mizan/internal/modules/purchasing/domain"
 )
@@ -130,12 +132,31 @@ func TestAPriceVarianceIsBookedAndGRNIStillClearsExactly(t *testing.T) {
 	if balances["2150"] != 0 {
 		t.Errorf("GRNI = %d, want 0 — it must clear at the ACCRUED figure", balances["2150"])
 	}
-	if balances["5600"] != 2_000 {
-		t.Errorf("variance account = %d, want 2000", balances["5600"])
+	// The goods are all still on the shelf, so the whole correction REVALUES them: inventory
+	// carries 10,000 from the receipt plus the 2,000 the invoice says it undercharged.
+	if balances["1300"] != 12_000 {
+		t.Errorf("inventory = %d, want 12000 — the correction did not reach the stock",
+			balances["1300"])
+	}
+	if balances["5600"] != 0 {
+		t.Errorf("adjustment account = %d, want 0 — nothing was sold", balances["5600"])
 	}
 	// Payable is the whole invoice: 12,000 plus 15% tax.
 	if balances["2100"] != -13_800 {
 		t.Errorf("accounts payable = %d, want -13800", balances["2100"])
+	}
+
+	// And the STOCK LEDGER agrees with the books, which is the point of writing a revaluation
+	// movement rather than only a journal line.
+	level, err := f.inventory.StockOf(f.ctx, f.variant.ID, f.warehouseID)
+	if err != nil {
+		t.Fatalf("StockOf: %v", err)
+	}
+	if level.OnHandMicro != 10_000_000 {
+		t.Errorf("on hand = %d — a revaluation moved quantity", level.OnHandMicro)
+	}
+	if level.AverageMicro != 12_000_000 {
+		t.Errorf("average cost = %d, want 12000000 (12.00)", level.AverageMicro)
 	}
 }
 
@@ -167,9 +188,126 @@ func TestASupplierChargingLessMovesTheBooksTheOtherWay(t *testing.T) {
 	if balances["2150"] != 0 {
 		t.Errorf("GRNI = %d, want 0", balances["2150"])
 	}
-	// The variance account is CREDITED this time: a gain, not a cost.
-	if balances["5600"] != -2_000 {
-		t.Errorf("variance account = %d, want -2000 (a credit)", balances["5600"])
+	// Inventory is written DOWN this time: 10,000 accrued less the 2,000 overcharge.
+	if balances["1300"] != 8_000 {
+		t.Errorf("inventory = %d, want 8000", balances["1300"])
+	}
+
+	level, err := f.inventory.StockOf(f.ctx, f.variant.ID, f.warehouseID)
+	if err != nil {
+		t.Fatalf("StockOf: %v", err)
+	}
+	if level.AverageMicro != 8_000_000 {
+		t.Errorf("average cost = %d, want 8000000 (8.00)", level.AverageMicro)
+	}
+}
+
+// TestAVarianceOnGoodsAlreadySoldGoesToAdjustmentsNotToStock
+//
+// The other half of 6.4's split. The cost of that sale posted at the old figure, in a period that
+// may be closed — §D.4 forbids reopening periods to restate costing, and the same argument holds
+// here. Revaluing stock that is no longer there would put the correction on a shelf that is
+// empty.
+func TestAVarianceOnGoodsAlreadySoldGoesToAdjustmentsNotToStock(t *testing.T) {
+	f := newStockedFixture(t)
+	books := f.booked(t)
+
+	_, _, receiptLines := f.delivered(t, 10_000_000)
+
+	// Everything is sold before the invoice arrives — which is the ordinary case for fast stock.
+	if _, err := f.inventory.Move(f.ctx, inventory.MoveInput{
+		CompanyID: f.companyID, WarehouseID: f.warehouseID,
+		ProductID: receiptLines[0].ProductID, VariantID: f.variant.ID,
+		Type: inventorydomain.Issue, QuantityMicro: 10_000_000,
+		OccurredAt: "2026-08-19",
+	}); err != nil {
+		t.Fatalf("issuing the stock: %v", err)
+	}
+
+	billID := f.draftBill(t, "ACME-5507")
+	if _, err := f.svc.AddBillLine(f.ctx, purchasing.BillLineInput{
+		CompanyID: f.companyID, BillID: billID, ReceiptLineID: receiptLines[0].ID,
+		UnitPriceMicro: 12_000_000,
+	}); err != nil {
+		t.Fatalf("AddBillLine: %v", err)
+	}
+	if _, err := f.svc.PostBill(f.ctx, billID); err != nil {
+		t.Fatalf("PostBill: %v", err)
+	}
+
+	balances := f.balances(t, books)
+	if balances["2150"] != 0 {
+		t.Errorf("GRNI = %d, want 0", balances["2150"])
+	}
+	// The correction is an ADJUSTMENT, not a revaluation: there is nothing left to revalue.
+	if balances["5600"] != 2_000 {
+		t.Errorf("adjustment account = %d, want 2000", balances["5600"])
+	}
+
+	// And no revaluation movement was written, because writing one against zero stock would
+	// imply a correction that did not happen.
+	var revaluations int
+	if err := f.store.Reader(f.ctx).QueryRowContext(f.ctx,
+		`SELECT COUNT(*) FROM stock_movements WHERE movement_type = 'revaluation'`,
+	).Scan(&revaluations); err != nil {
+		t.Fatalf("counting revaluations: %v", err)
+	}
+	if revaluations != 0 {
+		t.Errorf("%d revaluations were written against empty stock", revaluations)
+	}
+}
+
+// TestAVarianceIsSplitWhenSomeOfTheGoodsHaveGone
+//
+// The general case, and the one a proportional split exists for.
+func TestAVarianceIsSplitWhenSomeOfTheGoodsHaveGone(t *testing.T) {
+	f := newStockedFixture(t)
+	books := f.booked(t)
+
+	_, _, receiptLines := f.delivered(t, 10_000_000)
+
+	// Six of the ten are sold before the invoice arrives.
+	if _, err := f.inventory.Move(f.ctx, inventory.MoveInput{
+		CompanyID: f.companyID, WarehouseID: f.warehouseID,
+		ProductID: receiptLines[0].ProductID, VariantID: f.variant.ID,
+		Type: inventorydomain.Issue, QuantityMicro: 6_000_000,
+		OccurredAt: "2026-08-19",
+	}); err != nil {
+		t.Fatalf("issuing the stock: %v", err)
+	}
+
+	// Measured as a DELTA across posting the bill, so the assertion is about what the BILL did
+	// rather than about everything else that has happened to these accounts.
+	before := f.balances(t, books)
+
+	billID := f.draftBill(t, "ACME-5508")
+	if _, err := f.svc.AddBillLine(f.ctx, purchasing.BillLineInput{
+		CompanyID: f.companyID, BillID: billID, ReceiptLineID: receiptLines[0].ID,
+		UnitPriceMicro: 12_000_000, // a 2,000 minor variance over ten units
+	}); err != nil {
+		t.Fatalf("AddBillLine: %v", err)
+	}
+	if _, err := f.svc.PostBill(f.ctx, billID); err != nil {
+		t.Fatalf("PostBill: %v", err)
+	}
+	after := f.balances(t, books)
+
+	// Four of the ten remain, so four-tenths of the 2,000 variance revalues stock and
+	// six-tenths corrects costs that have already posted.
+	stockCorrection := after["1300"] - before["1300"]
+	expenseCorrection := after["5600"] - before["5600"]
+
+	if stockCorrection != 800 {
+		t.Errorf("stock correction = %d, want 800", stockCorrection)
+	}
+	if expenseCorrection != 1_200 {
+		t.Errorf("expense correction = %d, want 1200", expenseCorrection)
+	}
+	// The two halves tie to the whole. A split that lost a minor unit would put it nowhere,
+	// which is §D.3's trap 4 in a different costume.
+	if stockCorrection+expenseCorrection != 2_000 {
+		t.Errorf("the halves sum to %d, want the whole variance of 2000",
+			stockCorrection+expenseCorrection)
 	}
 }
 

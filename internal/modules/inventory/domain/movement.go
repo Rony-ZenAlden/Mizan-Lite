@@ -44,6 +44,9 @@ const (
 	Count         Type = "count"
 	Revaluation   Type = "revaluation"
 	ReturnIn      Type = "return_in"
+	// ReturnOut is goods going BACK to a supplier (6.6). The opposite direction to ReturnIn and
+	// a different fact, so a different type rather than a negative one.
+	ReturnOut Type = "return_out"
 )
 
 // Direction is the sign a type contributes to on-hand.
@@ -68,6 +71,7 @@ var directions = map[Type]Direction{
 	AdjustmentIn:  Inward,
 	TransferIn:    Inward,
 	Issue:         Outward,
+	ReturnOut:     Outward,
 	AdjustmentOut: Outward,
 	TransferOut:   Outward,
 	Count:         Neutral,
@@ -141,7 +145,18 @@ func NewMovement(
 	if _, err := DirectionOf(movementType); err != nil {
 		return Movement{}, err
 	}
-	if quantityMicro <= 0 {
+	// # A revaluation is the one movement that moves NO quantity
+	//
+	// It changes what stock is worth without changing how much there is — which is why 4.2 gave
+	// it the Neutral direction rather than treating it as an inward move of zero. Its ledger row
+	// is not "a movement that did not happen": it is a value change, and the ledger carries
+	// value as well as quantity.
+	//
+	// This exemption was missing until Phase 6.4 tried to write one. The type existed, the
+	// direction table knew it, the costing strategy had a `revalue` case — and the constructor
+	// refused every one, so the seam could not actually be used. A seam is only proven by a
+	// caller.
+	if quantityMicro < 0 || (quantityMicro == 0 && movementType != Revaluation) {
 		// Zero moves nothing and would still write a ledger row, which is a movement that
 		// happened according to the trail and did not according to the stock. Negative is the
 		// signed-quantity mistake this design exists to make unrepresentable.

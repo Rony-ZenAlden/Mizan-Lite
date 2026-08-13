@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
@@ -256,4 +257,107 @@ func (s *Service) RebuildLevels(ctx context.Context, companyID id.ID) (int, erro
 		return 0, err
 	}
 	return rebuilt, nil
+}
+
+// RevalueBy changes what stock is worth without moving any of it.
+//
+// # Why the caller states a VALUE, and inventory decides the average
+//
+// A purchase bill that disagrees with the order it bills knows one thing: these goods are worth
+// N minor units more (or less) than we thought. It does not know — and must not learn — whether
+// this business runs weighted average or FIFO, or what the current average is. That is the
+// costing strategy's business, and the whole point of the port Phase 4 built.
+//
+// So the caller supplies a delta and this converts it into whatever the strategy needs. Under
+// WAC that is a new average: the delta spread across what is actually on hand.
+//
+// # Nothing on hand means nothing to revalue
+//
+// If the goods have all been sold, there is no stock left carrying the wrong cost — the error is
+// in a cost of sale that has already posted, and correcting THAT is the caller's decision, not a
+// stock movement. Revaluing zero quantity would write a movement that changes nothing and
+// implies a correction that did not happen.
+func (s *Service) RevalueBy(ctx context.Context, in RevalueInput) (domain.Movement, error) {
+	if err := s.requirePublisher(); err != nil {
+		return domain.Movement{}, err
+	}
+
+	var recorded domain.Movement
+	err := s.db.Do(ctx, func(txCtx context.Context) error {
+		state, err := s.StockOf(txCtx, in.VariantID, in.WarehouseID)
+		if err != nil {
+			return err
+		}
+		if state.OnHandMicro <= 0 {
+			// Nothing to revalue. Not an error: it is the ordinary outcome when goods were sold
+			// before their invoice arrived.
+			return nil
+		}
+
+		// The delta, spread across what is on hand, added to the average it already carries.
+		// Computed in the same scale the average lives in (10⁻⁶ of the major unit, §E).
+		perUnit := deltaPerUnitMicro(in.DeltaMinor, state.OnHandMicro, in.Decimals)
+
+		movement, err := s.moveWithin(txCtx, MoveInput{
+			CompanyID: in.CompanyID, WarehouseID: in.WarehouseID,
+			ProductID: in.ProductID, VariantID: in.VariantID,
+			Type: domain.Revaluation,
+			// A revaluation moves no quantity. Its direction is Neutral and the ledger's fold
+			// leaves the balance alone — which is exactly why Phase 4 gave it its own direction
+			// rather than treating it as an inward move of zero.
+			QuantityMicro: 0,
+			UnitCostMicro: state.AverageMicro + perUnit,
+			DocumentType:  in.DocumentType, DocumentID: in.DocumentID,
+			OccurredAt: in.OccurredAt,
+		})
+		if err != nil {
+			return err
+		}
+		recorded = movement
+		return nil
+	})
+	if err != nil {
+		return domain.Movement{}, err
+	}
+	return recorded, nil
+}
+
+// RevalueInput asks for a revaluation.
+type RevalueInput struct {
+	CompanyID   id.ID
+	WarehouseID id.ID
+	ProductID   id.ID
+	VariantID   id.ID
+	// DeltaMinor is how much more (or less) the stock on hand is worth.
+	DeltaMinor int64
+	// Decimals is the currency's minor-unit scale, for converting money into a unit cost.
+	Decimals     int
+	DocumentType string
+	DocumentID   id.ID
+	OccurredAt   string
+}
+
+// deltaPerUnitMicro converts a money delta into a per-unit cost at the UnitAmount scale.
+//
+// Money is in minor units (10^decimals of the major unit) and a unit cost is 10⁻⁶ of the MAJOR
+// unit, so the conversion is not a division alone — getting it wrong by the currency's scale is
+// a hundred-fold error in the direction nobody checks.
+// The scales this file converts between (§E).
+const (
+	quantityScale = 1_000_000
+	unitScale     = 1_000_000
+)
+
+func pow10(n int) *big.Int {
+	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
+}
+
+func deltaPerUnitMicro(deltaMinor, onHandMicro int64, decimals int) int64 {
+	if onHandMicro == 0 {
+		return 0
+	}
+	// delta(minor) → major × 10⁶ → per unit, with the quantity's own 10⁶ cancelling.
+	numerator := new(big.Int).Mul(big.NewInt(deltaMinor), big.NewInt(unitScale*quantityScale))
+	numerator.Div(numerator, pow10(decimals))
+	return new(big.Int).Div(numerator, big.NewInt(onHandMicro)).Int64()
 }

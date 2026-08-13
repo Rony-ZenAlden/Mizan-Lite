@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"math/big"
 	"strings"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
@@ -229,4 +230,67 @@ func SplitVariance(varianceMinor int64) (over, under int64) {
 		return varianceMinor, 0
 	}
 	return 0, -varianceMinor
+}
+
+// ── the variance split (6.4) ────────────────────────────────────────────────────
+
+// VarianceSplit is a price difference divided by where the goods are now.
+type VarianceSplit struct {
+	// StockMinor is the part belonging to goods still on the shelf. It REVALUES them.
+	StockMinor int64
+	// ExpenseMinor is the part belonging to goods already sold, whose cost has posted.
+	ExpenseMinor int64
+}
+
+// SplitByWhereTheGoodsAre divides a line's price variance between stock and expense.
+//
+// # Why the split exists at all
+//
+// A bill that disagrees with the order it bills is correcting what the goods cost. Where those
+// goods are decides what the correction can do:
+//
+//   - **Still on the shelf** → the stock is carrying the wrong cost, and revaluing it fixes both
+//     the balance sheet and every future sale. Phase 4 built `Revaluation` for exactly this in
+//     4.2 and nothing has called it until now.
+//   - **Already sold** → the cost of that sale posted at the old figure, in a period that may be
+//     closed. §D.4 forbids reopening periods to restate costing, and the same argument holds
+//     here: the correction goes to an adjustment account, visible and explainable, rather than
+//     rewriting history.
+//
+// # The proportion is capped at what was received
+//
+// `onHandMicro` is the whole variant's stock, which may exceed this delivery — other receipts
+// contribute to it. Attributing more than THIS delivery's quantity would revalue goods that came
+// in at a price this bill says nothing about.
+func SplitByWhereTheGoodsAre(
+	varianceMinor, receivedMicro, onHandMicro int64,
+) VarianceSplit {
+	if varianceMinor == 0 || receivedMicro <= 0 {
+		return VarianceSplit{}
+	}
+	if onHandMicro <= 0 {
+		// Everything has gone. The whole correction belongs to costs already posted.
+		return VarianceSplit{ExpenseMinor: varianceMinor}
+	}
+
+	remaining := onHandMicro
+	if remaining > receivedMicro {
+		remaining = receivedMicro
+	}
+
+	// Proportional, computed multiplication-first so a small remainder against a large delivery
+	// does not truncate to nothing — the same trap the over-receipt tolerance carries (6.2).
+	//
+	// There was a `remaining == receivedMicro` shortcut here returning the whole variance. A
+	// drill deleted it and nothing failed, because the proportional path already answers
+	// `variance × received / received`, which is the variance. Redundant code that makes a
+	// drill on the real path ambiguous is worse than no code (5.8's lesson).
+	stock := scaledShare(varianceMinor, remaining, receivedMicro)
+	return VarianceSplit{StockMinor: stock, ExpenseMinor: varianceMinor - stock}
+}
+
+// scaledShare is `amount × part / whole`, exact and sign-preserving.
+func scaledShare(amount, part, whole int64) int64 {
+	product := new(big.Int).Mul(big.NewInt(amount), big.NewInt(part))
+	return new(big.Int).Quo(product, big.NewInt(whole)).Int64()
 }

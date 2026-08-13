@@ -1333,3 +1333,22 @@ GRNI clears at the ACCRUED figure, never the bill's own net — otherwise the pr
 in GRNI forever, and a balance nobody can explain is one nobody reads. The variance posts as two
 amounts with exactly one non-zero, because the posting engine refuses negatives and a negative
 would silently flip a line to the other side of the entry.
+
+### Step 6.4 — price variance and revaluation ✅
+
+**Phase 4's `Revaluation` movement could not be written.** The type existed since 4.2, the
+direction table knew it, the costing strategy had a `revalue` case, and the schema's CHECK list
+named it — and every path ended in a validation error, because two positive-quantity guards
+refused a movement of zero, which is the only kind a revaluation is. Built, documented,
+unit-tested, and structurally unusable. **A seam is only proven by a caller.**
+
+Fixed by exempting revaluation in the domain and by a table rebuild (`0030`), SQLite having no way
+to alter a CHECK constraint.
+
+The caller states a VALUE and inventory decides the average, because a bill must not learn whether
+the business runs WAC or FIFO. The variance splits by where the goods are: still on the shelf means
+revalue, already sold means an adjustment, since §D.4 forbids reopening periods to restate costing.
+The proportion is capped at what this delivery brought in — on-hand stock includes other receipts.
+
+Drill 86 found redundant code (deleted); drill 89 found a guard purchasing can never reach, which
+now has a test at the inventory layer that names the layer it is about.

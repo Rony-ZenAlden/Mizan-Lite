@@ -286,6 +286,12 @@ func (s *Service) PostBill(ctx context.Context, billID id.ID) (domain.Bill, erro
 		bill.VarianceMinor = bill.NetMinor - bill.AccruedMinor
 		bill.Status = domain.BillPosted
 
+		// The price correction, split by where the goods are now (6.4).
+		split, err := s.correctCosts(txCtx, bill, lines)
+		if err != nil {
+			return err
+		}
+
 		if bill.Number, err = s.allocate(txCtx, bill.BranchID, SeriesBill); err != nil {
 			return err
 		}
@@ -302,7 +308,7 @@ func (s *Service) PostBill(ctx context.Context, billID id.ID) (domain.Bill, erro
 			return err
 		}
 
-		if err = s.publishBillPosting(txCtx, bill); err != nil {
+		if err = s.publishBillPosting(txCtx, bill, split); err != nil {
 			return err
 		}
 
@@ -341,14 +347,86 @@ func (s *Service) receiptsBehind(
 	return out, nil
 }
 
-func (s *Service) publishBillPosting(ctx context.Context, bill domain.Bill) error {
+// correctCosts revalues the stock a price difference still applies to.
+//
+// # What this does and why it is not one number
+//
+// A bill disagreeing with the order it bills is correcting what the goods cost. Where those goods
+// are now decides what the correction can do — still on the shelf means REVALUE them, already
+// sold means the cost of that sale posted at the old figure in a period that may be closed.
+//
+// The revaluation is written as a stock MOVEMENT, not merely a journal line, because the stock
+// ledger carries its own value and the two must not disagree. Phase 4 built `Revaluation` — value
+// without quantity, Neutral direction — in 4.2 for exactly this, and nothing has called it until
+// now.
+func (s *Service) correctCosts(
+	ctx context.Context, bill domain.Bill, lines []domain.BillLine,
+) (domain.VarianceSplit, error) {
+	var total domain.VarianceSplit
+	if s.stock == nil {
+		return total, errs.Internal(CodePortMissing,
+			"the purchasing service was built without a stock port")
+	}
+
+	decimals, err := s.decimalsOf(ctx, bill.CurrencyCode)
+	if err != nil {
+		return total, err
+	}
+
+	for _, line := range lines {
+		variance := line.PriceVarianceMinor()
+		if variance == 0 {
+			continue
+		}
+
+		receiptLine, receiptID, found, lineErr := s.repos.ReceiptLineByID(ctx, line.ReceiptLineID)
+		if lineErr != nil {
+			return total, lineErr
+		}
+		if !found {
+			continue
+		}
+		receipt, receiptErr := s.requireReceipt(ctx, receiptID)
+		if receiptErr != nil {
+			return total, receiptErr
+		}
+
+		onHand, stockErr := s.stock.OnHandMicro(ctx, line.VariantID, receipt.WarehouseID)
+		if stockErr != nil {
+			return total, stockErr
+		}
+
+		split := domain.SplitByWhereTheGoodsAre(
+			variance, receiptLine.QuantityStockMicro, onHand)
+		total.StockMinor += split.StockMinor
+		total.ExpenseMinor += split.ExpenseMinor
+
+		if split.StockMinor != 0 {
+			if err = s.stock.Revalue(ctx, RevaluationRequest{
+				CompanyID: bill.CompanyID, WarehouseID: receipt.WarehouseID,
+				ProductID: line.ProductID, VariantID: line.VariantID,
+				DeltaMinor: split.StockMinor, Decimals: decimals,
+				DocumentType: EntityBill, DocumentID: bill.ID,
+				OccurredAt: bill.BillDate,
+			}); err != nil {
+				return total, err
+			}
+		}
+	}
+	return total, nil
+}
+
+func (s *Service) publishBillPosting(
+	ctx context.Context, bill domain.Bill, split domain.VarianceSplit,
+) error {
 	date, ok := clock.ParseDate(bill.BillDate)
 	if !ok {
 		return errs.Internal(domain.CodeInvalidBill,
 			"a purchase bill has an unreadable date").WithParam("date", bill.BillDate)
 	}
 
-	over, under := domain.SplitVariance(bill.VarianceMinor)
+	stockOver, stockUnder := domain.SplitVariance(split.StockMinor)
+	expenseOver, expenseUnder := domain.SplitVariance(split.ExpenseMinor)
 
 	return s.bus.Publish(ctx, accountingc.Postable{
 		Action:    PostingBillPosted,
@@ -361,12 +439,14 @@ func (s *Service) publishBillPosting(ctx context.Context, bill domain.Bill) erro
 		DocumentNumber: bill.Number,
 
 		Amounts: map[string]int64{
-			accountingc.AmountTotal:         bill.TotalMinor,
-			accountingc.AmountNet:           bill.NetMinor,
-			accountingc.AmountTax:           bill.TaxMinor,
-			accountingc.AmountAccrued:       bill.AccruedMinor,
-			accountingc.AmountVarianceOver:  over,
-			accountingc.AmountVarianceUnder: under,
+			accountingc.AmountTotal:                bill.TotalMinor,
+			accountingc.AmountNet:                  bill.NetMinor,
+			accountingc.AmountTax:                  bill.TaxMinor,
+			accountingc.AmountAccrued:              bill.AccruedMinor,
+			accountingc.AmountVarianceStockOver:    stockOver,
+			accountingc.AmountVarianceStockUnder:   stockUnder,
+			accountingc.AmountVarianceExpenseOver:  expenseOver,
+			accountingc.AmountVarianceExpenseUnder: expenseUnder,
 		},
 
 		CurrencyCode: bill.CurrencyCode,

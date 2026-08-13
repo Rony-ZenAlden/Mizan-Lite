@@ -1237,3 +1237,28 @@ files both named `printing.go`, and the restore wrote one over the other — unt
 not help. Backup paths must derive from the full path. A companion failure: BSD grep has no `\s`,
 so drills whose only failures were nested subtests looked like they produced no output, and one
 read as a passing drill until checked directly.
+
+### Step 5.10 — Phase 5 Definition-of-Done review ✅ 14/14
+
+Five criteria were only partly proven, and every gap had the same shape: **a criterion with two
+halves, one tested and one assumed.** None was a false claim; each was a claim nothing enforced.
+
+- #1 named four things that must not change a reprint, and three were tested. The price list and
+  tax rate arrive through PORTS, so the new test swaps both services for ones answering nine times
+  the price at four times the rate — proving printing never asks, not merely that a repository
+  reads right.
+- #4's "cannot be edited" covered adding a line, never removing one — the worse direction.
+- #6 is a claim with an "unless" in it, and the "unless" is what a van or a next-morning delivery
+  counter depends on. The column had said "Read from Phase 4" since Phase 1 and nothing had driven
+  it from a sale.
+- #11's stock half was never asserted: a hold that reserved goods would strand them.
+- #13 rested on one test about number series; nothing required the other eleven audited acts.
+
+Writing the audit test found a vocabulary collision: `sales.invoice.posted` is a POSTING-RULE key
+and `sales.document.posted` is an AUDIT action, and both sat in one const block under one comment
+with the same `Action` prefix. Now separated, with the test asserting the separation both ways.
+
+**Phase 5 complete.** Ten steps, 66 drills, 12 passed. Every seam from earlier phases got its
+first real caller and none needed reshaping; the two gaps found in the books were fixed entirely
+in seed data. The most valuable findings were not bugs in the code but tests that could not fail:
+when a test needs a helper that imitates a production mechanism, that mechanism is untested.

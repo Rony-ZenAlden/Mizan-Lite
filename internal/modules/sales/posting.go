@@ -11,7 +11,15 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/sales/domain"
 )
 
-// The postable actions and audited actions this step adds.
+// POSTING-RULE actions: the keys Phase 2's seeded rules match on (§20.3).
+//
+// These are NOT audit actions, and the difference matters more than the shared `Action` prefix
+// suggests. A posting-rule action selects which journal entry to write; an audit action records
+// that a human did something. They travel to different tables, for different readers, and one
+// firing tells you nothing about the other.
+//
+// The two were declared in a single block under one comment until the Phase 5 DoD review, where
+// a test asked the audit trail for `sales.invoice.posted` and correctly found nothing.
 const (
 	// ActionInvoicePosted is what Phase 2's `sale_revenue` and `sale_cost` rules match on. It was
 	// seeded in Phase 2 and has never fired until now.
@@ -19,11 +27,15 @@ const (
 	// ActionCreditNotePosted is the reverse. A SEPARATE action, not a negative invoice, because
 	// the posting engine refuses negative amounts — a negative would flip a line's side silently.
 	ActionCreditNotePosted = "sales.credit_note.posted"
-
-	ActionDocumentPosted = "sales.document.posted"
-
-	CodePortMissing = "sales.port_missing"
 )
+
+// AUDIT actions: what a person did, recorded in the same transaction as the change.
+const (
+	ActionDocumentPosted = "sales.document.posted"
+)
+
+// CodePortMissing reports a dependency the composition root did not supply.
+const CodePortMissing = "sales.port_missing"
 
 // Post commits a sales document.
 //

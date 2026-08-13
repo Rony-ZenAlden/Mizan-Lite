@@ -868,3 +868,112 @@ A second, smaller one: the drill loop grepped `^\s*--- FAIL`, and BSD grep does 
 Two drills whose only failures were *nested subtests* appeared to produce no output at all — one
 of which read as a passing drill until it was checked directly. A verification harness that
 silently drops evidence is worse than none.
+
+---
+
+## Step 5.10 — Phase 5 Definition-of-Done review
+
+**14 of 14 met.** Five were only partly proven when the review began, and closing those gaps is
+the whole return on doing this step.
+
+| # | Criterion | Proven by |
+|---|---|---|
+| 1 | A posted line reproduces its invoice byte-identically after the price list, tax rate, product name, and unit name have all changed | `TestAReprintSurvivesEveryChangeToMasterData` + **`TestAReprintIgnoresANewPriceListAndANewTaxRate`** |
+| 2 | A number is allocated only at posting; an abandoned draft consumes none | `TestADraftHasNoNumber`, `TestAbandonedDraftsConsumeNoNumbers` |
+| 3 | Two documents can never share a number, enforced by the schema as well as the allocator | `TestTheDatabaseRefusesADuplicateDocumentNumber`, `TestConcurrentAllocationsNeverCollide` |
+| 4 | A posted document cannot be edited; correction is by credit note | `TestAPostedDocumentCannotTakeMoreLines`, **`TestALineCannotBeRemovedFromAPostedDocument`**, `TestOnlyAPostedInvoiceCanBeCredited` |
+| 5 | Posting issues stock, computes tax, records cost, and writes the journal — all in one transaction or none | `TestPostingResolvesPriceTaxStockAndNumber`, `TestASaleWhoseJournalEntryFailsMovesNoStock`, `TestAFailedCreditCheckRollsBackTheStockAndTheNumber` |
+| 6 | A sale that would take stock below zero is refused unless the warehouse permits it | `TestSellingMoreThanIsInStockIsRefused` + **`TestASaleMayGoNegativeWhereTheWarehouseAllowsIt`** |
+| 7 | A credit note returns stock at the original sale's cost | `TestAReturnIsCostedAtTheOriginalSaleNotTodaysAverage` |
+| 8 | Price resolution records which list answered, stored on the line | `TestAPostedLineRecordsWhichPriceListAnsweredAndWhichRate` |
+| 9 | One payment settles several invoices; one invoice takes several payments | `TestOnePaymentCanSettleSeveralInvoices`, `TestOneInvoiceCanTakeSeveralPayments` |
+| 10 | A shift's expected cash is derived from its payments; a close records the difference | `TestAShiftExpectsItsFloatPlusTheCashItTook`, `TestAShortTillIsPostedAsAnExpense`, `TestAnOverTillIsPostedTheOtherWay` |
+| 11 | A held sale occupies no number and moves no stock | `TestAHeldSaleKeepsItsLinesAndTakesNoNumber` + **`TestAHeldSaleMovesNoStock`** |
+| 12 | Sales contains no accounting logic; every posting goes through Phase 2's rules | `TestSalesNamesNoAccounts`, `TestPostingASaleWritesTheJournalEntryThroughPhase2sRules` |
+| 13 | Every new binding has a declared policy; every state change is audited in-transaction | `TestEveryBindingMethodHasAPolicy`, `TestEveryFacadeIsExportedAndAttached` + **`TestEveryActOnASaleLeavesAnAuditEntry`** |
+| 14 | `make ci` green, with each step's drills | 66 drills across the phase; 12 passed and each was resolved |
+
+**Bold** entries were written by this review.
+
+### What the review found
+
+Every gap was of one shape: **a criterion with two halves, of which one had been tested and the
+other assumed.** Not a single one was a false claim — each was a claim that nothing enforced.
+
+1. **Criterion 1 named four things and three were tested.** The price list and the tax rate arrive
+   through PORTS, and a reprint that re-asked them would be re-deriving the document rather than
+   reproducing it. The new test swaps the whole pricing and tax services for ones answering nine
+   times the price at four times the rate — a sharper instrument than editing a table, because it
+   proves printing never asks rather than that a repository reads correctly.
+
+2. **Criterion 4's "cannot be edited" only covered adding.** Removal is the worse direction: it
+   takes goods off an invoice that has already issued stock and written a journal entry, leaving
+   both pointing at a line that no longer exists.
+
+3. **Criterion 6 is a claim with an "unless" in it, and the "unless" is what a real shop depends
+   on.** Selling from a van, or a counter whose deliveries are booked the next morning, means
+   going negative routinely. The column has said "Read from Phase 4" since Phase 1; nothing had
+   ever driven it from a SALE. The drill confirms it: disabling the warehouse lookup fails a test
+   in *both* modules, which is the Phase 3 rule holding.
+
+4. **Criterion 11's stock half was never asserted.** A hold that reserved or issued goods would
+   take them off the shelf for a customer who walked away, and nothing would put them back. The
+   test now checks on-hand *and* reserved, then resumes and posts to prove the absence was a hold
+   rather than a broken sale.
+
+5. **Criterion 13 rested on one test about number series.** Drafting, posting, holding,
+   cancelling, taking money, and opening and closing a till were each audited, but nothing
+   REQUIRED it — so the next act added would not have been. The new test walks a day's trading
+   through the service and demands an entry for every act, which is what catches "somebody added
+   an eighth and forgot".
+
+### A vocabulary collision, found by writing the audit test
+
+`sales.invoice.posted` is a **posting-rule key** that Phase 2's `sale_revenue` and `sale_cost`
+rules match on. `sales.document.posted` is an **audit action**. Both were declared in one `const`
+block under the comment "the postable actions and audited actions this step adds", both carry an
+`Action` prefix — and the first version of the audit test asked the audit trail for the posting
+key and correctly found nothing.
+
+The two now sit in separate blocks with the distinction stated: one selects a journal entry, the
+other records that a person did something. They travel to different tables, for different
+readers, and one firing tells you nothing about the other. The test asserts the separation in
+both directions — every audit action present, and the posting key *absent*.
+
+### Drills
+
+| # | Mutation | Result |
+|---|---|---|
+| 61 | A posted document's line can be removed | fails |
+| 62 | The reprint re-derives the price | fails |
+| 63 | Two audited acts stop being audited | fails |
+| 64 | Closing a till stops being audited | fails |
+| 65 | The warehouse's permission to go negative is ignored | fails in **both** modules |
+| 66 | Holding a sale issues stock | fails |
+
+Drill 66 took three attempts. The first two produced a *build failure* and a *foreign-key
+violation* — the test failed, but for the mutation's own defect rather than for the guarantee. A
+drill that fails for the wrong reason proves nothing, and is the fourth bad mutation this project
+has recorded.
+
+---
+
+## Phase 5 complete
+
+Ten steps: numbering, documents, posting, returns, payments, shifts, PIN login, screens, printing,
+and this review. **66 mutation drills, 12 of which passed** — each resolved by one of the five
+outcomes Phase 4 recorded.
+
+**What Phase 5 proved about the phases before it.** Every seam built earlier got its first real
+caller and none needed reshaping: Phase 2's posting rules fired for the first time, Phase 3's
+price resolution and "you cannot sell half a chair" got their first callers, Phase 4's costing
+port supplied cost-at-sale, and Phase 1's `user_credentials` already accepted a PIN. The two gaps
+found in the books were fixed **entirely in seed data** — credit notes posting no entry, and
+payments debiting cash for every method — which is the §20.3 table-driven design paying for
+itself.
+
+**The most valuable finding was not a bug in the code.** Drill 39 showed that every test asserting
+the PIN permission bound stamped the flag by hand, so the guard could stop setting it and nothing
+would notice; drill 52 showed the same shape one step later, and drill 44 found a façade wired
+into nothing while 210 tests stayed green. The recurring lesson: **when a test needs a helper that
+imitates a production mechanism, that mechanism is untested.**

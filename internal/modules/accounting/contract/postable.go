@@ -81,4 +81,19 @@ const (
 	AmountNet   = "document.net"
 	AmountTax   = "document.tax"
 	AmountCost  = "document.cost"
+
+	// AmountAccrued is what a PRIOR document already put on the books for the same goods —
+	// what a goods receipt credited to GRNI, which its bill must clear EXACTLY. Clearing the
+	// bill's own net instead would leave the difference sitting in GRNI forever, which is the
+	// balance a purchasing manager is supposed to be able to trust.
+	AmountAccrued = "document.accrued"
+
+	// AmountVarianceOver and AmountVarianceUnder are the two halves of a price difference.
+	//
+	// TWO keys, exactly one of which is non-zero, because the posting engine refuses negative
+	// amounts — a negative would silently flip a line to the other side of the entry. The same
+	// shape as Phase 5s cash_short and cash_over: when the books must differ, the ACTION
+	// differs, never the modules knowledge of accounts (§20.3).
+	AmountVarianceOver  = "document.variance_over"
+	AmountVarianceUnder = "document.variance_under"
 )

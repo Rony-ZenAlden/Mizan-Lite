@@ -27,6 +27,11 @@ const (
 	CodeAlreadyConfirmed   = "purchasing.already_confirmed"
 	CodeNotConfirmed       = "purchasing.not_confirmed"
 	CodeAlreadyBilled      = "purchasing.already_billed"
+	CodeInvalidBill        = "purchasing.invalid_bill"
+	CodeBillPosted         = "purchasing.bill_posted"
+	CodeNoSupplierInvoice  = "purchasing.no_supplier_invoice"
+	CodeQuantityMismatch   = "purchasing.quantity_mismatch"
+	CodeDuplicateInvoice   = "purchasing.duplicate_invoice"
 )
 
 // The numeric scales this module works in (§E).

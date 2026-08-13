@@ -1313,3 +1313,23 @@ zero means "genuinely free". A plain int64 collapses the two in the one directio
 **Drill 73: whole units hid a real defect.** The tolerance arithmetic gives the same answer for
 every whole-unit quantity, so a mutation swapping multiply and divide passed — every test ordered
 whole widgets. They diverge where tolerance matters most: goods measured rather than counted.
+
+### Step 6.3 — the purchase bill, the three-way match, and posting ✅
+
+Phase 2's `purchasing.bill.posted` rule fired for the first time.
+
+A bill line takes a receipt line IN FULL — the receipt line is already the record of what arrived
+in one delivery, signed for by one person. Partial take-up would need a third projection to
+maintain, for a case nobody has, and it is what makes GRNI clearing exact.
+
+**The best outcome came from writing a test.** The quantity side of the match needs no check: a
+bill line must name a receipt line and takes its quantity from it, so "invoiced for goods that
+never arrived" is not a state the schema can hold. A `RequireQuantityMatch` written first was
+DELETED — it compared a value with what it had just been assigned from and could never fire, and
+an unreachable guard is worse than none. Price is the opposite: a difference is ordinary and is
+booked and reported, never refused.
+
+GRNI clears at the ACCRUED figure, never the bill's own net — otherwise the price difference sits
+in GRNI forever, and a balance nobody can explain is one nobody reads. The variance posts as two
+amounts with exactly one non-zero, because the posting engine refuses negatives and a negative
+would silently flip a line to the other side of the entry.

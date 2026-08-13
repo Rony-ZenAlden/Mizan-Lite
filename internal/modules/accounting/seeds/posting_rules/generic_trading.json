@@ -119,13 +119,25 @@
       "code": "purchase",
       "event": "purchasing.bill.posted",
       "sequence": 1,
-      "description": "A supplier's invoice for goods already received: it clears what the receipt accrued, claims the recoverable tax, and books the payable.",
+      "description": "A supplier's invoice for goods already received: it clears EXACTLY what the receipts accrued to GRNI, books any price difference, claims the recoverable tax, and owes the supplier the total. Exactly one of the two variance lines is ever non-zero; the other resolves to nothing and is skipped.",
       "lines": [
         {
           "side": "debit",
           "account": "mapping:GRNI",
-          "amount": "document.net",
+          "amount": "document.accrued",
           "memo": "clears goods received not invoiced"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.variance_over",
+          "memo": "the supplier charged more than was ordered"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.variance_under",
+          "memo": "the supplier charged less than was ordered"
         },
         {
           "side": "debit",

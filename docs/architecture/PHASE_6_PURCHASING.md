@@ -426,3 +426,89 @@ that resolves to zero, so a tax line with no tax behind it is indistinguishable 
 
 No extra test was written. One that could fail on a single-layer mutation would have to assert
 something neither layer actually promises, and a test that pins nothing is worse than none (4.3).
+
+---
+
+## Step 6.3 — the purchase bill, the three-way match, and posting
+
+**Delivered.** `0029_bills.sql`, the bill domain and the match, the service (draft, add line,
+post, cancel, report), and the reworked `purchase` posting rule. Phase 2's
+`purchasing.bill.posted` rule fired for the first time.
+
+### D1 — a bill line takes a receipt line IN FULL
+
+Not a partial quantity of one. The receipt line is already the record of what physically arrived
+in one delivery, at one time, signed for by one person — it is the natural unit of *"this much was
+received"*, and suppliers do not invoice half a delivery line.
+
+Partial take-up would mean tracking how much of each receipt line remains unbilled: a third
+projection to maintain and reconcile, in exchange for a case nobody has. Where a supplier really
+does split an invoice, the answer is two bills each taking whole lines — which is what the paper
+looks like anyway.
+
+**This is what makes GRNI clearing exact rather than approximate.**
+
+### D2 — quantity is guaranteed by CONSTRUCTION; price is reported
+
+The design's most useful outcome, and it emerged from writing the test.
+
+A bill line **must** name a receipt line (`NOT NULL`) and takes its quantity from it. There is no
+field through which a different quantity could be expressed, so *"the supplier is invoicing for
+goods that never arrived"* is **not a state this schema can hold** — rather than one it validates
+against.
+
+A runtime `RequireQuantityMatch` was written first and then **deleted**: it compared the quantity
+with the value it had just been assigned from, so it could never fire. An unreachable guard is
+worse than none, because a test for it passes whatever the code does (4.3). The test now asserts
+the structural property, which is what actually holds.
+
+Price is the opposite. A different price is ordinary — a surcharge, a currency movement, a price
+agreed by telephone and never recorded. Refusing it would leave the goods on the shelf, the GRNI
+accrued, and no way to close the loop except by editing the order retrospectively, which is worse
+than the variance. So it is **booked and reported**, never refused.
+
+### D3 — GRNI is cleared at the ACCRUED figure, never the bill's own net
+
+```
+DR GRNI              exactly what the receipts accrued
+DR/CR variance       the difference between ordered and charged
+DR recoverable tax
+CR accounts payable  the total
+```
+
+Clearing the bill's net instead would leave the price difference sitting in GRNI forever — and a
+GRNI balance nobody can explain is a GRNI balance nobody reads, which costs the business the one
+report that says what it has received and not been invoiced for.
+
+### D4 — the variance is two amounts, exactly one non-zero
+
+The posting engine refuses negative amounts, because a negative would silently flip a line to the
+other side of the entry — a credit meant to be a debit, balancing perfectly and meaning the
+opposite. So `document.variance_over` and `document.variance_under` are two rule lines; the other
+resolves to nothing and Phase 2 skips it.
+
+The same shape as Phase 5's `cash_short` and `cash_over`, and the fifth application of: **when the
+books must differ, the ACTION differs, never the module's knowledge of accounts.**
+
+### D5 — the supplier's own invoice number is required
+
+Ours is for our filing; theirs is what a payment reference quotes and what a statement
+reconciliation matches on. Unique per supplier, because **the same invoice entered twice is a
+payment made twice** — and a duplicate number from a *different* supplier is entirely ordinary.
+
+Two layers keep it: a service pre-check that names which invoice and which supplier, and a unique
+index that holds when two clerks enter the same invoice at the same moment. Drill 82 confirmed
+both — removing the pre-check made the test fail with `purchasing.storage`, which is the index
+catching it.
+
+**Mutation drills — 7 run, 0 passed** (one bad mutation, redone).
+
+| # | Mutation | Result |
+|---|---|---|
+| 79 | GRNI cleared at the bill's net | 2 tests fail |
+| 80 | A negative variance reaches a rule line | 2 tests fail |
+| 81 | A delivery can be billed twice | fails |
+| 82 | The duplicate-invoice pre-check removed | fails — via the index |
+| 83 | Posted bills never mark deliveries billed | 2 tests fail |
+| 84 | Another supplier's delivery can be billed | fails |
+| 85 | The rule drops both variance lines | 2 tests fail |

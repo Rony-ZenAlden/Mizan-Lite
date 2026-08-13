@@ -1262,3 +1262,28 @@ with the same `Action` prefix. Now separated, with the test asserting the separa
 first real caller and none needed reshaping; the two gaps found in the books were fixed entirely
 in seed data. The most valuable findings were not bugs in the code but tests that could not fail:
 when a test needs a helper that imitates a production mechanism, that mechanism is untested.
+
+## Phase 6 — Purchasing
+
+Design recorded in `docs/architecture/PHASE_6_PURCHASING.md`. Three documents — order, receipt,
+bill — linked on their LINES, because the line is the grain at which their quantities differ. The
+three-way match is the control that stops a business paying for goods it never got, and it is only
+expressible if the three are distinct.
+
+### Step 6.1 — the module, schema, numbering, and the purchase order ✅
+
+The order is an intention: it moves no stock and writes no journal entry.
+
+**The number allocator moved to `internal/platform/numbering`,** because purchasing needed one and
+could neither import sales nor safely run a second against the same table. Sales 0023 had written
+the reason down a phase early about the TABLE; the allocator has the same property. Sales'
+public API is unchanged and every Phase 5 numbering test passes untouched.
+
+Two Phase 3 seams got their first reader: `purchase_uom_id` and `is_purchased`. Flour is bought by
+the kilogram and sold by the gram, so an order defaulting to the sales unit would be wrong by a
+factor of a thousand.
+
+**Drill 69 found a comment that overclaimed, in two modules.** Allocating the number FIRST — before
+everything that can fail — changes nothing, because the counter advance rolls back with the
+transaction. The ordering is not what keeps §9.4; the transaction is. Both comments corrected, and
+no test pins the ordering, because one would pass either way.

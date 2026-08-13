@@ -33,6 +33,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 )
 
@@ -60,8 +61,10 @@ const (
 // Stable codes for this module's failures.
 const (
 	CodePublisherMissing = "sales.publisher_missing"
-	CodeDuplicateSeries  = "sales.duplicate_series"
-	CodeUnknownSeries    = "sales.unknown_series"
+	// Series errors now come from the platform allocator. Re-exported so this module's
+	// callers and tests need not learn where the mechanism lives.
+	CodeDuplicateSeries = numbering.CodeDuplicateSeries
+	CodeUnknownSeries   = numbering.CodeUnknownSeries
 )
 
 // The series codes this build allocates from.
@@ -120,7 +123,9 @@ type Service struct {
 	// messages translates the labels on a printed document. Optional: a service built without
 	// one prints keys, which is visible and harmless, rather than refusing to construct.
 	messages Translator
-	logger   *slog.Logger
+	// numbers is the platform's allocator, shared with every other transactional module.
+	numbers *numbering.Allocator
+	logger  *slog.Logger
 }
 
 // NewService builds the service.
@@ -130,7 +135,8 @@ func NewService(db Database, opts Options) *Service {
 	}
 	return &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock,
-		bus: opts.Bus, actors: opts.Actors, catalog: opts.Catalog,
+		numbers: numbering.New(db, opts.Clock),
+		bus:     opts.Bus, actors: opts.Actors, catalog: opts.Catalog,
 		pricing: opts.Pricing, tax: opts.Tax, stock: opts.Stock, credit: opts.Credit,
 		messages: opts.Messages,
 		logger:   opts.Logger,
@@ -158,22 +164,26 @@ type NewSeriesInput struct {
 }
 
 // CreateSeries adds a numbering sequence.
-func (s *Service) CreateSeries(ctx context.Context, in NewSeriesInput) (domain.Series, error) {
-	var created domain.Series
+//
+// The series LIVES in the platform's table and is allocated by the platform's allocator; what
+// sales adds here is the audit entry, because creating a series is an administrative act by a
+// person and the platform has no opinion about people.
+func (s *Service) CreateSeries(ctx context.Context, in NewSeriesInput) (numbering.Series, error) {
+	var created numbering.Series
 
 	err := s.db.Do(ctx, func(txCtx context.Context) error {
 		identifier, err := id.New()
 		if err != nil {
 			return err
 		}
-		built, err := domain.NewSeries(identifier, in.Code, in.Prefix, in.Padding)
+		built, err := numbering.NewSeries(identifier, in.Code, in.Prefix, in.Padding)
 		if err != nil {
 			return err
 		}
 		built.Suffix = in.Suffix
 		built.BranchID = in.BranchID
 
-		if err = s.repos.InsertSeries(txCtx, built); err != nil {
+		if err = s.numbers.Create(txCtx, built); err != nil {
 			return err
 		}
 		created = built
@@ -186,61 +196,33 @@ func (s *Service) CreateSeries(ctx context.Context, in NewSeriesInput) (domain.S
 		})
 	})
 	if err != nil {
-		return domain.Series{}, err
+		return numbering.Series{}, err
 	}
 	return created, nil
 }
 
 // allocateNumber takes the next number from a series, INSIDE the caller's transaction.
 //
-// # Why this is unexported and takes a transaction context
+// # Why this stays unexported even though the allocator moved
 //
-// A number must be allocated in the same transaction that writes the document it numbers. If the
-// allocation committed separately, a posting that then failed would leave a consumed number and
-// no document — a gap on every failure rather than only on an abandoned draft.
+// The allocator is now platform (`internal/platform/numbering`), because purchasing needs one
+// too and could neither import sales nor safely build a second — which is what sales 0023
+// predicted when it declined to create a second series TABLE.
 //
-// Making it unexported means no caller outside this module can take a number without a document
-// to attach it to. That is the structural version of the rule, rather than a comment asking
-// people to remember it.
+// This wrapper remains unexported for the reason the original comment gave: no caller outside
+// this module should take a number without a document to attach it to. The structural guard is
+// worth keeping even though the mechanism it guards now lives elsewhere.
 func (s *Service) allocateNumber(
 	ctx context.Context, branchID id.ID, code string,
 ) (string, error) {
-	series, found, err := s.repos.SeriesFor(ctx, branchID, code)
-	if err != nil {
-		return "", err
-	}
-	if !found {
-		return "", errs.NotFound(CodeUnknownSeries,
-			"there is no number series for that kind of document").WithParam("code", code)
-	}
-
-	number, advanced, err := series.Next()
-	if err != nil {
-		return "", err
-	}
-	if err = s.repos.AdvanceSeries(ctx, series.ID, advanced.NextValue); err != nil {
-		return "", err
-	}
-	return number, nil
+	return s.numbers.Allocate(ctx, branchID, code)
 }
 
 // PreviewNumber reports what the next number WOULD be, without consuming it.
-//
-// For a screen that shows "this will be INV-000124". Reads the counter and formats it; takes
-// nothing. The separation of Format from Next in the domain is what makes this possible without
-// a second implementation of the padding rules.
 func (s *Service) PreviewNumber(
 	ctx context.Context, branchID id.ID, code string,
 ) (string, error) {
-	series, found, err := s.repos.SeriesFor(ctx, branchID, code)
-	if err != nil {
-		return "", err
-	}
-	if !found {
-		return "", errs.NotFound(CodeUnknownSeries,
-			"there is no number series for that kind of document").WithParam("code", code)
-	}
-	return series.Format(series.NextValue), nil
+	return s.numbers.Preview(ctx, branchID, code)
 }
 
 // ── module ──────────────────────────────────────────────────────────────────────
@@ -309,8 +291,8 @@ func (m *Module) Jobs() []jobs.Registration { return nil }
 
 // Re-exported so callers need not import the domain package.
 type (
-	// Series is a document numbering sequence.
-	Series = domain.Series
+	// Series is a document numbering sequence, owned by the platform allocator since Phase 6.
+	Series = numbering.Series
 	// Document is a sale in one of its forms.
 	Document = domain.Document
 	// Line is one item on a document.

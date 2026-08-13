@@ -531,9 +531,54 @@ func (s *Service) ProductByID(
 func (s *Service) SaleFacts(
 	ctx context.Context, companyID, variantID, uomID id.ID, quantityMicro int64,
 ) (domain.Product, domain.Variant, domain.Unit, int64, error) {
+	return s.facts(ctx, companyID, variantID, uomID, quantityMicro, saleDirection)
+}
+
+// PurchaseFacts is the same question asked from the buying side.
+//
+// # Why a sibling and not a flag on SaleFacts
+//
+// The two differ in exactly one decision — which unit a caller who names none gets — and that
+// decision is `products.sales_uom_id` versus `products.purchase_uom_id`. Both columns have
+// existed since 3.2; the purchase one has had no reader until Phase 6.
+//
+// A business that buys cable in 100-metre drums and sells it by the metre needs the order to
+// default to drums and the sale to default to metres, without anybody saying so at either
+// counter. Defaulting both to the sales unit would make every purchase order wrong by a factor
+// of a hundred, in the direction nobody notices until the delivery arrives.
+//
+// It also refuses a product the catalog says is not bought. `is_purchased` has been on the table
+// since 3.2 with no reader; a shop that marks its own manufactured goods unpurchasable means it,
+// and an order for one is a mistake worth catching before it reaches a supplier.
+func (s *Service) PurchaseFacts(
+	ctx context.Context, companyID, variantID, uomID id.ID, quantityMicro int64,
+) (domain.Product, domain.Variant, domain.Unit, int64, error) {
+	return s.facts(ctx, companyID, variantID, uomID, quantityMicro, purchaseDirection)
+}
+
+// direction is which side of the trade a facts lookup is for.
+type direction int
+
+const (
+	saleDirection direction = iota
+	purchaseDirection
+)
+
+// facts is the shared body. The two exported forms differ only in their default unit and in the
+// flag they check.
+func (s *Service) facts(
+	ctx context.Context, companyID, variantID, uomID id.ID, quantityMicro int64, side direction,
+) (domain.Product, domain.Variant, domain.Unit, int64, error) {
 	variant, product, err := s.repos.VariantWithProduct(ctx, companyID, variantID)
 	if err != nil {
 		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
+	}
+
+	if side == purchaseDirection && !product.IsPurchased {
+		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0,
+			errs.Validation(domain.CodeNotPurchased,
+				"this product is not one the business buys").
+				WithParam("product", product.Code)
 	}
 
 	stockUnit, err := s.repos.UnitByID(ctx, product.StockUnitID)
@@ -541,30 +586,34 @@ func (s *Service) SaleFacts(
 		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
 	}
 
-	// No unit named means the product's SALES unit, which is what a till should default to: a
-	// business that buys in rolls and sells in metres expects the sale to be in metres without
+	// No unit named means the product's own unit for THIS side of the trade: a business that
+	// buys in rolls and sells in metres expects each counter to default to its own unit without
 	// anybody saying so.
-	saleUnit := stockUnit
+	preferred := product.SalesUnitID
+	if side == purchaseDirection {
+		preferred = product.PurchaseUnitID
+	}
+
+	lineUnit := stockUnit
 	if !uomID.IsZero() {
-		if saleUnit, err = s.repos.UnitByID(ctx, uomID); err != nil {
+		if lineUnit, err = s.repos.UnitByID(ctx, uomID); err != nil {
 			return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
 		}
-	} else if product.SalesUnitID != product.StockUnitID {
-		if saleUnit, err = s.repos.UnitByID(ctx, product.SalesUnitID); err != nil {
+	} else if preferred != product.StockUnitID {
+		if lineUnit, err = s.repos.UnitByID(ctx, preferred); err != nil {
 			return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
 		}
 	}
 
-	// Refuses half a chair, and refuses kilograms sold as metres. Both are 3.1's rules, reached
-	// here by the first caller they have ever had.
-	normalised, err := domain.Normalise(quantityMicro, saleUnit)
+	// Refuses half a chair, and refuses kilograms sold as metres. Both are 3.1's rules.
+	normalised, err := domain.Normalise(quantityMicro, lineUnit)
 	if err != nil {
 		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
 	}
-	inStock, err := domain.Convert(normalised, saleUnit, stockUnit, round.HalfAwayFromZero)
+	inStock, err := domain.Convert(normalised, lineUnit, stockUnit, round.HalfAwayFromZero)
 	if err != nil {
 		return domain.Product{}, domain.Variant{}, domain.Unit{}, 0, err
 	}
 
-	return product, variant, saleUnit, inStock, nil
+	return product, variant, lineUnit, inStock, nil
 }

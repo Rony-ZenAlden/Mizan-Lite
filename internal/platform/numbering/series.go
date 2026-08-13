@@ -1,5 +1,26 @@
-// Package domain holds the sales module's business rules.
-package domain
+// Package numbering allocates document numbers from shared series (§9.4).
+//
+// # Why this is platform and not a module
+//
+// `migrations/sqlite/0001_platform.sql` puts `number_series` at platform level, commented
+// "used by every transactional module". Sales 0023 wrote the reason down when it declined to
+// create a second one:
+//
+//	"purchasing (Phase 6) and payments will number documents too, and a series table owned by
+//	 sales would make them either import sales or build a second one."
+//
+// The ALLOCATOR has exactly the same property, and Phase 6 is where that became concrete: a
+// purchase order needs a number, purchasing cannot import sales (`module-isolation`), and two
+// allocators against one table would each be correct alone and race together. So the allocator
+// followed its table here.
+//
+// # The guarantee
+//
+// §9.4: unique and SEQUENTIAL, not gapless. A number is taken inside the caller's transaction,
+// so a failure anywhere in that transaction gives the number back. What this does not promise is
+// that no number is ever skipped — a gapless sequence requires serialising every document behind
+// one lock, which is a correctness claim traded for a throughput disaster.
+package numbering
 
 import (
 	"strings"
@@ -10,9 +31,9 @@ import (
 
 // Stable codes for numbering.
 const (
-	CodeInvalidSeries = "sales.invalid_series"
-	CodeNoSeries      = "sales.no_series"
-	CodeNumberTooLong = "sales.number_too_long"
+	CodeInvalidSeries = "numbering.invalid_series"
+	CodeNoSeries      = "numbering.no_series"
+	CodeNumberTooLong = "numbering.number_too_long"
 )
 
 // Series is a document numbering sequence.

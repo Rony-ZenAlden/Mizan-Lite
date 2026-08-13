@@ -10,7 +10,10 @@ import (
 
 // Stable error codes for products, categories, and variants.
 const (
-	CodeInvalidProduct     = "catalog.invalid_product"
+	CodeInvalidProduct = "catalog.invalid_product"
+	// CodeNotPurchased refuses an order for something the business does not buy. The flag has
+	// been on the table since 3.2 and had no reader until Phase 6.
+	CodeNotPurchased       = "catalog.not_purchased"
 	CodeInvalidCategory    = "catalog.invalid_category"
 	CodeInvalidVariant     = "catalog.invalid_variant"
 	CodeUnitsNotComparable = "catalog.units_not_comparable"

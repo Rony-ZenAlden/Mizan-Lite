@@ -1,5 +1,4 @@
-// Package sqlite is the sales module's persistence.
-package sqlite
+package numbering
 
 import (
 	"context"
@@ -9,30 +8,33 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
-	"github.com/mizan-erp/mizan/internal/modules/sales/domain"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 )
 
-// CodeStorage is the stable code for a persistence failure.
-const CodeStorage = "sales.storage"
+// Stable codes for the allocator.
+const (
+	CodeStorage         = "numbering.storage"
+	CodeDuplicateSeries = "numbering.duplicate_series"
+	CodeUnknownSeries   = "numbering.unknown_series"
+)
 
-// Repos is the module's repository set.
-type Repos struct {
+// Allocator issues document numbers from shared series.
+type Allocator struct {
 	db  database.DB
 	clk clock.Clock
 }
 
-// New builds the repositories.
-func New(db database.DB, clk clock.Clock) *Repos {
+// New builds an allocator.
+func New(db database.DB, clk clock.Clock) *Allocator {
 	if clk == nil {
 		clk = clock.System()
 	}
-	return &Repos{db: db, clk: clk}
+	return &Allocator{db: db, clk: clk}
 }
 
-func (r *Repos) now() string { return clock.Format(r.clk.Now()) }
+func (r *Allocator) now() string { return clock.Format(r.clk.Now()) }
 
-func (r *Repos) wrap(err error, what string) error {
+func (r *Allocator) wrap(err error, what string) error {
 	return errs.Wrap(r.db.Dialect().TranslateError(err), errs.CategoryInternal, CodeStorage, what)
 }
 
@@ -43,12 +45,76 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// Create adds a series.
+func (r *Allocator) Create(ctx context.Context, s Series) error {
+	existing, found, err := r.SeriesFor(ctx, s.BranchID, s.Code)
+	if err != nil {
+		return err
+	}
+	if found && existing.BranchID == s.BranchID {
+		return errs.Conflict(CodeDuplicateSeries,
+			"a number series with that code already exists").WithParam("code", s.Code)
+	}
+	return r.InsertSeries(ctx, s)
+}
+
+// Allocate takes the next number from a series, INSIDE the caller's transaction.
+//
+// # Why it must be the caller's transaction
+//
+// §9.4's guarantee is that a number is unique and sequential, not that it is gapless. Taking the
+// number in the same transaction that writes the document is what makes a failed document give
+// its number back — the two either both happen or neither does.
+//
+// A separate transaction here would hand out a number, commit it, and then watch the document
+// fail: a permanent hole, and one an auditor will ask about.
+func (r *Allocator) Allocate(
+	ctx context.Context, branchID id.ID, code string,
+) (string, error) {
+	series, found, err := r.SeriesFor(ctx, branchID, code)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", errs.NotFound(CodeUnknownSeries,
+			"there is no number series for that kind of document").WithParam("code", code)
+	}
+
+	number, advanced, err := series.Next()
+	if err != nil {
+		return "", err
+	}
+	if err = r.AdvanceSeries(ctx, advanced.ID, advanced.NextValue); err != nil {
+		return "", err
+	}
+	return number, nil
+}
+
+// Preview reports what the next number WOULD be, without consuming it.
+//
+// For a screen that wants to show "this will be INV-000124". It reads and does not advance, so
+// two callers previewing at once both see the same answer — which is correct, because neither has
+// taken anything.
+func (r *Allocator) Preview(
+	ctx context.Context, branchID id.ID, code string,
+) (string, error) {
+	series, found, err := r.SeriesFor(ctx, branchID, code)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", errs.NotFound(CodeUnknownSeries,
+			"there is no number series for that kind of document").WithParam("code", code)
+	}
+	return series.Format(series.NextValue), nil
+}
+
 // InsertSeries writes a number series.
 //
 // The table is the PLATFORM's (0001), shared with every transactional module. Its branch and
 // fiscal-year columns are NOT NULL with an empty-string default rather than nullable, which is
 // the better shape: "" means "all of them" without a COALESCE in every index and query.
-func (r *Repos) InsertSeries(ctx context.Context, s domain.Series) error {
+func (r *Allocator) InsertSeries(ctx context.Context, s Series) error {
 	now := r.now()
 	_, err := r.db.Writer(ctx).ExecContext(ctx, `
 		INSERT INTO number_series (
@@ -84,9 +150,9 @@ func (r *Repos) InsertSeries(ctx context.Context, s domain.Series) error {
 // being unexported and taking a transaction context already enforces structurally. `Writer` is
 // kept because it says "this is part of a write" to whoever reads it next, not because swapping
 // it would break anything.
-func (r *Repos) SeriesFor(
+func (r *Allocator) SeriesFor(
 	ctx context.Context, branchID id.ID, code string,
-) (domain.Series, bool, error) {
+) (Series, bool, error) {
 	row := r.db.Writer(ctx).QueryRowContext(ctx, `
 		SELECT id, code, branch_id, fiscal_year_id, prefix, suffix, padding,
 		       next_value, is_gapless
@@ -97,16 +163,16 @@ func (r *Repos) SeriesFor(
 		code, string(branchID))
 
 	var (
-		s       domain.Series
+		s       Series
 		gapless int
 	)
 	err := row.Scan(&s.ID, &s.Code, &s.BranchID, &s.FiscalYearID, &s.Prefix, &s.Suffix,
 		&s.Padding, &s.NextValue, &gapless)
 	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Series{}, false, nil
+		return Series{}, false, nil
 	}
 	if err != nil {
-		return domain.Series{}, false, r.wrap(err, "reading a number series")
+		return Series{}, false, r.wrap(err, "reading a number series")
 	}
 	s.IsGapless = gapless == 1
 	return s, true, nil
@@ -126,7 +192,7 @@ func (r *Repos) SeriesFor(
 // transaction whose isolation level does NOT serialise two allocators. There it is what stops
 // two terminals both believing they took number 123 — and the cost of carrying it until then is
 // one comparison.
-func (r *Repos) AdvanceSeries(
+func (r *Allocator) AdvanceSeries(
 	ctx context.Context, seriesID id.ID, nextValue int64,
 ) error {
 	result, err := r.db.Writer(ctx).ExecContext(ctx, `
@@ -144,22 +210,8 @@ func (r *Repos) AdvanceSeries(
 		// The counter did not move, which means somebody else already took this number. Failing
 		// LOUDLY is the point: the alternative is two documents with one number, discovered by
 		// a customer.
-		return errs.Conflict(domain.CodeNoSeries,
+		return errs.Conflict(CodeNoSeries,
 			"that number has already been issued").WithParam("next_value", itoa(nextValue))
 	}
 	return nil
-}
-
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits [20]byte
-	i := len(digits)
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(digits[i:])
 }

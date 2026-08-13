@@ -1,16 +1,16 @@
-package domain_test
+package numbering_test
 
 import (
 	"testing"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
-	"github.com/mizan-erp/mizan/internal/modules/sales/domain"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 )
 
-func series(t *testing.T, prefix string, padding int) domain.Series {
+func series(t *testing.T, prefix string, padding int) numbering.Series {
 	t.Helper()
-	built, err := domain.NewSeries(id.ID("s1"), "SALES_INVOICE", prefix, padding)
+	built, err := numbering.NewSeries(id.ID("s1"), "SALES_INVOICE", prefix, padding)
 	if err != nil {
 		t.Fatalf("NewSeries: %v", err)
 	}
@@ -112,15 +112,15 @@ func TestANumberTooLongToStoreIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("a number too long for the column was issued")
 	}
-	if code := errs.CodeOf(err); code != domain.CodeNumberTooLong {
-		t.Errorf("code = %q, want %q", code, domain.CodeNumberTooLong)
+	if code := errs.CodeOf(err); code != numbering.CodeNumberTooLong {
+		t.Errorf("code = %q, want %q", code, numbering.CodeNumberTooLong)
 	}
 }
 
 // ── construction ────────────────────────────────────────────────────────────────
 
 func TestASeriesNeedsACode(t *testing.T) {
-	if _, err := domain.NewSeries(id.ID("s1"), "   ", "INV-", 6); err == nil {
+	if _, err := numbering.NewSeries(id.ID("s1"), "   ", "INV-", 6); err == nil {
 		t.Fatal("a series with no code was accepted")
 	}
 }
@@ -128,19 +128,19 @@ func TestASeriesNeedsACode(t *testing.T) {
 // 18 digits is where an int64 stops being able to hold the value being padded, so a wider pad
 // could only ever produce a number the sequence cannot reach.
 func TestPaddingIsBoundedToWhatAnInt64CanReach(t *testing.T) {
-	if _, err := domain.NewSeries(id.ID("s1"), "INV", "INV-", 19); err == nil {
+	if _, err := numbering.NewSeries(id.ID("s1"), "INV", "INV-", 19); err == nil {
 		t.Error("a padding wider than an int64 can reach was accepted")
 	}
-	if _, err := domain.NewSeries(id.ID("s1"), "INV", "INV-", -1); err == nil {
+	if _, err := numbering.NewSeries(id.ID("s1"), "INV", "INV-", -1); err == nil {
 		t.Error("a negative padding was accepted")
 	}
-	if _, err := domain.NewSeries(id.ID("s1"), "INV", "INV-", 18); err != nil {
+	if _, err := numbering.NewSeries(id.ID("s1"), "INV", "INV-", 18); err != nil {
 		t.Errorf("the widest reachable padding was refused: %v", err)
 	}
 }
 
 func TestASeriesCodeIsNormalised(t *testing.T) {
-	built, err := domain.NewSeries(id.ID("s1"), "  sales_invoice  ", "INV-", 6)
+	built, err := numbering.NewSeries(id.ID("s1"), "  sales_invoice  ", "INV-", 6)
 	if err != nil {
 		t.Fatalf("NewSeries: %v", err)
 	}

@@ -60,7 +60,8 @@ const CodePortMissing = "sales.port_missing"
 //
 // Price before tax, because tax is computed on the net. Stock before totals, because the cost
 // comes back from the movement. Credit after totals, because the limit is checked against the
-// figure the customer will actually owe. The number LAST of the writes, so a failure anywhere
+// figure the customer will actually owe. The number is taken last of the writes — for tidiness;
+// what actually keeps §9.4 is that the whole thing is one transaction, so a failure anywhere
 // earlier consumes none.
 func (s *Service) Post(ctx context.Context, documentID id.ID) (domain.Document, error) {
 	if err := s.requirePorts(); err != nil {
@@ -111,8 +112,17 @@ func (s *Service) Post(ctx context.Context, documentID id.ID) (domain.Document, 
 			}
 		}
 
-		// LAST of the writes. A failure anywhere above consumes no number, which is §9.4's rule
-		// expressed as an ordering rather than as a comment.
+		// Allocated last, but the ORDERING is not what protects the number — the TRANSACTION is.
+		//
+		// A drill in 6.1 moved this allocation to the very top, before anything that can fail,
+		// and no test changed: `AdvanceSeries` runs inside `db.Do`, so a rollback takes the
+		// counter back with everything else. The earlier comment here claimed the ordering was
+		// "§9.4's rule expressed as an ordering", which overclaimed — §9.4 is kept by the
+		// transaction, and this ordering only avoids a pointless counter write on the failure
+		// path.
+		//
+		// No test pins the ordering, deliberately: a test that passes either way claims
+		// something is pinned when nothing is (4.3's rule).
 		number, err := s.allocateNumber(txCtx, document.BranchID, seriesFor(document.Type))
 		if err != nil {
 			return err

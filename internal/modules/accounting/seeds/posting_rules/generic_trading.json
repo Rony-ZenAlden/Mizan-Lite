@@ -272,6 +272,44 @@
       ]
     },
     {
+      "code": "supplier_return",
+      "event": "purchasing.return.posted",
+      "sequence": 1,
+      "description": "Goods go back to a supplier: what we owe them falls by what they charged, the recoverable tax we claimed is given back, and the stock leaves at what the original delivery cost. Any difference between the two is a real gain or loss on the return, not an error.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "debit note to the supplier"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax given back"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:INVENTORY",
+          "amount": "document.cost",
+          "memo": "goods leave at the original delivery's cost"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.variance_expense_over",
+          "memo": "returned for less than they cost"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:INVENTORY_ADJUSTMENT",
+          "amount": "document.variance_expense_under",
+          "memo": "returned for more than they cost"
+        }
+      ]
+    },
+    {
       "code": "supplier_payment",
       "event": "purchasing.payment.made",
       "sequence": 1,

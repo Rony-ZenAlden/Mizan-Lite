@@ -657,3 +657,21 @@ func (r *Repos) CompaniesWithStock(ctx context.Context) ([]id.ID, error) {
 	}
 	return out, rows.Err()
 }
+
+// FunctionalDecimals reads a company's functional currency scale.
+//
+// Needed to turn a quantity and a unit cost into money (§E). A company with no readable currency
+// is a broken install rather than a zero-decimal one, so this refuses rather than defaulting —
+// defaulting to 0 is what makes a valuation quietly a hundredth of the truth.
+func (r *Repos) FunctionalDecimals(ctx context.Context, companyID id.ID) (int, error) {
+	var decimals int
+	err := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT c.decimal_places
+		  FROM companies co
+		  JOIN currencies c ON c.code = co.functional_currency
+		 WHERE co.id = ?`, string(companyID)).Scan(&decimals)
+	if err != nil {
+		return 0, r.wrap(err, "reading the functional currency's scale")
+	}
+	return decimals, nil
+}

@@ -42,7 +42,21 @@ func (s realStock) Receive(
 func (s realStock) ReturnToSupplier(
 	ctx context.Context, r purchasing.StockRequest,
 ) (purchasing.StockResult, error) {
-	return purchasing.StockResult{}, nil // 6.6
+	moved, err := s.svc.Move(ctx, inventory.MoveInput{
+		CompanyID: r.CompanyID, WarehouseID: r.WarehouseID,
+		ProductID: r.ProductID, VariantID: r.VariantID,
+		Type: inventorydomain.ReturnOut, QuantityMicro: r.QuantityMicro,
+		LotID: r.LotID, SerialID: r.SerialID,
+		DocumentType: r.DocumentType, DocumentID: r.DocumentID,
+		DocumentLineID: r.DocumentLineID, OccurredAt: r.OccurredAt,
+		SourceMovementID: r.SourceMovementID,
+	})
+	if err != nil {
+		return purchasing.StockResult{}, err
+	}
+	return purchasing.StockResult{
+		MovementID: moved.ID, UnitCostMicro: moved.UnitCostMicro, ValueMinor: moved.ValueMinor,
+	}, nil
 }
 
 func (s realStock) Revalue(ctx context.Context, r purchasing.RevaluationRequest) error {

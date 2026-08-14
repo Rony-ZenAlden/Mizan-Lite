@@ -115,6 +115,12 @@ type Movement struct {
 	// SourceMovementID is the issue a return reverses (§D.3).
 	SourceMovementID id.ID
 
+	// Decimals is the functional currency's minor-unit scale, needed to turn a quantity and a
+	// unit cost into money (§E). Carried on the movement rather than looked up by the costing
+	// strategy, because a strategy that could look things up would need a database and would
+	// stop being testable against a table.
+	Decimals int
+
 	// LotID and SerialID are set when the product's tracking mode demands them, and must be
 	// empty otherwise — see RequireTracking, which enforces both directions.
 	LotID    id.ID
@@ -179,7 +185,9 @@ func (m Movement) RequireCostable() error {
 		return errs.Validation(CodeNegativeCost,
 			"a unit cost cannot be negative").WithParam("type", string(m.Type))
 	}
-	if m.Type == ReturnIn && m.SourceMovementID.IsZero() {
+	// Both kinds of return name what they reverse (§D.3). A return with no source has no cost
+	// but today's average, which is the whole thing the rule exists to prevent.
+	if (m.Type == ReturnIn || m.Type == ReturnOut) && m.SourceMovementID.IsZero() {
 		// §D.3: a return is costed at its ORIGINAL issue's cost, not today's average.
 		// Without the source there is no correct cost to apply, and using the average would
 		// invent profit on an item bought at last year's price.

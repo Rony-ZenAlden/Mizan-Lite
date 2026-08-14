@@ -1372,3 +1372,21 @@ regardless of value — which is exactly what landed costs do.
 The basis is declared per charge, because freight follows volume and customs follows value.
 `weight` and `volume` are named and REFUSED rather than substituted: a charge spread by value when
 somebody asked for weight is wrong in a way nobody would notice.
+
+### Step 6.6 — supplier returns ✅
+
+A debit note, not a negative bill — the posting engine refuses negatives because they silently
+flip a line to the other side of an entry. Costed at the ORIGINAL delivery per §D.3, with the
+average of what remains moving to match. Bounded twice: more than arrived, and the same goods
+twice, which only a running total catches.
+
+**This step uncovered the most consequential defect found so far.** Every costed value in the
+system was in MAJOR units, from fields named `…Minor`: `valueOf` never applied the currency's
+scale. It survived two phases because every test consuming a costed value used SYP, which has no
+minor unit — at scale 0 the two numbers are identical, so the conversion was only exercised where
+it could not be wrong.
+
+In production, every cost of goods sold would have been a hundredth of the truth for any business
+trading in a currency with minor units. Gross margin would have looked extraordinary.
+
+**A scale conversion tested only at scale 1 is a conversion nobody has tested.**

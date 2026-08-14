@@ -86,6 +86,7 @@ const (
 	CodeUnknownReceipt    = "purchasing.unknown_receipt"
 	CodeUnknownBill       = "purchasing.unknown_bill"
 	CodeUnknownLandedCost = "purchasing.unknown_landed_cost"
+	CodeUnknownReturn     = "purchasing.unknown_return"
 	CodePortMissing       = "purchasing.port_missing"
 )
 
@@ -223,6 +224,8 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermBillPost, Description: "permissions.purchasing.bill.post"},
 		{Code: PermLandedCostManage,
 			Description: "permissions.purchasing.landed_cost.manage"},
+		{Code: PermReturnView, Description: "permissions.purchasing.return.view"},
+		{Code: PermReturnPost, Description: "permissions.purchasing.return.post"},
 	}
 }
 

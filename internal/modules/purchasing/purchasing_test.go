@@ -260,6 +260,7 @@ func newFixture(t *testing.T) fixture {
 		{purchasing.SeriesReceipt, "GRN-"},
 		{purchasing.SeriesBill, "BILL-"},
 		{purchasing.SeriesPayment, "PAY-"},
+		{purchasing.SeriesReturn, "DN-"},
 	} {
 		if _, err = salesSvc.CreateSeries(ctx, sales.NewSeriesInput{
 			CompanyID: provisioned.CompanyID, Code: series.code,

@@ -196,6 +196,12 @@ func (s *Service) ReceiveLine(
 			variantID, uomID = orderLine.VariantID, orderLine.UomID
 			// Valued at the ORDER's price (D3): the best available estimate, and the number both
 			// parties last agreed on. The bill may disagree, and 6.4 corrects it.
+			//
+			// This OVERRIDES an explicit cost, deliberately. A delivery against an order is
+			// worth what the order said until the invoice says otherwise — letting whoever keys
+			// the delivery note set a cost would put an unagreed number into the valuation with
+			// no document behind it, and the three-way match would have nothing to compare.
+			// An explicit cost is for deliveries with no order, which have no agreed price.
 			unitCostMicro, costKnown = orderLine.UnitPriceMicro, true
 		}
 

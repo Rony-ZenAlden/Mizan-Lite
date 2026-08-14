@@ -651,3 +651,75 @@ expected always ends in.
 | 95 | An unsupported basis is accepted | fails |
 | 96 | Every basis behaves like value | fails |
 | 97 | A charge can be applied twice | fails |
+
+---
+
+## Step 6.6 — supplier returns
+
+**Delivered.** `0032_returns.sql`, the return domain and its bounds, the service, the
+`supplier_return` posting rule, and `ReturnOut` costing in inventory.
+
+### The defect this step uncovered
+
+**Every costed value in the system was in MAJOR units, from fields named `…Minor`.**
+
+`valueOf` multiplies a 10⁻⁶ quantity by a 10⁻⁶ unit cost and divides by 10¹², giving an amount in
+major units. Money is stored in **minor** units. The conversion needed the currency's scale and
+did not have it.
+
+It survived Phases 4 and 5 because **every test that consumed a costed value used SYP, which has
+no minor unit.** At scale 0 the two numbers are identical, so the conversion was only ever
+exercised where it could not be wrong. The first test in a two-decimal currency found it
+immediately: a return of two items at 10.00 was costed at 20 minor units instead of 2,000.
+
+In production this would have made **every cost of goods sold a hundredth of the truth** for any
+business trading in a currency with minor units — which is almost all of them. Gross margin would
+have looked extraordinary and the inventory valuation would have been off by two orders of
+magnitude.
+
+> **A scale conversion tested only at scale 1 is a conversion nobody has tested.**
+
+The fix reads the functional currency's scale in the service and carries it on the movement, so no
+caller can forget it. `scale_test.go` now exercises all three costing paths at 0, 2, and 3
+decimals.
+
+### D1 — a debit note, not a negative bill
+
+A negative bill would balance arithmetically and mean the wrong thing everywhere else: the posting
+engine refuses negatives because they silently flip a line to the other side of an entry, and a
+report filtering `status = 'posted'` would count the return as a purchase. Same reasoning Phase 5
+applied to credit notes — **when the books must differ, the ACTION differs.**
+
+### D2 — costed at the original delivery, never today's average
+
+§D.3, in the direction `0030` added `ReturnOut` for. The movement names the receipt's movement as
+its source and inventory reads the cost from there. Returning goods bought at last year's price at
+this year's average invents a gain or a loss that never happened.
+
+The average of what **remains** moves too: taking goods out at a cost different from the average
+changes the average of everything left, and leaving it alone would park the difference in the
+valuation of stock that never went anywhere.
+
+### D3 — two bounds, for different reasons
+
+Returning **more than arrived** is a debit note for goods the supplier never sent — the mirror of
+being invoiced for goods that never arrived. Returning **the same goods twice** is subtler: each
+return looks reasonable alone, and only the running total shows fourteen of ten leaving. Only
+POSTED returns count against the bound, or a second genuine return would be refused while the
+first was still being typed.
+
+### D4 — an explicit cost is ignored when there is an order
+
+A delivery against an order is worth what the order said until the invoice says otherwise. Letting
+whoever keys the delivery note set a cost would put an unagreed number into the valuation with no
+document behind it, and the three-way match would have nothing to compare.
+
+**Mutation drills — 5 run, 0 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 98 | The currency's scale is not read | fails |
+| 99 | A supplier return leaves at today's average | fails |
+| 100 | More can go back than arrived | 2 tests fail |
+| 101 | Draft returns count against what is left | fails |
+| 102 | The return names no source movement | 4 tests fail |

@@ -142,6 +142,16 @@ func (s *Service) moveWithin(ctx context.Context, in MoveInput) (domain.Movement
 		return domain.Movement{}, err
 	}
 
+	// The functional currency's scale, read here rather than asked of the caller.
+	//
+	// Every caller would otherwise have to supply it and any that forgot would silently value
+	// stock at a hundredth of the truth — which is exactly what happened while this was missing
+	// altogether (6.6). Read once per movement; it is one indexed lookup against a row that
+	// changes about never.
+	if movement.Decimals, err = s.repos.FunctionalDecimals(ctx, in.CompanyID); err != nil {
+		return domain.Movement{}, err
+	}
+
 	movement.UnitCostMicro = in.UnitCostMicro
 	movement.SourceMovementID = in.SourceMovementID
 	movement.LotID = in.LotID

@@ -96,6 +96,8 @@ func (w WAC) Cost(state State, m Movement, original Movement) (Result, error) {
 		return w.inward(state, m)
 	case ReturnIn:
 		return w.returned(state, m, original)
+	case ReturnOut:
+		return w.returnedOut(state, m, original)
 	case Issue, AdjustmentOut, TransferOut:
 		return w.outward(state, m)
 	case Revaluation:
@@ -112,7 +114,7 @@ func (w WAC) Cost(state State, m Movement, original Movement) (Result, error) {
 //
 //	new = (on_hand × average + received × cost) ÷ (on_hand + received)
 func (w WAC) inward(state State, m Movement) (Result, error) {
-	value := valueOf(m.QuantityMicro, m.UnitCostMicro)
+	value := valueOf(m.QuantityMicro, m.UnitCostMicro, m.Decimals)
 
 	// TRAP 1 (§D.3): zero or negative on-hand at receipt.
 	//
@@ -171,8 +173,8 @@ func (w WAC) outward(state State, m Movement) (Result, error) {
 		return Result{
 			UnitCostMicro:   state.AverageMicro,
 			NewAverageMicro: state.AverageMicro,
-			ValueDeltaMinor: -valueOf(m.QuantityMicro, state.AverageMicro),
-			VarianceMinor:   valueOf(shortfall, state.AverageMicro),
+			ValueDeltaMinor: -valueOf(m.QuantityMicro, state.AverageMicro, m.Decimals),
+			VarianceMinor:   valueOf(shortfall, state.AverageMicro, m.Decimals),
 		}, nil
 	}
 
@@ -181,7 +183,7 @@ func (w WAC) outward(state State, m Movement) (Result, error) {
 	return Result{
 		UnitCostMicro:   state.AverageMicro,
 		NewAverageMicro: state.AverageMicro,
-		ValueDeltaMinor: -valueOf(m.QuantityMicro, state.AverageMicro),
+		ValueDeltaMinor: -valueOf(m.QuantityMicro, state.AverageMicro, m.Decimals),
 	}, nil
 }
 
@@ -197,7 +199,7 @@ func (w WAC) outward(state State, m Movement) (Result, error) {
 // return without one has no correct cost available, ever.
 func (w WAC) returned(state State, m Movement, original Movement) (Result, error) {
 	cost := original.UnitCostMicro
-	value := valueOf(m.QuantityMicro, cost)
+	value := valueOf(m.QuantityMicro, cost, m.Decimals)
 
 	// Same trap-1 reasoning: with nothing on hand there is no average to blend into.
 	if state.OnHandMicro <= 0 {
@@ -220,10 +222,56 @@ func (w WAC) returned(state State, m Movement, original Movement) (Result, error
 	}, nil
 }
 
+// returnedOut sends goods back to a supplier, at what THEY were bought for.
+//
+// # The mirror of `returned`, and the same §D.3 rule
+//
+// An issue leaves at the current average, because a sale takes an anonymous unit off the shelf.
+// A supplier return is not anonymous: it names the delivery it is sending back, and those goods
+// cost what that delivery cost. Returning stock bought at last year's price at this year's
+// average invents a gain or a loss that never happened — the same defect `returned` exists to
+// prevent, in the opposite direction.
+//
+// The average of what REMAINS therefore has to move. Taking goods out at a cost different from
+// the average changes the average of everything left, and leaving it alone would quietly park
+// the difference in the valuation of stock that never went anywhere.
+func (w WAC) returnedOut(state State, m Movement, original Movement) (Result, error) {
+	cost := original.UnitCostMicro
+	value := valueOf(m.QuantityMicro, cost, m.Decimals)
+
+	remaining := state.OnHandMicro - m.QuantityMicro
+	if remaining <= 0 {
+		// Everything has gone back. There is no remaining stock to carry an average, and
+		// inventing one would seed the next receipt's blend with a number from nowhere.
+		return Result{
+			UnitCostMicro: cost, NewAverageMicro: 0, ValueDeltaMinor: -value,
+		}, nil
+	}
+
+	existing := new(big.Int).Mul(
+		big.NewInt(state.OnHandMicro), big.NewInt(state.AverageMicro))
+	leaving := new(big.Int).Mul(big.NewInt(m.QuantityMicro), big.NewInt(cost))
+	total := new(big.Int).Sub(existing, leaving)
+
+	average, err := divRound(total, remaining)
+	if err != nil {
+		return Result{}, err
+	}
+	if average < 0 {
+		// Returning goods worth more than everything on the shelf. Real when a costly delivery
+		// goes back after cheaper stock has been sold — the remainder cannot be worth less than
+		// nothing, and a negative average would make the next sale post a negative cost.
+		average = 0
+	}
+	return Result{
+		UnitCostMicro: cost, NewAverageMicro: average, ValueDeltaMinor: -value,
+	}, nil
+}
+
 // revalue moves value without moving quantity.
 func (w WAC) revalue(state State, m Movement) (Result, error) {
-	before := valueOf(state.OnHandMicro, state.AverageMicro)
-	after := valueOf(state.OnHandMicro, m.UnitCostMicro)
+	before := valueOf(state.OnHandMicro, state.AverageMicro, m.Decimals)
+	after := valueOf(state.OnHandMicro, m.UnitCostMicro, m.Decimals)
 
 	return Result{
 		UnitCostMicro: m.UnitCostMicro, NewAverageMicro: m.UnitCostMicro,
@@ -240,7 +288,7 @@ func (w WAC) counted(state State, m Movement) (Result, error) {
 	return Result{
 		UnitCostMicro:   state.AverageMicro,
 		NewAverageMicro: state.AverageMicro,
-		ValueDeltaMinor: valueOf(difference, state.AverageMicro),
+		ValueDeltaMinor: valueOf(difference, state.AverageMicro, m.Decimals),
 	}, nil
 }
 
@@ -249,12 +297,33 @@ func (w WAC) counted(state State, m Movement) (Result, error) {
 // Both inputs are ×10⁶, so their product is ×10¹² and the division is by 10¹² — which overflows
 // int64 well before a real wholesaler's numbers do. Rounded ONCE, here, so that a movement's
 // stored value and the ledger's posting cannot differ by a rounding.
-func valueOf(quantityMicro, unitCostMicro int64) int64 {
+// valueOf converts a quantity and a unit cost into MONEY, in minor units.
+//
+// # The decimals are not optional, and leaving them out was a real defect
+//
+// quantity is 10⁻⁶ and a unit cost is 10⁻⁶ of the MAJOR unit (§E), so their product over 10¹² is
+// an amount in MAJOR units. Money is stored in MINOR units — 10^decimals of the major — so the
+// conversion needs the currency's scale.
+//
+// This function omitted it until Phase 6.6, returning major units from fields named `…Minor`. It
+// was invisible for two phases because every test that consumed the value used a currency with
+// NO minor unit, where the two are the same number. The first test in a two-decimal currency
+// found it immediately: a return of two items at 10.00 was costed at 20 minor units instead of
+// 2,000, and a cost of goods sold would have been a hundredth of the truth.
+//
+// The lesson is narrower than "test more": a scale conversion tested only at scale 1 is a
+// conversion nobody has tested.
+func valueOf(quantityMicro, unitCostMicro int64, decimals int) int64 {
 	product := new(big.Int).Mul(big.NewInt(quantityMicro), big.NewInt(unitCostMicro))
+	product.Mul(product, pow10(decimals))
 	divisor := big.NewInt(quantityScale * quantityScale)
 
 	quotient, _ := divRoundBig(product, divisor)
 	return quotient
+}
+
+func pow10(n int) *big.Int {
+	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
 }
 
 // divRound divides a 128-bit numerator by an int64, half away from zero.

@@ -35,6 +35,10 @@ const (
 	CodeInvalidLandedCost  = "purchasing.invalid_landed_cost"
 	CodeUnsupportedBasis   = "purchasing.unsupported_basis"
 	CodeLandedApplied      = "purchasing.landed_cost_applied"
+	CodeInvalidReturn      = "purchasing.invalid_return"
+	CodeReturnPosted       = "purchasing.return_posted"
+	CodeNothingToReturn    = "purchasing.nothing_to_return"
+	CodeTooMuchReturned    = "purchasing.too_much_returned"
 )
 
 // The numeric scales this module works in (§E).

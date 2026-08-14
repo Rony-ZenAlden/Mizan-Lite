@@ -382,6 +382,8 @@
   "permissions.purchasing.order.draft": "Draft purchase orders",
   "permissions.purchasing.order.place": "Place purchase orders with suppliers",
   "permissions.purchasing.order.view": "View purchase orders",
+  "permissions.purchasing.return.post": "Post supplier returns",
+  "permissions.purchasing.return.view": "View supplier returns",
   "permissions.purchasing.supplier_product.manage": "Manage supplier product codes",
   "permissions.sales.document.print": "Print sales documents",
   "permissions.tax.manage": "Change tax settings",

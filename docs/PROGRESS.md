@@ -1410,3 +1410,22 @@ ordinary). What a bill still owes is derived from allocations, never stored.
 
 Drill 108 found a repository guard the service cannot reach, now tested by writing a draft payment
 straight to the table.
+
+### Step 6.8 — bindings and screens ✅
+
+**Five steps of purchasing existed and none of it ran.** Every test drove the service directly;
+`bootstrap.Start` had never heard of the module. Found only because a binding needed
+`app.Purchasing`.
+
+The same shape as drill 44, and there were TWO lists to keep in sync, not one: the real graph in
+`Start`, and `DeclarationModules` which enumerates permissions with nil services. The second is
+nastier — a permission no module declares cannot be granted to anybody, so the method is not
+refused but UNREACHABLE, which reads as a configuration problem.
+
+A new test compares the two in both directions, against the running application — the thing that
+cannot be forgotten.
+
+Four separate grants (order, receive, bill, pay), because one person who can do all four can pay a
+supplier for nothing and no matching detects it. The GRNI list sits on the bills screen, since
+"what do we owe" and "what have we received and not been invoiced for" are the same question from
+opposite ends — and separated, the second is never opened.

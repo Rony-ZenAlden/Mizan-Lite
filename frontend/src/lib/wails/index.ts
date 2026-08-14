@@ -294,6 +294,14 @@ export const PERMISSIONS = {
   shiftOpen: "pos.shift.open",
   shiftClose: "pos.shift.close",
   salePrint: "sales.document.print",
+  orderView: "purchasing.order.view",
+  orderDraft: "purchasing.order.draft",
+  orderPlace: "purchasing.order.place",
+  receiptRecord: "purchasing.receipt.record",
+  billView: "purchasing.bill.view",
+  billDraft: "purchasing.bill.draft",
+  billPost: "purchasing.bill.post",
+  supplierPay: "purchasing.payment.post",
 } as const;
 
 // ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
@@ -907,4 +915,167 @@ export function printSalesDocument(
   paper: string,
 ): Promise<PrintedDocument> {
   return call<PrintedDocument>("Sales", "Print", documentId, template, paper);
+}
+
+// ── Purchasing ──────────────────────────────────────────────────────────────────
+//
+// The other half of the stock cycle. Money as strings of minor units and quantities as strings
+// of micro units, as everywhere — a purchase order for three thousand metres of cable is exactly
+// the document where float64 stops being able to hold the answer (§17, §18).
+
+export interface PurchaseOrder {
+  id: string;
+  status: string;
+  number: string;
+  supplierName: string;
+  orderDate: string;
+  expectedDate: string;
+  currency: string;
+  netMinor: string;
+  taxMinor: string;
+  totalMinor: string;
+  supplierReference: string;
+  /** Whether everything ordered has arrived. Computed from the lines, never stored. */
+  fullyReceived: boolean;
+}
+
+export interface PurchaseOrderLine {
+  id: string;
+  lineNumber: number;
+  variantId: string;
+  /** What the product was CALLED when the order was placed, not what it is called now (§9.3). */
+  productName: string;
+  sku: string;
+  uomCode: string;
+  quantityMicro: string;
+  receivedMicro: string;
+  outstandingMicro: string;
+  unitPriceMicro: string;
+  taxAmountMinor: string;
+  netMinor: string;
+  totalMinor: string;
+  supplierCode: string;
+}
+
+export interface PurchaseOrderDetail {
+  order: PurchaseOrder;
+  lines: PurchaseOrderLine[];
+  /** A placed order has been SENT and a supplier is picking from it. */
+  editable: boolean;
+  receivable: boolean;
+}
+
+export interface GoodsReceipt {
+  id: string;
+  status: string;
+  number: string;
+  orderId: string;
+  supplierName: string;
+  receiptDate: string;
+  deliveryNoteReference: string;
+  receivedByName: string;
+  valueMinor: string;
+  /** Whether an invoice has taken this delivery up. The GRNI report's central column. */
+  billed: boolean;
+}
+
+export interface PurchaseBill {
+  id: string;
+  status: string;
+  number: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  billDate: string;
+  dueDate: string;
+  currency: string;
+  netMinor: string;
+  taxMinor: string;
+  totalMinor: string;
+  /** What the supplier charged over what was ordered. Shown because a variance is ACCEPTED. */
+  varianceMinor: string;
+  outstandingMinor: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  number: string;
+  supplierName: string;
+  paymentDate: string;
+  method: string;
+  reference: string;
+  amountMinor: string;
+  status: string;
+}
+
+export interface NewPurchaseOrder {
+  warehouseId: string;
+  supplierId: string;
+  supplierName: string;
+  orderDate: string;
+  expectedDate: string;
+  currency: string;
+  supplierReference: string;
+  notes: string;
+}
+
+/** No price field: the purchase price lists answer at placement. */
+export interface NewPurchaseOrderLine {
+  orderId: string;
+  variantId: string;
+  uomId: string;
+  quantityMicro: string;
+  supplierCode: string;
+}
+
+export function purchaseOrders(status = ""): Promise<PurchaseOrder[]> {
+  return call<PurchaseOrder[]>("Purchasing", "Orders", status);
+}
+
+export function purchaseOrder(orderId: string): Promise<PurchaseOrderDetail> {
+  return call<PurchaseOrderDetail>("Purchasing", "Order", orderId);
+}
+
+export function draftPurchaseOrder(input: NewPurchaseOrder): Promise<PurchaseOrder> {
+  return call<PurchaseOrder>("Purchasing", "DraftOrder", input);
+}
+
+export function addPurchaseOrderLine(
+  input: NewPurchaseOrderLine,
+): Promise<PurchaseOrderDetail> {
+  return call<PurchaseOrderDetail>("Purchasing", "AddOrderLine", input);
+}
+
+export function removePurchaseOrderLine(
+  orderId: string,
+  lineId: string,
+): Promise<PurchaseOrderDetail> {
+  return call<PurchaseOrderDetail>("Purchasing", "RemoveOrderLine", orderId, lineId);
+}
+
+export function placePurchaseOrder(orderId: string): Promise<PurchaseOrder> {
+  return call<PurchaseOrder>("Purchasing", "PlaceOrder", orderId);
+}
+
+export function cancelPurchaseOrder(orderId: string): Promise<boolean> {
+  return call<boolean>("Purchasing", "CancelOrder", orderId);
+}
+
+export function goodsReceipts(orderId = "", status = ""): Promise<GoodsReceipt[]> {
+  return call<GoodsReceipt[]>("Purchasing", "Receipts", orderId, status);
+}
+
+export function confirmGoodsReceipt(receiptId: string): Promise<GoodsReceipt> {
+  return call<GoodsReceipt>("Purchasing", "ConfirmReceipt", receiptId);
+}
+
+export function purchaseBills(status = ""): Promise<PurchaseBill[]> {
+  return call<PurchaseBill[]>("Purchasing", "Bills", status);
+}
+
+export function postPurchaseBill(billId: string): Promise<PurchaseBill> {
+  return call<PurchaseBill>("Purchasing", "PostBill", billId);
+}
+
+export function supplierPayments(): Promise<SupplierPayment[]> {
+  return call<SupplierPayment[]>("Purchasing", "Payments");
 }

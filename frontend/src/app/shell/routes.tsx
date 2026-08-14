@@ -10,6 +10,8 @@ import { CatalogScreen } from "@/modules/catalog/CatalogScreen";
 import { StockScreen } from "@/modules/inventory/StockScreen";
 import { PartnersScreen } from "@/modules/partners/PartnersScreen";
 import { POSTerminal } from "@/modules/sales/POSTerminal";
+import { PurchaseOrdersScreen } from "@/modules/purchasing/PurchaseOrdersScreen";
+import { BillsScreen } from "@/modules/purchasing/BillsScreen";
 import { InvoicesScreen } from "@/modules/sales/InvoicesScreen";
 import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
@@ -91,6 +93,18 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.invoices",
     element: <InvoicesScreen />,
     permission: PERMISSIONS.saleView,
+  },
+  {
+    path: "/purchasing/orders",
+    labelKey: "nav.purchaseOrders",
+    element: <PurchaseOrdersScreen />,
+    permission: PERMISSIONS.orderView,
+  },
+  {
+    path: "/purchasing/bills",
+    labelKey: "nav.bills",
+    element: <BillsScreen />,
+    permission: PERMISSIONS.billView,
   },
   {
     path: "/partners/customers",

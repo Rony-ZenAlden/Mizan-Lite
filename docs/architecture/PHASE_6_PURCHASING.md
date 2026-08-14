@@ -792,3 +792,61 @@ failed — because `Pay` drafts and posts in one transaction, so no draft paymen
 allocations through the service. The filter is still right, and the day a draft-payment flow is
 added is the day it matters. It is now asserted by writing a draft payment **straight to the
 table**, which is the Phase 3 rule applied to a guard the service cannot reach.
+
+---
+
+## Step 6.8 — bindings and screens
+
+**Delivered.** The composition-root wiring, six port adapters, the `Purchasing` façade (23
+methods), the typed TypeScript surface, three screens, and a new structural test.
+
+### The module was never wired into the application
+
+Five steps of purchasing existed and **none of it ran**. Every test drove the service directly;
+`bootstrap.Start` had never heard of it. This step found that only because a binding needed
+`app.Purchasing`.
+
+It is the same shape as drill 44 — a thing registered in one place and absent from another, with
+nothing connecting them — and it turned out there were **two** such lists, not one:
+
+| List | Purpose | Symptom when a module is missing |
+|---|---|---|
+| `bootstrap.Start` | the real graph, with real services | nothing works; the façade has no service |
+| `DeclarationModules` | nil-service modules, for enumerating permissions | every binding requiring one of its permissions is **permanently unreachable** |
+
+The second is the nastier one. A permission no module declares cannot be granted to anybody, so
+the method is not refused — it is unreachable, which reads as a configuration problem rather than
+a missing registration.
+
+`TestEveryModuleTheApplicationRunsAlsoDeclaresItself` now compares the two **in both directions**:
+a module that runs must declare itself, and a module that declares must run. The comparison is
+against the running application, which is the thing that cannot be forgotten.
+
+### D1 — four grants, not one
+
+Ordering, receiving, billing, and paying are separate permissions. One person who can do all four
+can pay a supplier for nothing, and **no amount of matching detects it** because they control
+every side. The three-way match is only a control if the sides are held by different people.
+
+### D2 — the GRNI list sits on the bills screen
+
+A bills list answers *"what do we owe"*. The GRNI list answers *"what have we received and not
+been invoiced for"* — and a delivery sitting there for weeks is either a missing invoice or goods
+nobody charged us for. They are the same question from opposite ends, and separating them means
+the second one is never opened.
+
+### D3 — outstanding is shown per LINE
+
+An order is rarely late as a whole. It is late in one line, and a document-level "partly received"
+tells a buyer nothing they can act on. The line's outstanding figure is what a telephone call to
+the supplier is about.
+
+**Mutation drills — 5 run, 0 passed** (two bad mutations, redone).
+
+| # | Mutation | Result |
+|---|---|---|
+| 109 | A running module missing from `DeclarationModules` | fails |
+| 110 | A declared module never runs | fails |
+| 111 | The façade missing from `All()` | fails |
+| 112 | The façade never attached | fails |
+| 113 | A binding method has no declared policy | fails |

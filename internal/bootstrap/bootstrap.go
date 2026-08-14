@@ -34,6 +34,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/pricing"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
+	"github.com/mizan-erp/mizan/internal/modules/purchasing"
 	"github.com/mizan-erp/mizan/internal/modules/sales"
 	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
@@ -45,6 +46,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 	"github.com/mizan-erp/mizan/internal/platform/paths"
 	"github.com/mizan-erp/mizan/migrations"
@@ -126,6 +128,7 @@ type App struct {
 	Pricing    *pricing.Service
 	Inventory  *inventory.Service
 	Sales      *sales.Service
+	Purchasing *purchasing.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -364,6 +367,21 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	})
 	salesModule := sales.NewModule(app.Sales)
 
+	// Purchasing: the other half of the stock cycle, and the phase where PHASE 4's seams find
+	// out whether they were built for a real caller — `Revaluation`, `Allocate`, the document
+	// link, and `inventory_layers`. One of them was not (6.4).
+	app.Purchasing = purchasing.NewService(db, purchasing.Options{
+		Clock: opts.Clock, Bus: app.Bus, Actors: purchasingActors{},
+		Catalog: purchasingCatalog{catalog: app.Catalog},
+		Pricing: purchasingPricing{pricing: app.Pricing},
+		Tax:     purchasingTax{tax: app.Tax, currency: app.Currency},
+		Stock:   purchasingStock{inventory: app.Inventory},
+		// The PLATFORM allocator, shared with sales. Two against one table would race.
+		Numbers: purchasingNumbering{allocator: numbering.New(db, opts.Clock)},
+		Logger:  opts.Logger,
+	})
+	purchasingModule := purchasing.NewModule(app.Purchasing)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
@@ -373,7 +391,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, salesModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
+		auditModule, purchasingModule, salesModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
 		identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)

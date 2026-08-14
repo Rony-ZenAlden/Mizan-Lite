@@ -58,6 +58,9 @@ const (
 	PermOrderPlace            = "purchasing.order.place"
 	PermOrderCancel           = "purchasing.order.cancel"
 	PermSupplierProductManage = "purchasing.supplier_product.manage"
+	// PermReceiptRecord gates taking delivery, separately from ordering: one person who can do
+	// both can sign for goods nobody ordered.
+	PermReceiptRecord = "purchasing.receipt.record"
 )
 
 // The audited actions (§15.3).
@@ -218,6 +221,7 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermOrderDraft, Description: "permissions.purchasing.order.draft"},
 		{Code: PermOrderPlace, Description: "permissions.purchasing.order.place"},
 		{Code: PermOrderCancel, Description: "permissions.purchasing.order.cancel"},
+		{Code: PermReceiptRecord, Description: "permissions.purchasing.receipt.record"},
 		{Code: PermSupplierProductManage,
 			Description: "permissions.purchasing.supplier_product.manage"},
 		{Code: PermBillView, Description: "permissions.purchasing.bill.view"},

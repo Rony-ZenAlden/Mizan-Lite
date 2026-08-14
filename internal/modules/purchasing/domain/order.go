@@ -39,6 +39,11 @@ const (
 	CodeReturnPosted       = "purchasing.return_posted"
 	CodeNothingToReturn    = "purchasing.nothing_to_return"
 	CodeTooMuchReturned    = "purchasing.too_much_returned"
+	CodeInvalidPayment     = "purchasing.invalid_payment"
+	CodePaymentPosted      = "purchasing.payment_posted"
+	CodeNonPositiveAmount  = "purchasing.non_positive_amount"
+	CodeOverAllocated      = "purchasing.over_allocated"
+	CodeOverSettled        = "purchasing.over_settled"
 )
 
 // The numeric scales this module works in (§E).

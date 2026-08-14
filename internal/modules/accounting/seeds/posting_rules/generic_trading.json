@@ -310,22 +310,82 @@
       ]
     },
     {
-      "code": "supplier_payment",
-      "event": "purchasing.payment.made",
+      "code": "supplier_payment_cash",
+      "event": "purchasing.payment.cash.made",
       "sequence": 1,
-      "description": "We pay a supplier: what we owe falls, cash falls.",
+      "description": "We pay a supplier paid from the till: what we owe them falls, and the money leaves the account the METHOD implies.",
       "lines": [
         {
           "side": "debit",
           "account": "mapping:AP",
           "amount": "document.total",
-          "memo": "settles bill"
+          "memo": "settles what we owe"
         },
         {
           "side": "credit",
           "account": "mapping:CASH",
           "amount": "document.total",
-          "memo": "payment made"
+          "memo": "paid from the till"
+        }
+      ]
+    },
+    {
+      "code": "supplier_payment_card",
+      "event": "purchasing.payment.card.made",
+      "sequence": 1,
+      "description": "We pay a supplier paid by card: what we owe them falls, and the money leaves the account the METHOD implies.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what we owe"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by card"
+        }
+      ]
+    },
+    {
+      "code": "supplier_payment_bank",
+      "event": "purchasing.payment.bank_transfer.made",
+      "sequence": 1,
+      "description": "We pay a supplier paid by transfer: what we owe them falls, and the money leaves the account the METHOD implies.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what we owe"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by transfer"
+        }
+      ]
+    },
+    {
+      "code": "supplier_payment_cheque",
+      "event": "purchasing.payment.cheque.made",
+      "sequence": 1,
+      "description": "We pay a supplier paid by cheque: what we owe them falls, and the money leaves the account the METHOD implies.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what we owe"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by cheque"
         }
       ]
     },

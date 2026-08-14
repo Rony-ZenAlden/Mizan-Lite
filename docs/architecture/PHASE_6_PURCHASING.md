@@ -723,3 +723,72 @@ document behind it, and the three-way match would have nothing to compare.
 | 100 | More can go back than arrived | 2 tests fail |
 | 101 | Draft returns count against what is left | fails |
 | 102 | The return names no source movement | 4 tests fail |
+
+---
+
+## Step 6.7 — supplier payments, and the per-method seed fix
+
+**Delivered.** `0033_payments.sql`, the payment domain, the service, and **four per-method posting
+rules replacing the one Phase 2 seeded.**
+
+### The defect Phase 2 seeded, on the paying side
+
+```json
+"code": "supplier_payment",
+"lines": [{ "side": "debit",  "account": "mapping:AP" },
+          { "side": "credit", "account": "mapping:CASH" }]
+```
+
+**It credited CASH whatever the method.** A bank transfer to a supplier would have reduced the
+till — and the till would have been short at every close with no transaction to explain it, while
+the bank reconciliation carried a payment the books said never happened.
+
+The identical defect existed on the receiving side and 5.5 found it there. Both are fixed the same
+way and **entirely in seed data**: four actions, four rules, and no Go that knows which account any
+of them touches. That the fix is data-only twice over is the §20.3 design paying for itself a
+third time.
+
+### D1 — the same two-table shape as sales, and not the same table
+
+0024's argument transfers unchanged: `paid_minor` on a bill cannot express one payment settling
+several bills, one bill taking several payments, or a prepayment allocated to nothing.
+
+It is **not** `sales_payments` with a direction column. One table would need a nullable foreign key
+to each document type and a CHECK that exactly one is set — a discriminated union hand-rolled in
+SQL, with a direction filter on every query that somebody eventually writes without. It would also
+make sales and purchasing share a table, which `module-isolation` forbids so that neither can
+change shape without the other's agreement.
+
+### D2 — a payee is required, where a customer payment's payer is not
+
+A shop takes cash from whoever walks in. Money *leaving* the business goes to somebody, and a
+payment with no payee is a hole in the cash position nobody can chase.
+
+### D3 — over-allocation is refused; under-allocation is not
+
+Allocating more than the payment is arithmetic that cannot be true — the money does not exist.
+Allocating less is a prepayment with a balance still to assign, which is ordinary: a business
+paying a round figure against a statement leaves a few units unassigned, and forcing them to
+balance would mean inventing an allocation.
+
+### D4 — what a bill still owes is derived, never stored
+
+A maintained `paid_minor` drifts from the allocations that justify it, and the drift is invisible
+until somebody chases a supplier for money already sent.
+
+**Mutation drills — 6 run, 1 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 103 | Every method credits CASH (the seeded defect) | 3 subtests fail |
+| 104 | The posting action ignores the method | 3 subtests fail |
+| 105 | A bill can be overpaid | fails |
+| 106 | A payment allocates more than it is worth | fails |
+| 107 | A draft bill can be paid | fails |
+| 108 | Draft payments count as settled | **Passed → test written at the repository** |
+
+**Drill 108** removed the `status = 'posted'` filter from the settled-amount query and nothing
+failed — because `Pay` drafts and posts in one transaction, so no draft payment ever carries
+allocations through the service. The filter is still right, and the day a draft-payment flow is
+added is the day it matters. It is now asserted by writing a draft payment **straight to the
+table**, which is the Phase 3 rule applied to a guard the service cannot reach.

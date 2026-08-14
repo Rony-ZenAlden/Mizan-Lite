@@ -1390,3 +1390,23 @@ In production, every cost of goods sold would have been a hundredth of the truth
 trading in a currency with minor units. Gross margin would have looked extraordinary.
 
 **A scale conversion tested only at scale 1 is a conversion nobody has tested.**
+
+### Step 6.7 — supplier payments, and the per-method seed fix ✅
+
+Phase 2's seeded `supplier_payment` rule credited CASH whatever the method, so a bank transfer to
+a supplier would have reduced the till — short at every close, with no transaction to explain it.
+The identical defect existed on the receiving side and 5.5 found it there. Both fixed entirely in
+seed data: four actions, four rules, no Go that knows which account any of them touches. Data-only
+twice over is the §20.3 design paying for itself a third time.
+
+The same two-table shape as sales, and deliberately NOT the same table: one table with a direction
+column is a discriminated union hand-rolled in SQL, with a filter on every query that somebody
+eventually writes without — and it would make two modules share a table neither could reshape
+alone.
+
+A payee is required where a customer payment's payer is not: money leaving goes to somebody.
+Over-allocation is refused (the money does not exist); under-allocation is not (a prepayment is
+ordinary). What a bill still owes is derived from allocations, never stored.
+
+Drill 108 found a repository guard the service cannot reach, now tested by writing a draft payment
+straight to the table.

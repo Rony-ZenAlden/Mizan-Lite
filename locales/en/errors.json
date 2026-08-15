@@ -12,6 +12,7 @@
   "accounting.invalid_account": "The account is not valid.",
   "accounting.invalid_chart": "The chart of accounts is not valid.",
   "accounting.invalid_line": "One of the entry's lines is not valid.",
+  "accounting.invalid_range": "That report range does not make sense.",
   "accounting.invalid_rules": "The posting rules are not valid.",
   "accounting.later_period_closed": "A later period is already closed. Reopen it first.",
   "accounting.ledger_corrupt": "The accounting records do not agree with themselves. Contact support — details are in the job history.",

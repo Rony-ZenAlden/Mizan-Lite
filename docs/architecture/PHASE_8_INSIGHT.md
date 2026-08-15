@@ -240,3 +240,81 @@ whichever module owns the multiplication — which is D1 again.
 ---
 
 *Implementation proceeds step by step; each step records its own decisions and drills.*
+
+---
+
+## Step 8.1 — financial statements
+
+A profit and loss and a balance sheet, both built on `account_balances` — the projection the
+trial balance already reads, and the one §20.5 already rebuilds and verifies.
+
+Two service methods, two view permissions, one new query file. No migration, no index: both
+queries filter on `accounts.company_id` and `account_balances.fiscal_period_id`, which
+`ix_accounts_path` and 0012's own index already cover.
+
+### D1 — a statement widens to whole periods, and SAYS which ones
+
+`account_balances` is per-period, so the finest resolution any statement built on it can have is
+one fiscal period. A request for 1–15 March cannot be answered exactly. The three honest options
+are to refuse, to widen silently, or to widen and report both ranges.
+
+Refusing makes the common case fail for anyone whose fiscal calendar does not start on the 1st.
+Widening silently reports March's figures under a fortnight's heading, which is how somebody
+concludes their sales doubled.
+
+So `ProfitAndLoss` carries `RequestedFrom`/`RequestedTo` alongside `Covered`, and a screen that
+finds them different can say so. **A report that cannot answer the question asked should say what
+question it answered.**
+
+The period filter is OVERLAP, not containment. `start >= from AND end <= to` reads naturally and
+silently drops the period a mid-month date falls in — the whole month, not part of it.
+
+### D2 — the balance sheet carries the unclosed result, and that is the step's real content
+
+Assets equal liabilities plus equity only once revenue and expense have been closed out. Until
+the year end the profit so far sits in accounts the balance sheet does not show, so a sheet that
+ignored them would be out of balance **by exactly the profit, every day of every year except
+one**.
+
+It is computed from the revenue and expense positions rather than stored, because closing has not
+happened and a stored figure would be a second home for what those accounts already say. It is
+also folded INTO `EquityMinor` rather than left beside it: a reader wants one equity figure that
+ties, not two they have to add up.
+
+`TestTheUnclosedResultIsTheSameFigureBothStatementsReport` pins the two statements to one answer.
+
+### D3 — out of balance is REPORTED, never enforced
+
+A statement that refused to render when the books are wrong would hide the evidence needed to
+find out why. That is 7.4 D3's rule — invariant 5 is a report, not a repair — applied to a screen
+instead of a job.
+
+### D4 — the subtotal is summed from the children
+
+A parent's figure is the sum of its children, never the parent's own balance. Both give the same
+answer today, because a posting to a non-postable account is refused — but nothing in the schema
+promises it, and a restore or a repair script does not go through the posting path.
+
+`TestASubtotalIsTheSumOfItsChildrenAndNotAStoredFigure` writes exactly that row straight to
+`account_balances` and requires the subtotal not to move.
+
+### D5 — the presentation edge is here, and only here
+
+The ledger is debit-positive throughout: revenue holds a negative balance, correctly, and an
+accountant who sees it stops trusting the report. 0012 named this the presentation edge and said
+the conversion happens once. `presentationSign` is that once.
+
+### The drills
+
+D163–D170, eight. Two passed, and each cost a change:
+
+- **D167** — reporting the EARLIEST period end instead of the latest changed nothing, because
+  every covered-range assertion used a single period, where the two are the same date. A
+  three-period range was added. *A range tested only at length one is not a range.*
+- **D169** — hardcoding `OutOfBalanceMinor = 0` left every balance-sheet test green, because they
+  all assert it IS zero. **A detector tested only where it should stay silent is a detector
+  nobody has heard.** `TestABalanceSheetThatDoesNotBalanceSaysSo` writes an unmatched balance
+  straight to the table and requires the statement to report it — and to still render.
+
+D169 is the one worth keeping: it is the same shape as 8.1's own D3 decision. Deciding that
+something is reported rather than enforced obliges you to test that it is actually reported.

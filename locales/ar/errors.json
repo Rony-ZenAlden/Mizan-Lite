@@ -12,6 +12,7 @@
   "accounting.invalid_account": "الحساب غير صالح.",
   "accounting.invalid_chart": "شجرة الحسابات غير صالحة.",
   "accounting.invalid_line": "أحد سطور القيد غير صالح.",
+  "accounting.invalid_range": "نطاق التقرير هذا غير صالح.",
   "accounting.invalid_rules": "قواعد الترحيل غير صالحة.",
   "accounting.later_period_closed": "هناك فترة لاحقة مغلقة بالفعل. أعد فتحها أولًا.",
   "accounting.ledger_corrupt": "السجلات المحاسبية غير متوافقة مع نفسها. تواصل مع الدعم — التفاصيل في سجل المهام.",

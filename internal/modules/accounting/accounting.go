@@ -353,6 +353,8 @@ func (m *Module) Permissions() []auth.PermissionDef {
 	return []auth.PermissionDef{
 		{Code: PermAccountView, Description: "permissions.accounting.account.view"},
 		{Code: PermAccountManage, Description: "permissions.accounting.account.manage"},
+		{Code: PermProfitAndLossView, Description: "permissions.accounting.profit_and_loss.view"},
+		{Code: PermBalanceSheetView, Description: "permissions.accounting.balance_sheet.view"},
 	}
 }
 

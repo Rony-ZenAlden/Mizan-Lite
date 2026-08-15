@@ -448,6 +448,8 @@
   "permission.denied.title": "You do not have access to this",
   "permissions.accounting.account.manage": "Change the chart of accounts",
   "permissions.accounting.account.view": "View the chart of accounts",
+  "permissions.accounting.balance_sheet.view": "View the balance sheet",
+  "permissions.accounting.profit_and_loss.view": "View the profit and loss statement",
   "permissions.expenses.category.manage": "Manage expense categories",
   "permissions.expenses.debt.record": "Record loans, advances and owner's capital",
   "permissions.expenses.debt.view": "View loans, advances and owner's capital",

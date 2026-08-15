@@ -448,6 +448,8 @@
   "permission.denied.title": "ليس لديك صلاحية الوصول",
   "permissions.accounting.account.manage": "تعديل شجرة الحسابات",
   "permissions.accounting.account.view": "عرض شجرة الحسابات",
+  "permissions.accounting.balance_sheet.view": "عرض الميزانية العمومية",
+  "permissions.accounting.profit_and_loss.view": "عرض قائمة الأرباح والخسائر",
   "permissions.expenses.category.manage": "إدارة فئات المصروفات",
   "permissions.expenses.debt.record": "تسجيل القروض والسلف ورأس مال المالك",
   "permissions.expenses.debt.view": "عرض القروض والسلف ورأس مال المالك",

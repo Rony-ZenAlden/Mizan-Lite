@@ -74,6 +74,7 @@ const (
 	CodePortMissing      = "expenses.port_missing"
 	CodeUnknownExpense   = "expenses.unknown_expense"
 	CodeUnknownCategory  = "expenses.unknown_category"
+	CodeUnknownDebt      = "expenses.unknown_debt"
 	CodeUnknownAccount   = "expenses.unknown_account"
 	CodeSeedInvalid      = "expenses.seed_invalid"
 )
@@ -285,6 +286,8 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermExpensePost, Description: "permissions.expenses.expense.post"},
 		{Code: PermCategoryManage, Description: "permissions.expenses.category.manage"},
 		{Code: PermSettlePost, Description: "permissions.expenses.settlement.post"},
+		{Code: PermDebtView, Description: "permissions.expenses.debt.view"},
+		{Code: PermDebtRecord, Description: "permissions.expenses.debt.record"},
 	}
 }
 

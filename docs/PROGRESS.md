@@ -1509,3 +1509,25 @@ an i18n key.
 **Drill 132 is drill 108 again**, in the module written after it — and that repetition is the
 finding: any service that creates and commits a document in one call has a "drafts do not count"
 filter its own API cannot exercise. Both are now tested by writing a draft straight to the table.
+
+### Step 7.3 — debts ✅
+
+Money in and out with no trade document: a loan from a relative, an advance against wages, the
+owner putting capital in. Modelling them as sales or purchases would put them in revenue and cost
+reports where they are neither — and the mistake is invisible, because the totals all add up, they
+are just about the wrong thing.
+
+**7.1's `document:accounts` exception was NOT reused, and that is the point.** Debt kinds are a
+closed set of three, and three can be mappings. Using the exception here would be naming accounts
+in Go with extra steps — exactly the boundary 7.1 drew around it. The exception stays narrow
+because the second thing that could have used it did not.
+
+Direction and method name the ACTION; the kind is an AMOUNT. Putting the kind in the action too
+would give twenty-four rules where eight say the same thing.
+
+A sign belongs in a POSITION, never in a document: the documents keep positive amounts and a
+direction column, and `DebtPositions` is the one place one number per kind is what a reader wants.
+
+They live in the expenses module because a module is a unit of ownership, and a separate one for
+two small tables would earn a migration range, a permission set, a service, a façade and three
+registration entries — to keep apart two things only ever used together.

@@ -678,6 +678,262 @@
           "memo": "paid by cheque"
         }
       ]
+    },
+    {
+      "code": "debt_received_cash",
+      "event": "debts.received.cash",
+      "sequence": 1,
+      "description": "Money in with no sale behind it: a loan taken, a loan we gave being repaid, or the owner putting capital in. Exactly one of the three obligation lines is ever non-zero; the rest resolve to nothing.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "money in"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        }
+      ]
+    },
+    {
+      "code": "debt_paid_cash",
+      "event": "debts.paid.cash",
+      "sequence": 1,
+      "description": "Money out with no purchase behind it: repaying a loan, lending money, or the owner taking capital out.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "money out"
+        }
+      ]
+    },
+    {
+      "code": "debt_received_card",
+      "event": "debts.received.card",
+      "sequence": 1,
+      "description": "Money in with no sale behind it: a loan taken, a loan we gave being repaid, or the owner putting capital in. Exactly one of the three obligation lines is ever non-zero; the rest resolve to nothing.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "money in"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        }
+      ]
+    },
+    {
+      "code": "debt_paid_card",
+      "event": "debts.paid.card",
+      "sequence": 1,
+      "description": "Money out with no purchase behind it: repaying a loan, lending money, or the owner taking capital out.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "money out"
+        }
+      ]
+    },
+    {
+      "code": "debt_received_bank_transfer",
+      "event": "debts.received.bank_transfer",
+      "sequence": 1,
+      "description": "Money in with no sale behind it: a loan taken, a loan we gave being repaid, or the owner putting capital in. Exactly one of the three obligation lines is ever non-zero; the rest resolve to nothing.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "money in"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        }
+      ]
+    },
+    {
+      "code": "debt_paid_bank_transfer",
+      "event": "debts.paid.bank_transfer",
+      "sequence": 1,
+      "description": "Money out with no purchase behind it: repaying a loan, lending money, or the owner taking capital out.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "money out"
+        }
+      ]
+    },
+    {
+      "code": "debt_received_cheque",
+      "event": "debts.received.cheque",
+      "sequence": 1,
+      "description": "Money in with no sale behind it: a loan taken, a loan we gave being repaid, or the owner putting capital in. Exactly one of the three obligation lines is ever non-zero; the rest resolve to nothing.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "money in"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        }
+      ]
+    },
+    {
+      "code": "debt_paid_cheque",
+      "event": "debts.paid.cheque",
+      "sequence": 1,
+      "description": "Money out with no purchase behind it: repaying a loan, lending money, or the owner taking capital out.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_PAYABLE",
+          "amount": "document.loan_payable",
+          "memo": "money we borrowed"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:LOAN_RECEIVABLE",
+          "amount": "document.loan_receivable",
+          "memo": "money we lent"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:OWNER_EQUITY",
+          "amount": "document.owner_equity",
+          "memo": "the owner's capital"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "money out"
+        }
+      ]
     }
   ]
 }

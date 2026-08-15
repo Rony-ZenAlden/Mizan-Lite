@@ -327,3 +327,78 @@ asserted by writing a draft settlement straight to the table.
 That the *same* unreachable-guard shape appeared in two modules is itself the finding: **any
 service that creates and commits a document in one call has a "drafts do not count" filter that
 its own API cannot exercise.**
+
+---
+
+## Step 7.3 — debts
+
+**Delivered.** `0036_debts.sql`, the debt domain, the service, three accounts and mappings, and
+**eight posting rules**.
+
+### D1 — a debt is not a sale or a purchase
+
+An owner putting money in, a loan from a relative, an advance against wages: money moves, nothing
+is bought or sold, no invoice exists.
+
+Modelling them as trade documents would put them in **revenue and cost reports where they are
+neither**. A business whose "sales" included the owner's own capital would show a month it never
+had — and the mistake is invisible, because the totals all add up. They are just about the wrong
+thing.
+
+### D2 — a closed set of kinds, so mappings and not 7.1's exception
+
+Expense categories are open-ended — forty of them, each with its own account — which is why 7.1
+introduced `document:accounts`. Debt kinds are **three**, and three can be mappings.
+
+Using the exception here would be *naming accounts in Go with extra steps*, which is exactly the
+boundary 7.1 drew around it. The exception stays narrow because the second thing that could have
+used it did not.
+
+### D3 — direction and method name the ACTION; the kind is an AMOUNT
+
+Putting the kind in the action too would give **twenty-four rules where eight say the same thing**.
+So the action is `debts.{received|paid}.{method}` and each rule carries three obligation lines of
+which exactly one is ever non-zero — the same shape as the variance split (6.3) and cash
+short/over (5.6).
+
+### D4 — a sign belongs in a POSITION, never in a document
+
+The documents keep positive amounts and a `direction` column, because a signed amount makes
+`SUM(amount)` meaningless and every query a minefield — the discipline stock movements and payments
+already keep.
+
+`DebtPositions` is the one place a sign is right: "we owe 2,500" and "we are owed 300" are the two
+answers, and a reader wants one number per kind.
+
+### D5 — why these live in the expenses module
+
+**Not because they are expenses.** Because a module is a unit of ownership, and a separate `debts`
+module owning two small tables would earn a migration range, a permission set, a service, a
+binding façade, and a place in three registration lists — in exchange for keeping apart two things
+only ever used together.
+
+§10 draws module boundaries around what changes together. If debts grow a life of their own —
+schedules, interest, terms — they earn their own module then, and the tables move with a migration
+rather than being split now on a guess.
+
+### D6 — recorded and posted in one call
+
+An expense is entered, checked, and approved, often by different people — which is why drafting and
+posting are separate grants. A debt is a **single act somebody performs with the money in their
+hand**: the owner takes 4,000 out of the till, and there is no intermediate state in which that has
+half-happened.
+
+The permission is deliberately its own: money moving with no trade document behind it is the shape
+every misappropriation takes, and *"the owner drew 40,000"* is a sentence somebody should have had
+to be authorised to write.
+
+**Mutation drills — 6 run, 0 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 133 | The posting action ignores the direction | 2 tests fail |
+| 134 | The posting action ignores the method | 2 subtests fail |
+| 135 | Every debt posts as a loan payable | 3 subtests fail |
+| 136 | An unknown obligation kind is accepted | fails |
+| 137 | The net position ignores direction | fails |
+| 138 | The rules drop the owner-equity line | 2 tests fail |

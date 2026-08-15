@@ -64,6 +64,14 @@
       "system": true
     },
     {
+      "code": "1500",
+      "name": "Loans and advances receivable",
+      "name_key": "account.loan_receivable",
+      "parent": "1100",
+      "type": "asset",
+      "subtype": "receivable"
+    },
+    {
       "code": "2000",
       "name": "Liabilities",
       "name_key": "account.liabilities",
@@ -97,6 +105,14 @@
       "system": true
     },
     {
+      "code": "2300",
+      "name": "Loans and advances payable",
+      "name_key": "account.loan_payable",
+      "parent": "2000",
+      "type": "liability",
+      "subtype": "payable"
+    },
+    {
       "code": "3000",
       "name": "Equity",
       "name_key": "account.equity",
@@ -110,6 +126,13 @@
       "type": "equity",
       "subtype": "retained",
       "system": true
+    },
+    {
+      "code": "3200",
+      "name": "Owner's capital",
+      "name_key": "account.owner_equity",
+      "parent": "3000",
+      "type": "equity"
     },
     {
       "code": "3900",
@@ -273,6 +296,9 @@
     "FX_GAIN_LOSS": "5800",
     "ROUNDING_DIFF": "5900",
     "INVENTORY_ADJUSTMENT": "5600",
-    "GRNI": "2150"
+    "GRNI": "2150",
+    "LOAN_RECEIVABLE": "1500",
+    "LOAN_PAYABLE": "2300",
+    "OWNER_EQUITY": "3200"
   }
 }

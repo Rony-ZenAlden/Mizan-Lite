@@ -472,6 +472,7 @@
   "permissions.purchasing.return.post": "Post supplier returns",
   "permissions.purchasing.return.view": "View supplier returns",
   "permissions.purchasing.supplier_product.manage": "Manage supplier product codes",
+  "permissions.sales.analysis.view": "View sales analysis and margins",
   "permissions.sales.document.print": "Print sales documents",
   "permissions.tax.manage": "Change tax settings",
   "permissions.tax.view": "View tax settings",

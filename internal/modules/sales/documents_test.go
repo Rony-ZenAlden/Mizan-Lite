@@ -371,3 +371,17 @@ func TestAnUnknownDocumentIsRefusedByName(t *testing.T) {
 		t.Errorf("code = %q, want %q", code, sales.CodeUnknownDocument)
 	}
 }
+
+// backdate moves a posted document's date, straight to the table.
+//
+// Posting stamps the date the caller drafted with, and there is no service method to change it —
+// correctly, because a posted document's date is part of what was agreed. A period analysis
+// needs two dates to have an ORDER at all, and the fixture dates everything the same day.
+func (f fixture) backdate(t *testing.T, date string, documentID id.ID) {
+	t.Helper()
+	if _, err := f.store.Writer(f.ctx).ExecContext(f.ctx,
+		`UPDATE sales_documents SET document_date = ? WHERE id = ?`,
+		date, string(documentID)); err != nil {
+		t.Fatalf("backdating: %v", err)
+	}
+}

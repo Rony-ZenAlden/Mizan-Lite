@@ -318,3 +318,75 @@ D163–D170, eight. Two passed, and each cost a change:
 
 D169 is the one worth keeping: it is the same shape as 8.1's own D3 decision. Deciding that
 something is reported rather than enforced obliges you to test that it is actually reported.
+
+---
+
+## Step 8.2 — sales analysis and gross margin
+
+Three cuts of one question — by period, by product, by partner — plus the margin figure Phase 8's
+analysis warned about naming carelessly.
+
+One permission for all three. A grant that let somebody see revenue per customer but not per
+product would protect nothing; they could add the products up.
+
+### D1 — the lines come back raw and the arithmetic happens in Go
+
+The obvious query sums `quantity_stock_micro * cost_micro` per product in SQL. That would be a
+SECOND implementation of `domain.CostOfLine`, in a language with different integer division,
+rounding at a different point.
+
+Phase 6 already priced that mistake. `valueOf` produced values in major units from fields named
+`…Minor` for two phases, invisible because every consuming test used a zero-decimal currency —
+and the defect was not that the arithmetic was hard, but that two places believed they agreed.
+
+So `SoldLinesInRange` returns rows and the service sums them with the function the document
+itself used. A year of a shop's sales is tens of thousands of lines. If that is ever too slow the
+answer is an index, then a projection with a verifier, in that order.
+
+### D2 — the credit-note sign lives beside the query, and is applied once
+
+A credit note's lines carry POSITIVE quantities; `NewLine` refuses a negative one, because a
+return is a document rather than a negative row. An analysis that summed both document types
+would report a returned sale as two sales, and **a shop with heavy returns would read as its own
+best month**.
+
+`SoldLine.Sign()` is a method on the row, so no caller can forget it and no caller can apply it
+twice. Three separate `GROUP BY` queries would have been three places to forget it — which is
+also why the three analyses share one aggregation with the grouping passed in.
+
+### D3 — revenue is net of discount and before tax
+
+Tax is collected on behalf of a government and owed to it. A margin computed against a
+tax-inclusive figure flatters every product by the tax rate, which here is 15% — more than most
+shops make.
+
+### D4 — a ranking and a sequence are different reports
+
+"Which products make money" is a ranking. "Is this month better than last" is a sequence. A
+period report sorted by margin puts July before March whenever July did better, answering a
+question nobody asked and hiding the one they did. Ties break on the key in both, so a printed
+copy cannot disagree with the screen it came from.
+
+### D5 — the walk-in row exists
+
+Most of a shop's trade names no partner. Dropping those lines would make the partner analysis
+total less than the other two — and a shopkeeper WILL add the rows up and compare.
+`TestTheThreeAnalysesAddUpToTheSameTotal` is what holds the three to one answer.
+
+### The drills
+
+D171–D176, six. Two passed, and both for the same underlying reason: **the test data could not
+tell the mutation apart from the truth.**
+
+- **D172** — deleting `status = 'posted'` changed nothing. A draft line has no money on it at
+  all: price, tax and cost are resolved at posting, so a counted draft contributes zero revenue
+  either way. The QUANTITY is set when the line is added, and is the one field a draft can leak;
+  the test now asserts on it.
+- **D174** — removing the chronological branch changed nothing, because the test put the BIGGER
+  sale on the earlier day. Ranking and sorting by date gave the same answer. The data was
+  inverted so the two orders disagree, and the test now checks that they do before relying on it.
+
+Both are the same lesson in different clothes, and it is worth stating plainly: **a test whose
+fixture cannot distinguish the right answer from the wrong one is not evidence, however carefully
+it is written.** D174's original even had a comment claiming the later day earned less — the
+comment described the test that should have been written.

@@ -270,6 +270,7 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermSeriesManage, Description: "permissions.sales.series.manage"},
 		{Code: PermShiftOpen, Description: "permissions.pos.shift.open"},
 		{Code: PermShiftClose, Description: "permissions.pos.shift.close"},
+		{Code: PermAnalysisView, Description: "permissions.sales.analysis.view"},
 	}
 }
 

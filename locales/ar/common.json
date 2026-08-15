@@ -472,6 +472,7 @@
   "permissions.purchasing.return.post": "ترحيل مرتجعات المورّدين",
   "permissions.purchasing.return.view": "عرض مرتجعات المورّدين",
   "permissions.purchasing.supplier_product.manage": "إدارة رموز أصناف المورّدين",
+  "permissions.sales.analysis.view": "عرض تحليل المبيعات والهوامش",
   "permissions.sales.document.print": "طباعة مستندات المبيعات",
   "permissions.tax.manage": "تعديل إعدادات الضرائب",
   "permissions.tax.view": "عرض إعدادات الضرائب",

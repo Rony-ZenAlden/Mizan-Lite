@@ -38,6 +38,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 )
 
@@ -257,3 +258,14 @@ func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { retur
 
 // Jobs: none yet.
 func (m *Module) Jobs() []jobs.Registration { return nil }
+
+// Series are the five sequences purchasing allocates from.
+func (m *Module) Series() []numbering.SeriesSpec {
+	return []numbering.SeriesSpec{
+		{Code: SeriesOrder, Prefix: "PO-", Padding: 6},
+		{Code: SeriesReceipt, Prefix: "GRN-", Padding: 6},
+		{Code: SeriesBill, Prefix: "BILL-", Padding: 6},
+		{Code: SeriesPayment, Prefix: "PAY-", Padding: 6},
+		{Code: SeriesReturn, Prefix: "DN-", Padding: 6},
+	}
+}

@@ -31,6 +31,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 	"github.com/mizan-erp/mizan/internal/platform/seeds"
 )
@@ -413,3 +414,6 @@ func (m *Module) Jobs() []jobs.Registration {
 		},
 	}}
 }
+
+// Series is empty: this module numbers no documents of its own.
+func (m *Module) Series() []numbering.SeriesSpec { return nil }

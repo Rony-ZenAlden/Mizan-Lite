@@ -537,3 +537,128 @@ Both halves sit beside the net, because netting them away hides the case that ma
 
 The two structural checks written in 5.8 and 6.8 caught the first two immediately, which is what a
 structural test is for: **the third and fourth façade to be added cost nothing to get right.**
+
+---
+
+## Step 7.6 — Phase 7 Definition-of-Done review
+
+Each of §5's twelve criteria mapped to the test that proves it. Where no test existed, one was
+written and drilled. Where the criterion described something this phase did not build, that is
+recorded as such rather than reworded to match what was built.
+
+**Result: 12/12 met, one of them by a mechanism the criterion did not describe (6).**
+
+The review's value was not in the twelve. It was in what mapping criterion 4 uncovered.
+
+### The finding: nothing ever created a number series
+
+Criterion 4 asks for a partner balance assembled from documents in three modules. The existing
+tests all used an untraded partner, so a test was written that raises a real payable — an expense
+on account — through the real composition root, and asserts the statement names the document.
+
+It failed on `numbering.unknown_series`.
+
+Not a bug in the test. **No number series existed, because nothing in the application ever created
+one.** Every transactional module named its series in a constant. Every module's TEST FIXTURE
+created it. `bootstrap.Start` did not, `org.Provision` did not, and no migration seeded one. A
+real company, freshly installed and provisioned, could not post an invoice, a purchase order, a
+goods receipt, a supplier payment, or an expense — thirteen series, three phases, none of them
+reachable.
+
+It survived Phases 5, 6 and most of 7 because every test that needed a number created its own
+series first. That is 5.4's rule at its worst: *when a test needs a helper that imitates a
+production mechanism, that mechanism is untested* — except here the mechanism did not exist at
+all, and the fixtures were not imitating it but standing in for it.
+
+The first version of the new test called `t.Skipf` on the failure. That is exactly the defect
+7.4's review found twice and named its worst; catching myself writing it a third time is the
+argument for the rule.
+
+### D1 — the fix goes where permissions already live
+
+Permissions have this problem solved: each module declares what it protects, the composition root
+reconciles the table at startup, and drift between the declaration and what the code checks is
+therefore impossible (§14.1). A number series has exactly that property.
+
+So `Series() []numbering.SeriesSpec` joins the module contract — the third method added to it
+after `Permissions()` and for the same reason — and `syncSeries` reconciles at boot, beside
+`syncPermissions`. `Allocator.Ensure` creates only what is ABSENT: prefix and padding are an
+administrator's to change, and a reconciler that rewrote them every start would silently undo a
+company that renumbered its invoices.
+
+The alternative was one list in the composition root. That is a second place to forget, which is
+precisely how this survived — and it is drill 44's lesson, already recorded twice.
+
+### D2 — two tests, because the declaration and the table are different failures
+
+`TestEverySeriesAModuleAllocatesFromIsOneItDeclares` scans the module SOURCE for series constants
+and requires each to be declared. `TestAFreshInstallCanNumberEveryDocumentItDeclares` boots a
+fresh install, previews every declared series, then boots again over the same database and
+requires the row count not to move.
+
+The first pins a series added but not declared — which fails at runtime, on a customer's first
+document, with a message that reads like a setup problem. The second pins the reconciler being
+called at all, and its idempotency: two rows for one code means two terminals can each take
+number 1.
+
+### Criterion 6 — settled in parts, by a mechanism the criterion did not describe
+
+*"A debt can be settled in parts, and what remains is derived from its settlements."*
+
+7.3 built something different from what this sentence expects. It expects the expense shape: an
+obligation document, then settlement documents allocated against it. What exists is a debt that
+IS the money movement, with a direction, repaid by another movement the other way.
+
+The difference is real. A loan repaid in three instalments is, under the criterion's shape, one
+debt and three allocations; under this one it is four movements, each with its own date, method
+and journal entry. The second is what actually happened and what a bank statement will show. The
+first invents a parent document nobody handed over — and 7.3 D6 had already decided this, for the
+reason recorded there.
+
+So the criterion is met and its second clause is wrong: what remains is derived from the
+MOVEMENTS, not from settlements against a parent. `TestADebtIsRepaidInPartsAndWhatRemainsFollows`
+pins both halves — the running position, and that each instalment keeps its own numbered document.
+
+### What the other criteria needed
+
+| # | Proven by | Written in this step |
+|---|-----------|----------------------|
+| 1 | `TestAnExpenseLandsInTheAccountItsCategoryNames` | — |
+| 2 | `TestTheSettlementDecidesWhetherAnythingIsOwed` | — |
+| 3 | `TestCategoriesAreSeededAndSeedingTwiceAddsNothing` | — |
+| 4 | `TestPartnerBalancesReconcileToTheGeneralLedger`, `TestTheVerifierFindsDrift` | `TestAPartnerWhoIsBothCustomerAndSupplierCarriesBothHalves` |
+| 5 | `TestADebtMovesMoneyWithoutTouchingRevenueOrCost` | — |
+| 6 | — | `TestADebtIsRepaidInPartsAndWhatRemainsFollows` |
+| 7 | `TestExpensesNamesNoAccountItCouldHaveMapped` (expenses only) | `TestNoMoneyOutPostingNamesAnAccountItCouldHaveMapped` |
+| 8 | `TestAnAbandonedExpenseConsumesNoNumber` (expenses only) | `TestEveryMoneyOutSeriesIsGaplessAfterAnAbandonedDraft` |
+| 9 | `TestEveryActOnAnExpenseLeavesAnAuditEntry` (expenses only) | `TestEveryMoneyOutActLeavesAnAuditEntry` |
+| 10 | 6.8's two structural checks | `TestEverySeriesAModuleAllocatesFromIsOneItDeclares`, `TestAFreshInstallCanNumberEveryDocumentItDeclares` |
+| 11 | — (the fixture used a two-decimal currency; nothing asserted it) | `TestExpenseArithmeticIsExactAtATwoDecimalScale` |
+| 12 | `make ci` | drills D149–D162 |
+
+Criteria 7, 8 and 9 shared a shape worth naming. Each had a test, each test covered EXPENSES, and
+this phase fires three kinds of document — expenses, settlements, and debts. A module that named
+an account in a settlement, or numbered a debt from the expense series, would have failed the
+criterion while passing the test. **A criterion proven about one of a module's three documents is
+proven about none of them.**
+
+### The drills
+
+Fourteen, D149–D162. Three passed, and each cost a change:
+
+- **D156** — the debt posting bypassed the rules entirely and
+  `TestNoMoneyOutPostingNamesAnAccountItCouldHaveMapped` stayed green. It took one reading before
+  and one after, and asserted the redirected account had moved AT ALL — which the expense and the
+  settlement had already done. *"Something posted" is not "all three posted."* The test now
+  measures after each of the three, and the drill fails.
+- **D159** — the ledger's net amount was swapped for the gross, and nothing failed: the expense
+  accounts are driven by `AccountAmounts`, not by `AmountNet`, so the mutation was not on the path
+  under test. Re-aimed as D159b at `CostByAccount`, where it fails.
+- **D162** — forcing half-up rounding inside the real tax engine changed nothing, because these
+  tests replace the tax engine with a stub. The figure chosen for criterion 11 could not
+  discriminate between rounding modes either. Both were fixed: the test now uses a figure that
+  does discriminate, and says plainly that it covers the expenses module's arithmetic and scale
+  carriage rather than the engine's rounding, which Phase 2 owns.
+
+D162 is the one worth keeping. A test whose comment claims a guarantee it does not exercise is
+worse than no test, because it stops anyone else writing the real one.

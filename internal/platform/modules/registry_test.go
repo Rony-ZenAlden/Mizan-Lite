@@ -13,6 +13,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 )
 
@@ -32,6 +33,7 @@ func (f fake) FeatureFlags() []config.FlagDef                     { return f.fla
 func (f fake) Metadata() []metadata.SeedSpec                      { return nil }
 func (f fake) Jobs() []jobs.Registration                          { return nil }
 func (f fake) Permissions() []auth.PermissionDef                  { return nil }
+func (f fake) Series() []numbering.SeriesSpec                     { return nil }
 func (f fake) Subscribe(*eventbus.Bus, *outbox.Subscribers) error { return nil }
 
 func names(mods []modules.Module) []string {

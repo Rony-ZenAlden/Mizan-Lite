@@ -8,6 +8,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/expenses"
+	expensesdomain "github.com/mizan-erp/mizan/internal/modules/expenses/domain"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 )
@@ -263,5 +265,104 @@ func TestTheVerifierFindsDriftBetweenDocumentsAndTheLedger(t *testing.T) {
 	}
 	if after != 750_000 {
 		t.Errorf("the verifier changed the ledger from 750000 to %d", after)
+	}
+}
+
+// TestAPartnerWhoIsBothCustomerAndSupplierCarriesBothHalves
+//
+// # Criterion 4, with real documents on both sides
+//
+// The other balance tests use an untraded partner, which proves the clean case and the verifier's
+// silence. Neither exercises what the criterion is actually about: a balance assembled from
+// documents in THREE different modules, none of which can see the others.
+//
+// The case chosen is the one the design keeps insisting matters — a partner who is both customer
+// and supplier. Netting their two halves away would report the same number as somebody who simply
+// owed a little, and they are not the same risk: if the customer side goes bad, the payable is
+// still owed in full.
+func TestAPartnerWhoIsBothCustomerAndSupplierCarriesBothHalves(t *testing.T) {
+	app, ctx, companyID := traded(t)
+
+	created, err := app.Partner.CreatePartner(ctx, partner.NewPartnerInput{
+		CompanyID: companyID, Code: "BOTH", Name: "Both Ways Trading",
+		IsCustomer: true, IsSupplier: true,
+	})
+	if err != nil {
+		t.Fatalf("CreatePartner: %v", err)
+	}
+
+	// An expense on account is the cheapest genuine payable to raise here: it needs no stock, no
+	// delivery, and no purchase order — which is exactly why expenses exist as their own document.
+	if err = app.Expenses.ApplyCategories(ctx, companyID, "generic_trading"); err != nil {
+		t.Fatalf("ApplyCategories: %v", err)
+	}
+	categories, err := app.Expenses.Categories(ctx, companyID)
+	if err != nil {
+		t.Fatalf("Categories: %v", err)
+	}
+	if len(categories) == 0 {
+		t.Fatal("no expense categories were seeded")
+	}
+
+	branchID, err := app.Org.DefaultBranchID(ctx)
+	if err != nil {
+		t.Fatalf("DefaultBranchID: %v", err)
+	}
+
+	drafted, err := app.Expenses.Draft(ctx, expenses.NewExpenseInput{
+		CompanyID: companyID, BranchID: branchID,
+		PartnerID: created.ID, PayeeName: created.Name,
+		ExpenseDate: "2026-09-01", Settlement: expensesdomain.OnAccount,
+		DueDate: "2026-09-30", Currency: "SYP",
+	})
+	if err != nil {
+		t.Fatalf("Draft: %v", err)
+	}
+	if _, err = app.Expenses.AddLine(ctx, expenses.AddLineInput{
+		ExpenseID: drafted.ID, CategoryID: categories[0].ID, NetMinor: 40_000,
+	}); err != nil {
+		t.Fatalf("AddLine: %v", err)
+	}
+	if _, err = app.Expenses.Record(ctx, drafted.ID); err != nil {
+		// Not a skip. The first version of this test skipped here, and what it was skipping past
+		// was the Phase 7 review's largest finding: no number series existed, because nothing
+		// ever created one. A skip would have reported that as green.
+		t.Fatalf("Record: %v", err)
+	}
+
+	balance, err := app.Partner.BalanceOf(ctx, companyID, created.ID)
+	if err != nil {
+		t.Fatalf("BalanceOf: %v", err)
+	}
+
+	// The payable side carries the expense; the receivable side is empty. Both are REPORTED —
+	// a balance that showed only the net would say "we owe 40,000" and lose that it is an
+	// expense on account rather than a purchase.
+	if balance.PayableMinor == 0 {
+		t.Fatalf("the expense on account reached no payable balance: %+v", balance)
+	}
+	if balance.ReceivableMinor != 0 {
+		t.Errorf("receivable = %d, want 0", balance.ReceivableMinor)
+	}
+	if balance.NetMinor != balance.ReceivableMinor-balance.PayableMinor {
+		t.Errorf("net %d does not tie to %d less %d",
+			balance.NetMinor, balance.ReceivableMinor, balance.PayableMinor)
+	}
+
+	// And the statement lists the document itself, not merely its total — a statement row a
+	// partner can check against their own records has to say WHICH document it was.
+	statement, err := app.Partner.StatementFor(ctx, companyID, created.ID)
+	if err != nil {
+		t.Fatalf("StatementFor: %v", err)
+	}
+	if len(statement.Payable) == 0 {
+		t.Fatal("the statement lists no payable document")
+	}
+	if statement.Payable[0].DocumentType != "expenses.expense" {
+		t.Errorf("document type = %q, want expenses.expense",
+			statement.Payable[0].DocumentType)
+	}
+	if statement.Payable[0].DocumentNumber == "" {
+		t.Error("the statement row has no document number to check against")
 	}
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 )
 
@@ -307,3 +308,16 @@ func (m *Module) Subscribe(_ *eventbus.Bus, _ *outbox.Subscribers) error { retur
 // Jobs: none yet. Recurring templates pre-fill a form somebody confirms rather than posting
 // themselves (D5), so there is nothing to schedule.
 func (m *Module) Jobs() []jobs.Registration { return nil }
+
+// Series are the three sequences money out allocates from.
+//
+// Three, not one. A settlement is not an expense and a debt is neither, so sharing a counter
+// would make an expense number jump every time somebody paid a landlord — see 7.6's
+// TestEveryMoneyOutSeriesIsGaplessAfterAnAbandonedDraft, which pins each to its own sequence.
+func (m *Module) Series() []numbering.SeriesSpec {
+	return []numbering.SeriesSpec{
+		{Code: SeriesExpense, Prefix: "EXP-", Padding: 6},
+		{Code: SeriesSettlement, Prefix: "EXPPAY-", Padding: 6},
+		{Code: SeriesDebt, Prefix: "DEBT-", Padding: 6},
+	}
+}

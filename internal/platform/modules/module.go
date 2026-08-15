@@ -14,6 +14,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 )
 
@@ -71,6 +72,21 @@ type Module interface {
 
 	// Jobs are the module's background tasks (§24).
 	Jobs() []jobs.Registration
+
+	// Series are the document number series this module allocates from (§9.4).
+	//
+	// Added by the Phase 7 Definition-of-Done review, which found that NOTHING created them.
+	// Every transactional module named its series in a constant and every module's test fixture
+	// created one; the composition root never did. A freshly provisioned company could not post
+	// an invoice, a purchase order, or an expense — the allocator refused, correctly, because
+	// no series existed.
+	//
+	// It joins the contract for the same reason Permissions() did: a module knows what it
+	// allocates from, reading that needs no database, and the composition root reconciling it
+	// at startup is what stops the declaration drifting from what the code actually asks for.
+	// The alternative — one list in the composition root — is a second place to forget, which
+	// is precisely how this defect survived two phases.
+	Series() []numbering.SeriesSpec
 
 	// There is deliberately NO Bindings() method.
 	//

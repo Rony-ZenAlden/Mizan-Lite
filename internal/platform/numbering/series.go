@@ -58,6 +58,10 @@ type Series struct {
 // a wider pad could only ever produce a number the sequence cannot reach.
 const maxPadding = 18
 
+// defaultPadding matches the column default in 0001_platform.sql. Named here so a declaration
+// that omits a width and the schema that stores it cannot drift apart.
+const defaultPadding = 6
+
 // NewSeries builds a series, or refuses.
 func NewSeries(identifier id.ID, code, prefix string, padding int) (Series, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
@@ -135,4 +139,33 @@ func itoa(n int64) string {
 		digits[i] = '-'
 	}
 	return string(digits[i:])
+}
+
+// SeriesSpec is a series a module DECLARES, as opposed to one an administrator created.
+//
+// # Why this type exists at all
+//
+// The Phase 7 Definition-of-Done review went looking for the caller that creates the series a
+// document is numbered from, and found none. Every module named its series in a constant, every
+// module's TEST fixture created it, and nothing in the composition root ever did — so a real
+// company, freshly provisioned, could not post an invoice, a purchase order, or an expense. The
+// allocator was correct; nobody had ever asked it for a series it had not been handed.
+//
+// A fixture that creates production data is a fixture standing in for a mechanism, which is
+// 5.4's rule: when a test needs a helper that imitates a production mechanism, that mechanism is
+// untested. Here it was worse than untested — it did not exist.
+//
+// The shape follows the one the same problem already has. Permissions are code-defined, declared
+// per module, and reconciled into the table at every startup (§14.1), which is what stops the
+// permission list drifting from what the code actually checks. A series has exactly that
+// property, so it gets exactly that treatment rather than a second mechanism to learn.
+type SeriesSpec struct {
+	// Code is the series a module allocates from, e.g. "EXPENSE".
+	Code string
+	// Prefix is what the number is rendered with, e.g. "EXP-".
+	Prefix string
+	// Padding zero-fills the counter. Zero means "declare the default", which Ensure reads as 6:
+	// a spec that says nothing about width should get the width the table already defaults to,
+	// not numbers one digit wide.
+	Padding int
 }

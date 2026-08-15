@@ -317,3 +317,20 @@ const (
 	Posted    = domain.Posted
 	Cancelled = domain.Cancelled
 )
+
+// Series are the five sequences sales allocates from.
+//
+// The prefixes are what a fresh install starts with, not what it is stuck with: 0001's series
+// table carries prefix and padding as data, this module exposes CreateSeries for a branch that
+// wants its own, and Ensure never overwrites one that exists. What the declaration guarantees is
+// that a company which changed nothing can still post an invoice — which is what it could not do
+// before the Phase 7 review went looking for the caller.
+func (m *Module) Series() []numbering.SeriesSpec {
+	return []numbering.SeriesSpec{
+		{Code: SeriesInvoice, Prefix: "INV-", Padding: 6},
+		{Code: SeriesCreditNote, Prefix: "CN-", Padding: 6},
+		{Code: SeriesOrder, Prefix: "SO-", Padding: 6},
+		{Code: SeriesQuotation, Prefix: "QT-", Padding: 6},
+		{Code: SeriesPayment, Prefix: "RCT-", Padding: 6},
+	}
+}

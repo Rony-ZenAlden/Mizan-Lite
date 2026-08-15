@@ -447,6 +447,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		return nil, err
 	}
 
+	// 11c. Number series (Step 7.6). Declared per module, reconciled here, for the same reason
+	// permissions are: the alternative is a list in the composition root, which is a second place
+	// to forget — and forgetting is exactly what happened. Nothing created a series until this
+	// existed, so a real company could not post a single numbered document.
+	if err := app.syncSeries(app.Ctx, ordered, opts.Clock); err != nil {
+		abandon(db)
+		return nil, err
+	}
+
 	// 12. Seeding — every boot, no first-run flag (D4). The seeder is idempotent, and always
 	// seeding self-heals a system row someone deleted.
 	if err := app.seed(app.Ctx, ordered); err != nil {
@@ -551,6 +560,44 @@ func (a *App) syncPermissions(ctx context.Context, mods []modules.Module) error 
 			slog.Int("count", report.Obsolete))
 	}
 	a.log.InfoContext(ctx, "permissions synced", slog.Int("declared", report.Declared))
+	return nil
+}
+
+// syncSeries creates any declared number series that does not exist yet.
+//
+// Idempotent and run on every boot, like the seeder and for the same reason: always running it
+// self-heals an install where a series was never created, including every install made before
+// this function existed.
+//
+// A duplicate code across two modules is FATAL, matching syncPermissions. Two modules allocating
+// from one sequence is not a conflict to resolve at runtime — it is a code defect, and one that
+// would show up as a purchase order and an invoice sharing a number.
+func (a *App) syncSeries(
+	ctx context.Context, mods []modules.Module, clk clock.Clock,
+) error {
+	var (
+		specs = make([]numbering.SeriesSpec, 0, 16)
+		owner = make(map[string]string, 16)
+	)
+	for _, m := range mods {
+		for _, spec := range m.Series() {
+			if previous, taken := owner[spec.Code]; taken {
+				return errs.Internal(CodeRegistryInvalid,
+					"two modules declare the same number series").
+					WithParam("code", spec.Code).WithParam("modules", previous+" and "+m.Name())
+			}
+			owner[spec.Code] = m.Name()
+			specs = append(specs, spec)
+		}
+	}
+
+	created, err := numbering.New(a.DB, clk).Ensure(ctx, specs)
+	if err != nil {
+		return errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
+			"creating the declared number series")
+	}
+	a.log.InfoContext(ctx, "number series synced",
+		slog.Int("declared", len(specs)), slog.Int("created", created))
 	return nil
 }
 

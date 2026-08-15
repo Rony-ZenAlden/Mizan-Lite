@@ -7,6 +7,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
+	"github.com/mizan-erp/mizan/internal/platform/numbering"
 )
 
 // MappingInventory is the account role that holds stock value.
@@ -175,3 +176,6 @@ func (s *Service) ReconcileAll(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Series is empty: this module numbers no documents of its own.
+func (m *Module) Series() []numbering.SeriesSpec { return nil }

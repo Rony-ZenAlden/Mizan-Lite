@@ -215,3 +215,53 @@ func (r *Allocator) AdvanceSeries(
 	}
 	return nil
 }
+
+// Ensure reconciles the declared series into the table, and is safe on every boot.
+//
+// # What it does NOT do
+//
+// It does not touch a series that already exists. Prefix and padding are an administrator's to
+// change — a company that renumbers its invoices "2026-INV-" has made a decision, and a
+// reconciler that rewrote it on the next start would silently undo it. Only ABSENCE is repaired,
+// which is the failure this exists for: a series nobody ever created.
+//
+// It also never deletes. A code no module declares any more still numbers documents already
+// posted, and dropping the row would leave them unexplainable.
+//
+// Declared series are company-wide (`branch_id = ”`). A branch that wants its own sequence gets
+// it by creating one, which SeriesFor already prefers — the declaration is the floor, not the
+// ceiling.
+func (r *Allocator) Ensure(ctx context.Context, specs []SeriesSpec) (int, error) {
+	created := 0
+	for _, spec := range specs {
+		padding := spec.Padding
+		if padding == 0 {
+			padding = defaultPadding
+		}
+
+		identifier, err := id.New()
+		if err != nil {
+			return created, errs.Wrap(err, errs.CategoryInternal, CodeStorage,
+				"minting an identity for a number series")
+		}
+		series, err := NewSeries(identifier, spec.Code, spec.Prefix, padding)
+		if err != nil {
+			return created, err
+		}
+
+		// Company-wide, and found by the same resolution a document uses. Asking SeriesFor with
+		// no branch is not a shortcut around Create — Create refuses a duplicate, and refusing
+		// is exactly wrong for something that runs on every boot.
+		if _, found, findErr := r.SeriesFor(ctx, id.ID(""), series.Code); findErr != nil {
+			return created, findErr
+		} else if found {
+			continue
+		}
+
+		if err = r.InsertSeries(ctx, series); err != nil {
+			return created, err
+		}
+		created++
+	}
+	return created, nil
+}

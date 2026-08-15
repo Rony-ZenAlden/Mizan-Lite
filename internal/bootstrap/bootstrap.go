@@ -397,6 +397,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
+	// The partner module gains its balance ports LAST, because they need sales, purchasing and
+	// expenses — all of which need partner. The cycle is broken the way it always is: the ports
+	// are set after construction, not passed into it.
+	app.Partner.AttachLedgers(
+		partnerReceivables{sales: app.Sales},
+		partnerPayables{purchasing: app.Purchasing, expenses: app.Expenses},
+		partnerControl{accounting: app.Accounting},
+	)
+
 	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
 		app.Accounting, app.Catalog, settings, app.Messages, app.Bus)
 

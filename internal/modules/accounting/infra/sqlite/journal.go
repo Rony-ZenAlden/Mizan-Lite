@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
@@ -496,4 +497,25 @@ func (r *Repos) SetYearStatus(ctx context.Context, yearID id.ID, status string) 
 		return r.wrap(err, "changing a fiscal year's status")
 	}
 	return nil
+}
+
+// PartnerLineTotal sums one partner's movement on one account, debit-positive.
+//
+// Only POSTED entries count. A draft entry is one nobody has committed, and counting it would
+// make the verifier report a discrepancy against documents that correctly ignore it.
+func (r *Repos) PartnerLineTotal(
+	ctx context.Context, companyID, partnerID, accountID id.ID,
+) (int64, error) {
+	var total sql.NullInt64
+	err := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT SUM(l.debit_minor - l.credit_minor)
+		  FROM journal_lines l
+		  JOIN journal_entries e ON e.id = l.journal_entry_id
+		 WHERE e.company_id = ? AND e.status = 'posted'
+		   AND l.partner_id = ? AND l.account_id = ?`,
+		string(companyID), string(partnerID), string(accountID)).Scan(&total)
+	if err != nil {
+		return 0, r.wrap(err, "summing a partner's control balance")
+	}
+	return total.Int64, nil
 }

@@ -402,3 +402,89 @@ to be authorised to write.
 | 136 | An unknown obligation kind is accepted | fails |
 | 137 | The net position ignores direction | fails |
 | 138 | The rules drop the owner-equity line | 2 tests fail |
+
+---
+
+## Step 7.4 — partner balances, statements, and the verifier
+
+**Delivered.** `BalanceOf`, `StatementFor`, `Age`, `VerifyBalances`, `PartnerControlBalance`, and
+the three composition-root adapters that let a module compute something spanning three others it
+may not import.
+
+### D1 — three ports, satisfied where the graph is assembled
+
+A partner's position spans sales, purchasing and expenses. No module owns it and none may import
+another, so each contributes through a port: `Receivables`, `Payables`, `ControlLedger`.
+
+The ports are about MONEY, not documents. This module never learns what an invoice is — it asks
+*"what does this partner owe, and for what"*, and every answer has the same shape whatever
+produced it.
+
+### D2 — the ports are attached AFTER construction
+
+A balance needs sales, purchasing and expenses; every one of those needs partner, to check credit
+limits and name a counterparty. Passing the ports into `NewService` would need all four built
+before any of them.
+
+The cycle is broken where cycles always are: the module is built able to do less and gains the
+rest once its neighbours exist. Nothing between the two points can ask for a balance, because the
+composition root is the only caller and does both in one function.
+
+### D3 — invariant 5 is a REPORT, not a repair
+
+§7.13: *"Partner balances equal the sum of their open documents minus settlements."*
+
+The subsidiary ledger and the control account are computed by **completely different paths** — one
+sums documents and allocations, the other sums journal lines written by posting rules. When they
+disagree, one is wrong in a way nothing else will surface: an invoice posted against the wrong
+partner, a payment allocated across companies, a rule edited after the fact. Both sides are
+internally consistent; **only comparing them finds it**.
+
+It reports and does not repair, for 4.3's reason about stock.
+
+### D4 — a net figure, with both halves kept
+
+Netting them away hides the case that matters most: a partner who is both customer and supplier,
+owing 5,000 and owed 4,900, **is not the same risk** as one who simply owes 100.
+
+### D5 — ageing is as at a DATE
+
+An analysis printed for a month end must say what it said at that month end. One that quietly
+re-ages itself on reopening is a report nobody can file.
+
+**Mutation drills — 6 run, 3 passed.** All resolved.
+
+| # | Mutation | Result |
+|---|---|---|
+| 139 | Everything is aged as current | 3 tests fail |
+| 140 | An undated debt is never due | **Passed → test strengthened** |
+| 141 | A verifier with no control ledger reports success | fails |
+| 142 | A balance with no ledgers answers zero | **Passed → test strengthened** |
+| 143 | Draft journal entries count toward a control balance | **Passed → tests were SKIPPING** |
+| 144 | The verifier never compares receivables | **Passed → drift test written** |
+
+### The worst finding of this step: two tests that skipped
+
+D143 kept passing after several attempts to make it fail. The cause was not the mutation —
+**both balance tests were calling `t.Skipf` on every run**, because the bootstrap fixture has no
+provisioned company and I had written the skip as a convenience.
+
+They were green. They asserted nothing. That is worse than a missing test, because a skip occupies
+the place where a real check would go and the suite counts it as coverage.
+
+A test about partner balances *needs* a provisioned company. If provisioning breaks, it should fail
+loudly — so the skip became a fixture that provisions, and if that fails the test fails.
+
+### Two more tests that passed for the wrong reason
+
+- **D140** used an undated item from January. An empty due date sorts before every real date, so it
+  lands in "older" whether or not the fallback exists. The fallback is load-bearing for a *recent*
+  item: an invoice raised five days ago with no terms is five days over, not a year over.
+- **D142** asserted only that *an* error came back — and one did, because the partner identifier
+  was invented and the lookup failed first. It now uses a real partner and names the code.
+- **D144** tested the verifier only on a clean company, where deleting the comparison changes
+  nothing. It now introduces real drift.
+
+**Four of six drills in this step found a test that could not fail.** That is the highest
+proportion in the project, and the reason is worth recording: this step's subject is *a check*, and
+tests of checks are unusually easy to write in a form that never exercises the failing case.

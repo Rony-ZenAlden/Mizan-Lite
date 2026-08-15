@@ -1531,3 +1531,29 @@ direction column, and `DebtPositions` is the one place one number per kind is wh
 They live in the expenses module because a module is a unit of ownership, and a separate one for
 two small tables would earn a migration range, a permission set, a service, a façade and three
 registration entries — to keep apart two things only ever used together.
+
+### Step 7.4 — partner balances, statements, and the verifier ✅
+
+§7.13 invariant 5 finally has something computing it. A partner's position spans sales, purchasing
+and expenses; no module owns it and none may import another, so each contributes through a port
+satisfied in the composition root — and the ports are attached AFTER construction, because every
+one of those modules needs partner in turn.
+
+The verifier compares the subsidiary ledger against the control account. The two are computed by
+completely different paths, so when they disagree one is wrong in a way nothing else surfaces: an
+invoice posted against the wrong partner, a payment allocated across companies. Both sides are
+internally consistent — only comparing them finds it.
+
+**FOUR OF SIX DRILLS FOUND A TEST THAT COULD NOT FAIL** — the highest proportion in the project.
+
+The worst: **two tests were calling `t.Skipf` on every run.** Green, asserting nothing, occupying
+the place where a real check would go while the suite counted them as coverage. A test about
+partner balances needs a provisioned company; if provisioning breaks it should fail loudly, so the
+skip became a fixture that provisions.
+
+The others: an ageing test used a January date where the fallback it meant to pin makes no
+difference; a guard test asserted only that AN error came back, and got one from a failed lookup;
+and the verifier was tested only on a clean company, where deleting the comparison changes nothing.
+
+The reason so many clustered here is worth recording: this step's subject IS a check, and tests of
+checks are unusually easy to write in a form that never exercises the failing case.

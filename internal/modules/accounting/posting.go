@@ -437,3 +437,26 @@ func (s *Service) BalanceOfMapping(
 	}
 	return total, nil
 }
+
+// PartnerControlBalance reports what a mapped control account holds FOR ONE PARTNER.
+//
+// # Why this is not `BalanceOfMapping` with a filter
+//
+// That one sums `account_balances`, which is a projection per period and carries no partner — it
+// answers "what do receivables total", which is the control account's whole point.
+//
+// This answers the subsidiary question: "how much of that is this partner's". It has to go to
+// `journal_lines`, because that is the only place the partner is recorded, and it is the figure
+// the partner-balance verifier compares against the documents (§7.13 invariant 5).
+//
+// Summed debit-positive, like everything in this module: a positive receivable is owed TO the
+// business, and a positive payable would mean the business had overpaid.
+func (s *Service) PartnerControlBalance(
+	ctx context.Context, companyID, partnerID id.ID, mappingKey string,
+) (int64, error) {
+	account, err := s.repos.ResolveMapping(ctx, companyID, id.ID(""), mappingKey)
+	if err != nil {
+		return 0, err
+	}
+	return s.repos.PartnerLineTotal(ctx, companyID, partnerID, account.ID)
+}

@@ -80,6 +80,11 @@ type Options struct {
 	Clock  clock.Clock
 	Bus    event.Publisher
 	Logger *slog.Logger
+
+	// The ledgers a balance needs (7.4). Optional.
+	Receivables Receivables
+	Payables    Payables
+	Control     ControlLedger
 }
 
 // Service is the partner module's application layer.
@@ -88,6 +93,16 @@ type Service struct {
 	repos *sqlite.Repos
 	clk   clock.Clock
 	bus   event.Publisher
+
+	// The ledgers a BALANCE needs. A partner's position spans sales, purchasing and expenses,
+	// and this module can import none of them — so each contributes through a port satisfied in
+	// the composition root (7.4).
+	//
+	// Optional: a service built without them serves partners and refuses balances, which is what
+	// a test that only cares about addresses should get.
+	receivables Receivables
+	payables    Payables
+	control     ControlLedger
 }
 
 // NewService builds the service.
@@ -97,6 +112,7 @@ func NewService(db Database, opts Options) *Service {
 	}
 	return &Service{
 		db: db, repos: sqlite.New(db, opts.Clock), clk: opts.Clock, bus: opts.Bus,
+		receivables: opts.Receivables, payables: opts.Payables, control: opts.Control,
 	}
 }
 
@@ -146,6 +162,7 @@ func (m *Module) Migrations() fs.FS {
 // Permissions gate reading and editing each role.
 func (m *Module) Permissions() []auth.PermissionDef {
 	return []auth.PermissionDef{
+		{Code: PermBalanceView, Description: "permissions.partner.balance.view"},
 		{Code: PermCustomerView, Description: "permissions.partner.customer.view"},
 		{Code: PermCustomerManage, Description: "permissions.partner.customer.manage"},
 		{Code: PermSupplierView, Description: "permissions.partner.supplier.view"},

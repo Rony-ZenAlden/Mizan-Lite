@@ -14,12 +14,26 @@ import (
 // The audited actions a landed cost leaves.
 const (
 	ActionLandedCostAdded   = "purchasing.landed_cost.added"
-	ActionLandedCostApplied = "purchasing.landed_cost.applied"
+	ActionLandedCostApplied = "purchasing.charge.applied"
 
 	EntityLandedCost = "purchasing.landed_cost"
 )
 
 // PostingLandedCostApplied is the POSTING-RULE key an applied charge fires.
+//
+// # Why this is not the same string as the posting key beside it
+//
+// Both describe the same instant, and they are DIFFERENT VOCABULARIES: one selects a journal
+// entry, the other records that a person did something. They travel to different tables, for
+// different readers, and one firing tells you nothing about the other.
+//
+// They were the same literal string until the Phase 6 DoD review — which is the collision the
+// Phase 5 review separated by declaration and which came back here as an identical value. A
+// shared string is the strongest form of the same problem: no log query, report, or export can
+// tell the two apart, and neither could the test that found it.
+//
+// The POSTING key keeps its name, because Phase 2 seeded it and a rule matches on it. The audit
+// action takes the business synonym, which is what a person would say anyway.
 const PostingLandedCostApplied = "purchasing.landed_cost.applied"
 
 // PermLandedCostManage gates adding and applying landed costs.

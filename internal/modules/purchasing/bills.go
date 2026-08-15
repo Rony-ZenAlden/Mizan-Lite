@@ -15,7 +15,7 @@ import (
 const (
 	ActionBillDrafted   = "purchasing.bill.drafted"
 	ActionBillLineAdded = "purchasing.bill.line_added"
-	ActionBillPosted    = "purchasing.bill.posted"
+	ActionBillPosted    = "purchasing.invoice.posted"
 	ActionBillCancelled = "purchasing.bill.cancelled"
 
 	EntityBill = "purchasing.bill"
@@ -24,6 +24,20 @@ const (
 // PostingBillPosted is the POSTING-RULE key a posted bill fires.
 //
 // The event Phase 2 seeded `purchase` against, and which has never fired until now.
+//
+// # Why this is not the same string as the posting key beside it
+//
+// Both describe the same instant, and they are DIFFERENT VOCABULARIES: one selects a journal
+// entry, the other records that a person did something. They travel to different tables, for
+// different readers, and one firing tells you nothing about the other.
+//
+// They were the same literal string until the Phase 6 DoD review — which is the collision the
+// Phase 5 review separated by declaration and which came back here as an identical value. A
+// shared string is the strongest form of the same problem: no log query, report, or export can
+// tell the two apart, and neither could the test that found it.
+//
+// The POSTING key keeps its name, because Phase 2 seeded it and a rule matches on it. The audit
+// action takes the business synonym, which is what a person would say anyway.
 const PostingBillPosted = "purchasing.bill.posted"
 
 // The permissions a bill needs, separate from ordering and receiving.

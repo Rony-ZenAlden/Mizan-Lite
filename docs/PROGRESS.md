@@ -1429,3 +1429,34 @@ Four separate grants (order, receive, bill, pay), because one person who can do 
 supplier for nothing and no matching detects it. The GRNI list sits on the bills screen, since
 "what do we owe" and "what have we received and not been invoiced for" are the same question from
 opposite ends — and separated, the second is never opened.
+
+### Step 6.9 — Phase 6 Definition-of-Done review ✅ 13/14
+
+**Criterion 13 is NOT met, and saying so is the point of the step.** It asked whether any of Phase
+4's seams needed reshaping to serve a real caller. Three of four did not. `Revaluation` did — it
+had its own type, its own direction, a costing case and a place in the schema, and it could not be
+written, because two positive-quantity guards refused the movement of zero that a revaluation is.
+Recorded as a finding rather than quietly reworded, because the criterion did its job.
+
+Four gaps closed: an accepted over-delivery could have been clamped (nothing asserted the surplus
+was kept); only orders were proven to leave the number counter alone when abandoned; only orders
+were REQUIRED to be audited; and §20.3 was asserted for one posting out of four.
+
+**The Phase 5 collision came back as an identical string.** `ActionBillPosted` and
+`PostingBillPosted` had the same literal value, as did the other three pairs — declared apart and
+given the same string, which is worse than sharing a declaration: no log query or export can tell
+them apart. Posting keys kept their seeded names; audit actions took the business synonyms.
+
+A trap nearly repeated: the first §20.3 test redirected every mapping to one account, where debits
+and credits cancel — so it would have passed whether or not anything posted. Exactly what happened
+in 6.2.
+
+## Phase 6 complete
+
+Nine steps, 49 drills, 9 passed. Phase 5 asked whether Phase 2's seams were real; Phase 6 asked it
+of Phase 4 and found two shipped, invisible defects — `Revaluation` unusable, and every costed
+value in major units from fields named Minor — plus a module that had never been wired into the
+application at all.
+
+Two things moved to shared homes because a third caller appeared: the number allocator and
+`round.Allocate`. **The moment a fact needs a third home, the second home was the wrong one.**

@@ -850,3 +850,140 @@ the supplier is about.
 | 111 | The façade missing from `All()` | fails |
 | 112 | The façade never attached | fails |
 | 113 | A binding method has no declared policy | fails |
+
+---
+
+## Step 6.9 — Phase 6 Definition-of-Done review
+
+**13 of 14 met. Criterion 13 is NOT met, and saying so is the point of the step.**
+
+| # | Criterion | Proven by |
+|---|---|---|
+| 1 | An order moves no stock and writes no journal entry | `TestPlacingAnOrderMovesNoStockAndWritesNoJournalEntry` |
+| 2 | One order, several deliveries; outstanding is ordered less arrived | `TestOneOrderCanBeReceivedInSeveralDeliveries`, `TestADraftDeliveryCountsForNothing` |
+| 3 | Beyond tolerance refused; within it accepted **and recorded** | `TestADeliveryBeyondToleranceIsRefusedAtEntry` + **`TestAnAcceptedOverDeliveryIsRecordedInFull`** |
+| 4 | Receipt debits inventory and credits GRNI; the bill clears it exactly | `TestConfirmingADeliveryMovesStockAndAccruesGRNI`, `TestABillClearsGRNIExactlyWhenThePriceAgrees` |
+| 5 | A price difference revalues stock still on hand | `TestAPriceVarianceIsBookedAndGRNIStillClearsExactly`, `TestAVarianceIsSplitWhenSomeOfTheGoodsHaveGone` |
+| 6 | A bill covers several receipts; a receipt is billed once | `TestOneBillCanCoverSeveralDeliveries`, `TestADeliveryCannotBeBilledTwice` |
+| 7 | Landed costs reach inventory value and tie exactly | `TestFreightReachesTheCostOfTheGoodsItBroughtIn`, `TestAChargeSplitsByValueAndTiesExactly` |
+| 8 | A return is costed at the ORIGINAL receipt's cost | `TestAReturnIsCostedAtTheOriginalDeliveryNotTodaysAverage` |
+| 9 | A payment posts to the account its METHOD implies | `TestTheMethodDecidesWhichAccountTheMoneyLeaves` |
+| 10 | Purchasing contains no accounting logic | **`TestNoPurchasingPostingNamesAnAccount`** |
+| 11 | An abandoned draft consumes no number | `TestADraftOrderHasNoNumber…` + **`TestAnAbandonedDocumentOfAnyKindConsumesNoNumber`** |
+| 12 | Every binding has a policy; every state change is audited | `TestEveryBindingMethodHasAPolicy` + **`TestEveryActInPurchasingLeavesAnAuditEntry`** |
+| 13 | Every Phase 4 seam has a caller **and none needed reshaping** | **`TestEverySeamPhaseFourLeftHasARealCaller`** — first half only |
+| 14 | `make ci` green with each step's drills | 49 drills; 9 passed, all resolved |
+
+**Bold** entries were written by this review.
+
+### Criterion 13 is false, and that is the finding
+
+The phase asked: *"If any of Phase 4's seams needs reshaping, the seam was guessed rather than
+designed."*
+
+Three of four served their first caller unchanged — `inventory_layers`, the movement's document
+link, and `Allocate`. **`Revaluation` did not.** It had its own movement type, its own Neutral
+direction, a `revalue` case in the costing strategy, and a place in the schema's `CHECK` list —
+and it **could not be written**, because two positive-quantity guards refused the movement of zero
+that a revaluation is.
+
+Documented, unit-tested, and structurally unusable for two phases. Recorded as a finding rather
+than quietly reworded, because the criterion did its job: it asked a question whose answer was
+worth having.
+
+> **A seam is only proven by a caller.**
+
+### What the review found
+
+1. **An accepted over-delivery could have been clamped.** `received = min(ordered, arrived)` looks
+   tidy and closes every order cleanly — and means the surplus is never invoiced while the shelf
+   disagrees with the order that filled it. Nothing asserted the full figure was kept.
+
+2. **Only orders consumed numbers correctly.** Deliveries, bills and returns each have their own
+   series, and each was asserted only to *take* a number — never that an abandoned one leaves the
+   counter alone. A hole in a numbered sequence is what an auditor asks about.
+
+3. **Only orders were required to be audited.** Deliveries, bills, returns, landed costs and
+   payments were all audited and nothing demanded it — the same gap the Phase 5 review found, in a
+   module written after that review.
+
+4. **§20.3 was asserted for one posting out of four.** A module naming an account in any of the
+   other three would have failed the criterion while passing the test.
+
+### The collision came back, as an identical string
+
+`ActionBillPosted` and `PostingBillPosted` were **the same literal value** — and so were the other
+three pairs. The Phase 5 review separated these two vocabularies by declaration; here they were
+declared apart and given the same string, which is the stronger form of the same defect: no log
+query, report, or export can tell them apart, and neither could the test that found it.
+
+The posting keys keep their names — Phase 2 seeded them and rules match on them. The audit actions
+took the business synonyms, which is what a person would say anyway:
+
+| Posting key (seeded) | Audit action |
+|---|---|
+| `purchasing.receipt.confirmed` | `purchasing.delivery.confirmed` |
+| `purchasing.bill.posted` | `purchasing.invoice.posted` |
+| `purchasing.return.posted` | `purchasing.debit_note.posted` |
+| `purchasing.landed_cost.applied` | `purchasing.charge.applied` |
+
+### A trap this review nearly fell into
+
+The first §20.3 test redirected **every** mapping to one account. Debits and credits then landed
+in the same place and cancelled — so the test would have passed whether or not anything posted at
+all. That is exactly what happened in 6.2, where a redirect and an empty entry looked identical.
+
+The test now redirects only accounts that are moved **once** in the cycle and never cleared within
+it, and asserts on the redirected accounts themselves.
+
+### Drills
+
+| # | Mutation | Result |
+|---|---|---|
+| 114 | An accepted over-delivery is clamped | fails |
+| 115 | The delivery number is allocated earlier | **Passed — confirms drill 69** |
+| 116 | Confirming a delivery stops being audited | fails |
+| 117 | The posting key and audit action share a string again | 4 tests fail |
+| 118 | Landed costs are not recorded per line | fails |
+| 119 | A price variance never revalues stock | 4 tests fail |
+
+**Drill 115 passed and is not a gap.** Moving the number allocation earlier changes nothing,
+because the counter advance rolls back with the transaction — the same finding drill 69 recorded
+in 6.1, confirmed on a second document type. No test pins the ordering, deliberately.
+
+---
+
+## Phase 6 complete
+
+Nine steps: the order, the delivery, the bill, price variance, landed costs, supplier returns,
+payments, bindings and screens, and this review. **49 mutation drills, 9 of which passed** — each
+resolved by one of the five outcomes Phase 4 recorded.
+
+### What Phase 6 found
+
+Phase 5 asked whether Phase 2's seams were built for a real caller and the answer was yes. Phase 6
+asked it of Phase 4, and found **two defects that had been shipped and invisible**:
+
+1. **`Revaluation` could not be written.** Three phases of supporting design, unreachable.
+
+2. **Every costed value was in MAJOR units, from fields named `…Minor`.** `valueOf` never applied
+   the currency's scale. It survived two phases because every test consuming a costed value used a
+   currency with no minor unit — at scale 0 the two numbers are identical, so the conversion was
+   only ever exercised where it could not be wrong. **A scale conversion tested only at scale 1 is
+   a conversion nobody has tested.**
+
+And one that had been shipped and *unwired*:
+
+3. **The whole module never ran.** Five steps of purchasing existed and `bootstrap.Start` had never
+   heard of it — nor had `DeclarationModules`, whose omission makes a permission unreachable
+   rather than refused.
+
+### The structural work this phase forced
+
+- **The number allocator moved to the kernel's neighbour** (`platform/numbering`), because
+  purchasing needed one and could neither import sales nor safely run a second.
+- **`round.Allocate` moved to the kernel**, at the fourth caller. Three copies existed; none
+  could be reused where the fourth needed it.
+
+Both were predicted by comments written phases earlier. The lesson those comments teach is narrower
+than "reuse things": **the moment a fact needs a third home, the second home was the wrong one.**

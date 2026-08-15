@@ -16,13 +16,27 @@ import (
 const (
 	ActionReturnDrafted   = "purchasing.return.drafted"
 	ActionReturnLineAdded = "purchasing.return.line_added"
-	ActionReturnPosted    = "purchasing.return.posted"
+	ActionReturnPosted    = "purchasing.debit_note.posted"
 	ActionReturnCancelled = "purchasing.return.cancelled"
 
 	EntityReturn = "purchasing.return"
 )
 
 // PostingReturnPosted is the POSTING-RULE key a posted return fires.
+//
+// # Why this is not the same string as the posting key beside it
+//
+// Both describe the same instant, and they are DIFFERENT VOCABULARIES: one selects a journal
+// entry, the other records that a person did something. They travel to different tables, for
+// different readers, and one firing tells you nothing about the other.
+//
+// They were the same literal string until the Phase 6 DoD review — which is the collision the
+// Phase 5 review separated by declaration and which came back here as an identical value. A
+// shared string is the strongest form of the same problem: no log query, report, or export can
+// tell the two apart, and neither could the test that found it.
+//
+// The POSTING key keeps its name, because Phase 2 seeded it and a rule matches on it. The audit
+// action takes the business synonym, which is what a person would say anyway.
 const PostingReturnPosted = "purchasing.return.posted"
 
 // The permissions a supplier return needs.

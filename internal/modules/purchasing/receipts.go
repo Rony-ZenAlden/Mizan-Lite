@@ -16,7 +16,7 @@ import (
 const (
 	ActionReceiptDrafted   = "purchasing.receipt.drafted"
 	ActionReceiptLineAdded = "purchasing.receipt.line_added"
-	ActionReceiptConfirmed = "purchasing.receipt.confirmed"
+	ActionReceiptConfirmed = "purchasing.delivery.confirmed"
 	ActionReceiptCancelled = "purchasing.receipt.cancelled"
 
 	EntityReceipt = "purchasing.receipt"
@@ -27,6 +27,20 @@ const (
 // Not an audit action, and the separation is deliberate — the Phase 5 DoD review found the two
 // vocabularies merged in one const block and a test asking the audit trail for a posting key.
 // This one selects a journal entry; `ActionReceiptConfirmed` records that a person did something.
+//
+// # Why this is not the same string as the posting key beside it
+//
+// Both describe the same instant, and they are DIFFERENT VOCABULARIES: one selects a journal
+// entry, the other records that a person did something. They travel to different tables, for
+// different readers, and one firing tells you nothing about the other.
+//
+// They were the same literal string until the Phase 6 DoD review — which is the collision the
+// Phase 5 review separated by declaration and which came back here as an identical value. A
+// shared string is the strongest form of the same problem: no log query, report, or export can
+// tell the two apart, and neither could the test that found it.
+//
+// The POSTING key keeps its name, because Phase 2 seeded it and a rule matches on it. The audit
+// action takes the business synonym, which is what a person would say anyway.
 const PostingReceiptConfirmed = "purchasing.receipt.confirmed"
 
 // OverReceiptTolerance is how much more than was ordered a business will accept.

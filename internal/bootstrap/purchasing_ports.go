@@ -9,6 +9,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/money"
 	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/expenses"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	inventorydomain "github.com/mizan-erp/mizan/internal/modules/inventory/domain"
 	"github.com/mizan-erp/mizan/internal/modules/pricing"
@@ -201,4 +202,57 @@ func (purchasingActors) Actor(ctx context.Context) (purchasing.Actor, bool) {
 		return purchasing.Actor{}, false
 	}
 	return purchasing.Actor{UserID: a.UserID, BranchID: a.BranchID}, true
+}
+
+// ── expenses ────────────────────────────────────────────────────────────────────
+
+// expensesTax computes what an expense line is taxed.
+type expensesTax struct {
+	tax      *tax.Service
+	currency *currency.Service
+}
+
+var _ expenses.Tax = expensesTax{}
+
+func (t expensesTax) TaxFor(
+	ctx context.Context, q expenses.TaxQuery,
+) (expenses.ResolvedTax, error) {
+	unit, err := t.currency.Functional(ctx)
+	if err != nil {
+		return expenses.ResolvedTax{}, err
+	}
+	date, ok := clock.ParseDate(q.Date)
+	if !ok {
+		date = clock.System().Now()
+	}
+
+	quote, err := t.tax.Calculate(ctx, tax.Request{
+		CompanyID: q.CompanyID, PartnerID: q.PartnerID,
+		Date:   date,
+		Amount: money.FromMinor(unit, q.NetMinor),
+	})
+	if err != nil {
+		return expenses.ResolvedTax{}, err
+	}
+
+	var rateMicro int64
+	for _, component := range quote.Components {
+		rateMicro += component.RateMicro
+	}
+	return expenses.ResolvedTax{
+		AmountMinor: quote.Tax.Minor(), RateMicro: rateMicro, Code: quote.GroupCode,
+	}, nil
+}
+
+// expensesActors reports who is acting.
+type expensesActors struct{}
+
+var _ expenses.ActorResolver = expensesActors{}
+
+func (expensesActors) Actor(ctx context.Context) (expenses.Actor, bool) {
+	a, ok := appctx.ActorFrom(ctx)
+	if !ok || a.UserID.IsZero() {
+		return expenses.Actor{}, false
+	}
+	return expenses.Actor{UserID: a.UserID, BranchID: a.BranchID}, true
 }

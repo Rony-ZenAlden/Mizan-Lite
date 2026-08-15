@@ -60,6 +60,25 @@ type Postable struct {
 
 	PartnerID id.ID
 	Memo      string
+
+	// AccountAmounts is what to post to accounts the DOCUMENT names, rather than accounts a
+	// rule knows.
+	//
+	// # Why this exists, and why it is not the usual way
+	//
+	// Every posting until Phase 7 knew which accounts it touched: a sale moves revenue,
+	// receivables, and tax, and a rule can name all three. An expense does not — a business has
+	// forty categories, each pointing at its own account, and no rule can name them.
+	//
+	// So the DOCUMENT carries those debits and the rule says "post what the document says", with
+	// the selector `document:accounts`. The rule still decides the OTHER side — where the money
+	// came from — which is the part that differs by payment method and is exactly what §20.3
+	// exists for.
+	//
+	// This is the narrow exception, not a second way of doing things. A module using it for
+	// anything a mapping could express would be naming accounts in Go, which is the thing §20.3
+	// forbids.
+	AccountAmounts map[id.ID]int64
 }
 
 // EventType identifies the event on the bus.

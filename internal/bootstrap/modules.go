@@ -5,6 +5,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/expenses"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	"github.com/mizan-erp/mizan/internal/modules/org"
@@ -49,6 +50,7 @@ func DeclarationModules() []modules.Module {
 		inventory.NewModule(nil),
 		sales.NewModule(nil),
 		purchasing.NewModule(nil),
+		expenses.NewModule(nil),
 	}
 }
 

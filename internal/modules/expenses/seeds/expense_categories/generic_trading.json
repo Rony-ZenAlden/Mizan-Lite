@@ -1,0 +1,76 @@
+{
+  "code": "generic_trading",
+  "name": "General trading",
+  "categories": [
+    {
+      "code": "RENT",
+      "name": "Rent",
+      "name_key": "expense.rent",
+      "account": "5200",
+      "tax_recoverable": true
+    },
+    {
+      "code": "UTILITIES",
+      "name": "Utilities",
+      "name_key": "expense.utilities",
+      "account": "5210",
+      "tax_recoverable": true
+    },
+    {
+      "code": "WAGES",
+      "name": "Wages and salaries",
+      "name_key": "expense.wages",
+      "account": "5220",
+      "tax_recoverable": false
+    },
+    {
+      "code": "TRANSPORT",
+      "name": "Transport and fuel",
+      "name_key": "expense.transport",
+      "account": "5230",
+      "tax_recoverable": true
+    },
+    {
+      "code": "MAINTENANCE",
+      "name": "Repairs and maintenance",
+      "name_key": "expense.maintenance",
+      "account": "5240",
+      "tax_recoverable": true
+    },
+    {
+      "code": "PROFESSIONAL",
+      "name": "Professional fees",
+      "name_key": "expense.professional",
+      "account": "5250",
+      "tax_recoverable": true
+    },
+    {
+      "code": "MARKETING",
+      "name": "Advertising and marketing",
+      "name_key": "expense.marketing",
+      "account": "5260",
+      "tax_recoverable": true
+    },
+    {
+      "code": "BANK_CHARGES",
+      "name": "Bank charges",
+      "name_key": "expense.bank_charges",
+      "account": "5270",
+      "tax_recoverable": false
+    },
+    {
+      "code": "ENTERTAINMENT",
+      "name": "Entertainment",
+      "name_key": "expense.entertainment",
+      "account": "5280",
+      "tax_recoverable": false
+    },
+    {
+      "code": "OTHER",
+      "name": "Other expenses",
+      "name_key": "expense.other",
+      "account": "5290",
+      "tax_recoverable": true
+    }
+  ]
+}

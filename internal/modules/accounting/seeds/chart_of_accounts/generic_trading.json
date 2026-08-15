@@ -151,6 +151,86 @@
       "system": true
     },
     {
+      "code": "5200",
+      "name": "Rent",
+      "name_key": "account.rent",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5210",
+      "name": "Utilities",
+      "name_key": "account.utilities",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5220",
+      "name": "Wages and salaries",
+      "name_key": "account.wages",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5230",
+      "name": "Transport and fuel",
+      "name_key": "account.transport",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5240",
+      "name": "Repairs and maintenance",
+      "name_key": "account.maintenance",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5250",
+      "name": "Professional fees",
+      "name_key": "account.professional",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5260",
+      "name": "Advertising and marketing",
+      "name_key": "account.marketing",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5270",
+      "name": "Bank charges",
+      "name_key": "account.bank_charges",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5280",
+      "name": "Entertainment",
+      "name_key": "account.entertainment",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
+      "code": "5290",
+      "name": "Other expenses",
+      "name_key": "account.other_expenses",
+      "parent": "5000",
+      "type": "expense",
+      "subtype": "operating_expense"
+    },
+    {
       "code": "5600",
       "name": "Stock adjustments",
       "name_key": "account.stock_adjustment",

@@ -1460,3 +1460,32 @@ application at all.
 
 Two things moved to shared homes because a third caller appeared: the number allocator and
 `round.Allocate`. **The moment a fact needs a third home, the second home was the wrong one.**
+
+## Phase 7 — Money out
+
+Design in `docs/architecture/PHASE_7_MONEY_OUT.md`. **The `payments` module the original
+architecture planned no longer exists**: Phases 5 and 6 each built their own payments and
+allocations, independently reaching the same conclusion that a shared table with a direction column
+is a discriminated union hand-rolled in SQL. Recorded rather than skipped — a phase that created
+the tables anyway would be following a plan instead of a design.
+
+What is genuinely missing is expenses, partner balances, and debts.
+
+### Step 7.1 — the expenses module ✅
+
+Not a purchase bill, and one column says why: a bill line MUST name a goods receipt line, which is
+what makes the three-way match structural. An electricity bill has no delivery, and making that
+column nullable would trade Phase 6's strongest guarantee for one table's reuse.
+
+**A third account-selector kind was added to the rules engine.** Every posting until now knew which
+accounts it touched; an expense does not, because a business has forty categories each with its own
+account and no rule can enumerate them. So the DOCUMENT carries the debits and the rule says
+`document:accounts` — while still deciding the other side, which is what differs by payment method.
+A narrow, documented exception rather than a second way of doing things.
+
+One document, two moments: paid now versus owed. Recoverability is per LINE, because one card
+statement carries a meal and a tank of fuel — and blocked tax is not lost, it becomes part of what
+the thing cost.
+
+Two Phase 6 lessons applied from the start rather than discovered: audit actions and posting keys
+differ by construction, and the fixture uses a two-decimal currency.

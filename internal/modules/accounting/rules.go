@@ -115,6 +115,9 @@ func (r RuleSet) validate(name string) error {
 			default:
 				return invalid(where+".side", line.Side)
 			}
+			if line.Account == documentAccountsSelector {
+				continue
+			}
 			if _, _, err := parseAccountSelector(line.Account); err != nil {
 				return invalid(where+".account", line.Account)
 			}
@@ -334,6 +337,17 @@ func (s *Service) linesFor(
 	var lines []domain.Line
 
 	for _, ruleLine := range rule.Lines {
+		// The document-named form: one line per account the document carries. Used where the
+		// debit side is open-ended (expense categories) and no rule could enumerate it.
+		if ruleLine.AccountSelector == documentAccountsSelector {
+			documentLines, err := s.linesFromDocument(event, ruleLine)
+			if err != nil {
+				return nil, err
+			}
+			lines = append(lines, documentLines...)
+			continue
+		}
+
 		amount, present := event.Amounts[ruleLine.AmountSelector]
 		if !present || amount == 0 {
 			continue
@@ -368,6 +382,62 @@ func (s *Service) linesFor(
 		lines = append(lines, line)
 	}
 	return lines, nil
+}
+
+// documentAccountsSelector is the rule form that posts to accounts the DOCUMENT names.
+//
+// A third selector kind, added in Phase 7 for expenses. It is deliberately not a `mapping:` or an
+// `account:` because it resolves to a SET rather than to one account — and giving it the same
+// syntax would hide that difference.
+const documentAccountsSelector = "document:accounts"
+
+// linesFromDocument builds one line per account the document carries.
+//
+// The amounts come from `AccountAmounts`, which the posting module filled in. Each is checked for
+// negativity like any other, because a negative here would flip a side just as silently.
+func (s *Service) linesFromDocument(
+	event contract.Postable, ruleLine sqlite.PostingRuleLine,
+) ([]domain.Line, error) {
+	if len(event.AccountAmounts) == 0 {
+		return nil, nil
+	}
+
+	// Sorted, so the entry's lines are in a stable order. An entry whose lines shuffle between
+	// runs is one a golden test cannot pin and a reader cannot compare.
+	accounts := make([]id.ID, 0, len(event.AccountAmounts))
+	for accountID := range event.AccountAmounts {
+		accounts = append(accounts, accountID)
+	}
+	sort.Slice(accounts, func(i, j int) bool { return accounts[i] < accounts[j] })
+
+	out := make([]domain.Line, 0, len(accounts))
+	for _, accountID := range accounts {
+		amount := event.AccountAmounts[accountID]
+		if amount == 0 {
+			continue
+		}
+		if amount < 0 {
+			return nil, errs.Validation(domain.CodeInvalidLine,
+				"a posted amount cannot be negative; use the event for the reverse operation").
+				WithParam("account", string(accountID))
+		}
+
+		line := domain.Line{
+			AccountID:    accountID,
+			CurrencyCode: event.CurrencyCode,
+			RateMicro:    event.RateMicro,
+			BranchID:     event.BranchID,
+			PartnerID:    event.PartnerID,
+			Memo:         ruleLine.Memo,
+		}
+		if domain.Side(ruleLine.Side) == domain.Debit {
+			line.Debit = amount
+		} else {
+			line.Credit = amount
+		}
+		out = append(out, line)
+	}
+	return out, nil
 }
 
 // resolveSelector turns `mapping:AR` or `account:1200` into a real account.

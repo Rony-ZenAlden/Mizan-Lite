@@ -28,6 +28,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	"github.com/mizan-erp/mizan/internal/modules/catalog"
 	"github.com/mizan-erp/mizan/internal/modules/currency"
+	"github.com/mizan-erp/mizan/internal/modules/expenses"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	"github.com/mizan-erp/mizan/internal/modules/org"
@@ -129,6 +130,7 @@ type App struct {
 	Inventory  *inventory.Service
 	Sales      *sales.Service
 	Purchasing *purchasing.Service
+	Expenses   *expenses.Service
 	Setup      *setup.Service
 	Modules    []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
@@ -382,6 +384,16 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	})
 	purchasingModule := purchasing.NewModule(app.Purchasing)
 
+	// Expenses: money out that buys no stock, which is most of what a small business spends.
+	// Not a purchase bill — a bill line must name a delivery, and an electricity bill has none.
+	app.Expenses = expenses.NewService(db, expenses.Options{
+		Clock: opts.Clock, Bus: app.Bus, Actors: expensesActors{},
+		Tax:     expensesTax{tax: app.Tax, currency: app.Currency},
+		Numbers: purchasingNumbering{allocator: numbering.New(db, opts.Clock)},
+		Logger:  opts.Logger,
+	})
+	expensesModule := expenses.NewModule(app.Expenses)
+
 	// The wizard's service. Not a module (§1.9 D1): it composes four of them in one
 	// transaction, which module-isolation forbids from inside internal/modules — correctly,
 	// because setup owns no entities and is not a domain.
@@ -391,7 +403,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// Handed over in a deliberately WRONG order so the topological sort has to do real work:
 	// identity depends on org, which depends on currency.
 	ordered, err := modules.Order([]modules.Module{
-		auditModule, purchasingModule, salesModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
+		auditModule, expensesModule, purchasingModule, salesModule, inventoryModule, pricingModule, partnerModule, catalogModule, taxModule, accountingModule, profileModule,
 		identityModule, orgModule, currencyModule})
 	if err != nil {
 		abandon(db)

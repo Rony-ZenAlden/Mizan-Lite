@@ -468,6 +468,136 @@
           "memo": "till over"
         }
       ]
+    },
+    {
+      "code": "expense_paid_cash",
+      "event": "expenses.expense.paid.cash",
+      "sequence": 1,
+      "description": "An expense paid from the till. The categories decide what is debited — the document carries those accounts because no rule can name forty of them — and this rule decides where the money came from.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "document:accounts",
+          "amount": "document.by_account",
+          "memo": "expense"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "paid from the till"
+        }
+      ]
+    },
+    {
+      "code": "expense_paid_card",
+      "event": "expenses.expense.paid.card",
+      "sequence": 1,
+      "description": "An expense paid by card. The categories decide what is debited — the document carries those accounts because no rule can name forty of them — and this rule decides where the money came from.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "document:accounts",
+          "amount": "document.by_account",
+          "memo": "expense"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by card"
+        }
+      ]
+    },
+    {
+      "code": "expense_paid_bank_transfer",
+      "event": "expenses.expense.paid.bank_transfer",
+      "sequence": 1,
+      "description": "An expense paid by transfer. The categories decide what is debited — the document carries those accounts because no rule can name forty of them — and this rule decides where the money came from.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "document:accounts",
+          "amount": "document.by_account",
+          "memo": "expense"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by transfer"
+        }
+      ]
+    },
+    {
+      "code": "expense_paid_cheque",
+      "event": "expenses.expense.paid.cheque",
+      "sequence": 1,
+      "description": "An expense paid by cheque. The categories decide what is debited — the document carries those accounts because no rule can name forty of them — and this rule decides where the money came from.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "document:accounts",
+          "amount": "document.by_account",
+          "memo": "expense"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by cheque"
+        }
+      ]
+    },
+    {
+      "code": "expense_on_account",
+      "event": "expenses.expense.on_account",
+      "sequence": 1,
+      "description": "An expense invoiced and not yet paid. Nothing leaves the bank; we owe it. The same document as one paid immediately, at a different moment.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "document:accounts",
+          "amount": "document.by_account",
+          "memo": "expense"
+        },
+        {
+          "side": "debit",
+          "account": "mapping:TAX_RECEIVABLE",
+          "amount": "document.tax",
+          "memo": "recoverable tax"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "owed"
+        }
+      ]
     }
   ]
 }

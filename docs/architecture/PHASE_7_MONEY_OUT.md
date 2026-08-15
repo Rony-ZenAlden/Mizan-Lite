@@ -488,3 +488,52 @@ loudly — so the skip became a fixture that provisions, and if that fails the t
 **Four of six drills in this step found a test that could not fail.** That is the highest
 proportion in the project, and the reason is worth recording: this step's subject is *a check*, and
 tests of checks are unusually easy to write in a form that never exercises the failing case.
+
+---
+
+## Step 7.5 — bindings and screens
+
+**Delivered.** The `Expenses` façade (13 methods), partner statements and the balance verifier on
+`Partners`, the typed TypeScript surface, three screens, and nine frontend tests.
+
+### D1 — three grants, and the third is the strict one
+
+Recording an expense, paying one, and recording a **debt** are separate permissions. Money moving
+with no trade document behind it is the shape every misappropriation takes, and *"the owner drew
+40,000"* is a sentence somebody should have had to be authorised to write.
+
+### D2 — the ageing date comes from the OPERATOR
+
+`Statement(partnerID, asAt)` takes the date; empty means today, decided in Go. A statement printed
+for a month end must say what it said at that month end, and the frontend never bakes a date in.
+
+### D3 — outstanding is absent, not zero, on an expense paid when recorded
+
+`"0.00"` reads as *a debt that was settled*. An expense paid on the spot owes nothing and never
+did, which is a different fact — so the field is blank and the screen shows a dash.
+
+### D4 — every debt position is shown, including the empty ones
+
+A screen listing only the kinds with activity would silently change shape as a business used it,
+and *"the owner has taken nothing out"* is an answer somebody wants to see stated. The binding
+returns all three in a fixed order.
+
+### D5 — receivable and payable stay apart on a statement
+
+A statement sent to a customer shows what they owe; one sent to a supplier shows what is owed to
+them. Merging them into one signed list produces a document nobody can send to either — and the
+same partner is frequently both.
+
+Both halves sit beside the net, because netting them away hides the case that matters most: owing
+5,000 and being owed 4,900 **is not the same risk** as owing 100.
+
+**Mutation drills — 3 run, 0 passed** (one bad mutation, redone).
+
+| # | Mutation | Result |
+|---|---|---|
+| 145 | The expenses façade missing from `All()` | fails |
+| 146 | The façade never attached | fails |
+| 147 | Recording a debt has no declared policy | fails |
+
+The two structural checks written in 5.8 and 6.8 caught the first two immediately, which is what a
+structural test is for: **the third and fourth façade to be added cost nothing to get right.**

@@ -302,6 +302,13 @@ export const PERMISSIONS = {
   billDraft: "purchasing.bill.draft",
   billPost: "purchasing.bill.post",
   supplierPay: "purchasing.payment.post",
+  expenseView: "expenses.expense.view",
+  expenseDraft: "expenses.expense.draft",
+  expensePost: "expenses.expense.post",
+  expenseSettle: "expenses.settlement.post",
+  debtView: "expenses.debt.view",
+  debtRecord: "expenses.debt.record",
+  partnerBalanceView: "partner.balance.view",
 } as const;
 
 // ── Accounting (read-only, §20.6 tier v1.1) ─────────────────────────────────────
@@ -1078,4 +1085,223 @@ export function postPurchaseBill(billId: string): Promise<PurchaseBill> {
 
 export function supplierPayments(): Promise<SupplierPayment[]> {
   return call<SupplierPayment[]>("Purchasing", "Payments");
+}
+
+// ── Money out ───────────────────────────────────────────────────────────────────
+
+export interface ExpenseCategory {
+  id: string;
+  code: string;
+  name: string;
+  /** Set for a SHIPPED category, so the screen renders it through the catalog. */
+  nameKey: string;
+  /** Whether the tax on this can be reclaimed. The one thing an operator must be told. */
+  taxRecoverable: boolean;
+}
+
+export interface Expense {
+  id: string;
+  status: string;
+  number: string;
+  payeeName: string;
+  expenseDate: string;
+  reference: string;
+  description: string;
+  /** "immediate" or "on_account". */
+  settlement: string;
+  paidMethod: string;
+  dueDate: string;
+  currency: string;
+  netMinor: string;
+  taxMinor: string;
+  totalMinor: string;
+  /** Blank on an expense paid when recorded — absent, not zero. */
+  outstandingMinor: string;
+  isTemplate: boolean;
+}
+
+export interface ExpenseLine {
+  id: string;
+  lineNumber: number;
+  categoryId: string;
+  categoryName: string;
+  description: string;
+  netMinor: string;
+  taxAmountMinor: string;
+  taxRecoverable: boolean;
+  totalMinor: string;
+}
+
+export interface ExpenseDetail {
+  expense: Expense;
+  lines: ExpenseLine[];
+  editable: boolean;
+}
+
+export interface Debt {
+  id: string;
+  status: string;
+  number: string;
+  direction: string;
+  kind: string;
+  counterpartyName: string;
+  debtDate: string;
+  dueDate: string;
+  method: string;
+  reference: string;
+  currency: string;
+  amountMinor: string;
+}
+
+export interface DebtPosition {
+  kind: string;
+  /** SIGNED: positive means money came in on balance. The one place a sign belongs. */
+  netMinor: string;
+}
+
+export interface NewExpense {
+  partnerId: string;
+  payeeName: string;
+  expenseDate: string;
+  reference: string;
+  description: string;
+  settlement: string;
+  paidMethod: string;
+  dueDate: string;
+  currency: string;
+}
+
+export interface NewExpenseLine {
+  expenseId: string;
+  categoryId: string;
+  description: string;
+  netMinor: string;
+}
+
+export interface NewSettlement {
+  partnerId: string;
+  payeeName: string;
+  paymentDate: string;
+  method: string;
+  reference: string;
+  currency: string;
+  amountMinor: string;
+  expenseId: string;
+}
+
+export interface NewDebt {
+  direction: string;
+  kind: string;
+  partnerId: string;
+  counterpartyName: string;
+  debtDate: string;
+  dueDate: string;
+  method: string;
+  reference: string;
+  description: string;
+  currency: string;
+  amountMinor: string;
+}
+
+export function expenseCategories(): Promise<ExpenseCategory[]> {
+  return call<ExpenseCategory[]>("Expenses", "Categories");
+}
+
+export function expenses(status = ""): Promise<Expense[]> {
+  return call<Expense[]>("Expenses", "Expenses", status);
+}
+
+export function expense(expenseId: string): Promise<ExpenseDetail> {
+  return call<ExpenseDetail>("Expenses", "Expense", expenseId);
+}
+
+export function unsettledExpenses(): Promise<Expense[]> {
+  return call<Expense[]>("Expenses", "Unsettled");
+}
+
+export function draftExpense(input: NewExpense): Promise<Expense> {
+  return call<Expense>("Expenses", "Draft", input);
+}
+
+export function addExpenseLine(input: NewExpenseLine): Promise<ExpenseDetail> {
+  return call<ExpenseDetail>("Expenses", "AddLine", input);
+}
+
+export function recordExpense(expenseId: string): Promise<Expense> {
+  return call<Expense>("Expenses", "Record", expenseId);
+}
+
+export function cancelExpense(expenseId: string): Promise<boolean> {
+  return call<boolean>("Expenses", "Cancel", expenseId);
+}
+
+export function settleExpense(input: NewSettlement): Promise<boolean> {
+  return call<boolean>("Expenses", "Settle", input);
+}
+
+export function debts(kind = ""): Promise<Debt[]> {
+  return call<Debt[]>("Expenses", "Debts", kind);
+}
+
+export function debtPositions(): Promise<DebtPosition[]> {
+  return call<DebtPosition[]>("Expenses", "DebtPositions");
+}
+
+export function recordDebt(input: NewDebt): Promise<Debt> {
+  return call<Debt>("Expenses", "RecordDebt", input);
+}
+
+// ── Partner balances ────────────────────────────────────────────────────────────
+
+export interface PartnerBalance {
+  partnerId: string;
+  partnerName: string;
+  receivableMinor: string;
+  payableMinor: string;
+  /** SIGNED. Both halves come alongside, because netting hides the both-roles case. */
+  netMinor: string;
+}
+
+export interface OpenItem {
+  documentType: string;
+  documentId: string;
+  documentNumber: string;
+  date: string;
+  dueDate: string;
+  totalMinor: string;
+  settledMinor: string;
+  outstandingMinor: string;
+}
+
+export interface AgeBands {
+  currentMinor: string;
+  days30Minor: string;
+  days60Minor: string;
+  days90Minor: string;
+  olderMinor: string;
+}
+
+export interface PartnerStatement {
+  balance: PartnerBalance;
+  receivable: OpenItem[];
+  payable: OpenItem[];
+  receivableAgeing: AgeBands;
+}
+
+export interface BalanceDiscrepancy {
+  partnerId: string;
+  partnerName: string;
+  side: string;
+  documentsMinor: string;
+  ledgerMinor: string;
+  differenceMinor: string;
+}
+
+/** `asAt` decides the ageing date. Empty means today. */
+export function partnerStatement(partnerId: string, asAt = ""): Promise<PartnerStatement> {
+  return call<PartnerStatement>("Partners", "Statement", partnerId, asAt);
+}
+
+export function verifyPartnerBalances(): Promise<BalanceDiscrepancy[]> {
+  return call<BalanceDiscrepancy[]>("Partners", "VerifyBalances");
 }

@@ -1557,3 +1557,20 @@ and the verifier was tested only on a clean company, where deleting the comparis
 
 The reason so many clustered here is worth recording: this step's subject IS a check, and tests of
 checks are unusually easy to write in a form that never exercises the failing case.
+
+### Step 7.5 — bindings and screens ✅
+
+The `Expenses` façade, partner statements and the balance verifier, three screens, nine frontend
+tests. Expenses, debts and settlements are now reachable from the application rather than only
+from Go.
+
+Three separate grants, and the third is strict: recording a debt is money moving with no trade
+document behind it, which is the shape every misappropriation takes.
+
+The ageing date comes from the OPERATOR, so a statement printed for a month end says what it said
+then. Outstanding is absent rather than zero on an expense paid when recorded, because "0.00" reads
+as a debt that WAS settled. Every debt position shows, including empty ones, because "the owner has
+taken nothing out" is an answer somebody wants stated.
+
+The structural checks written in 5.8 and 6.8 caught both wiring drills immediately — the third and
+fourth façade cost nothing to get right, which is what a structural test is for.

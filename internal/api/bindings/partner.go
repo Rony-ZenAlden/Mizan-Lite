@@ -3,6 +3,8 @@ package bindings
 import (
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/api/policy"
+	"github.com/mizan-erp/mizan/internal/kernel/clock"
+	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 )
 
@@ -94,10 +96,12 @@ type Partners struct{ graph }
 // screens anyway.
 func partnerPolicies() map[string]policy.Policy {
 	return map[string]policy.Policy{
-		"Customers": policy.Requires(partner.PermCustomerView),
-		"Suppliers": policy.Requires(partner.PermSupplierView),
-		"Customer":  policy.Requires(partner.PermCustomerView),
-		"Supplier":  policy.Requires(partner.PermSupplierView),
+		"Customers":      policy.Requires(partner.PermCustomerView),
+		"Suppliers":      policy.Requires(partner.PermSupplierView),
+		"Customer":       policy.Requires(partner.PermCustomerView),
+		"Supplier":       policy.Requires(partner.PermSupplierView),
+		"Statement":      policy.Requires(partner.PermBalanceView),
+		"VerifyBalances": policy.Requires(partner.PermBalanceView),
 	}
 }
 
@@ -206,4 +210,151 @@ func partnerRow(row partner.Partner) PartnerRowDTO {
 		Phone:            row.Phone, Email: row.Email,
 		Active: row.IsActive, HasHistory: row.HasHistory,
 	}
+}
+
+// ── balances and statements (7.4) ───────────────────────────────────────────────
+
+// PartnerBalanceDTO is what a partner owes and is owed.
+type PartnerBalanceDTO struct {
+	PartnerID   string `json:"partnerId"`
+	PartnerName string `json:"partnerName"`
+
+	ReceivableMinor string `json:"receivableMinor"`
+	PayableMinor    string `json:"payableMinor"`
+	// NetMinor is SIGNED: positive means they owe the business on balance.
+	//
+	// Both halves are sent alongside it, because netting them away hides the case that matters
+	// most — a partner who is both customer and supplier, owing 5,000 and owed 4,900, is not the
+	// same risk as one who simply owes 100.
+	NetMinor string `json:"netMinor"`
+}
+
+// OpenItemDTO is one document a partner still owes something on.
+type OpenItemDTO struct {
+	DocumentType   string `json:"documentType"`
+	DocumentID     string `json:"documentId"`
+	DocumentNumber string `json:"documentNumber"`
+	Date           string `json:"date"`
+	DueDate        string `json:"dueDate"`
+
+	TotalMinor       string `json:"totalMinor"`
+	SettledMinor     string `json:"settledMinor"`
+	OutstandingMinor string `json:"outstandingMinor"`
+}
+
+// AgeBandsDTO groups what is outstanding by how overdue it is.
+type AgeBandsDTO struct {
+	CurrentMinor string `json:"currentMinor"`
+	Days30Minor  string `json:"days30Minor"`
+	Days60Minor  string `json:"days60Minor"`
+	Days90Minor  string `json:"days90Minor"`
+	OlderMinor   string `json:"olderMinor"`
+}
+
+// PartnerStatementDTO is a partner's open items and their ageing.
+type PartnerStatementDTO struct {
+	Balance PartnerBalanceDTO `json:"balance"`
+	// Receivable and Payable are kept apart rather than merged into one signed list: a statement
+	// sent to a customer shows what they owe, one sent to a supplier shows what is owed to them,
+	// and a merged list is a document nobody can send to either.
+	Receivable []OpenItemDTO `json:"receivable"`
+	Payable    []OpenItemDTO `json:"payable"`
+
+	ReceivableAgeing AgeBandsDTO `json:"receivableAgeing"`
+}
+
+// BalanceDiscrepancyDTO is one partner whose documents disagree with the ledger.
+type BalanceDiscrepancyDTO struct {
+	PartnerID   string `json:"partnerId"`
+	PartnerName string `json:"partnerName"`
+	Side        string `json:"side"`
+
+	DocumentsMinor  string `json:"documentsMinor"`
+	LedgerMinor     string `json:"ledgerMinor"`
+	DifferenceMinor string `json:"differenceMinor"`
+}
+
+// Statement reads one partner's open items, ageing, and balance.
+func (p *Partners) Statement(partnerID, asAt string) envelope.Result[PartnerStatementDTO] {
+	ctx, app, err := p.guard("Statement")
+	if err != nil {
+		return envelope.Fail[PartnerStatementDTO](err)
+	}
+	companyID, err := app.Org.CurrentCompanyID(ctx)
+	if err != nil {
+		return envelope.Fail[PartnerStatementDTO](err)
+	}
+
+	statement, err := app.Partner.StatementFor(ctx, companyID, id.ID(partnerID))
+	if err != nil {
+		return envelope.Fail[PartnerStatementDTO](err)
+	}
+
+	// The ageing date comes from the CALLER, so a statement printed for a month end says what it
+	// said at that month end. Defaulting to today only when nothing was asked for.
+	if asAt == "" {
+		asAt = clock.FormatDate(clock.System().Now())
+	}
+
+	out := PartnerStatementDTO{
+		Balance: PartnerBalanceDTO{
+			PartnerID:       string(statement.Balance.PartnerID),
+			PartnerName:     statement.Balance.PartnerName,
+			ReceivableMinor: minor(statement.Balance.ReceivableMinor),
+			PayableMinor:    minor(statement.Balance.PayableMinor),
+			NetMinor:        minor(statement.Balance.NetMinor),
+		},
+		Receivable: openItemRows(statement.Receivable),
+		Payable:    openItemRows(statement.Payable),
+	}
+
+	bands := partner.Age(statement.Receivable, asAt)
+	out.ReceivableAgeing = AgeBandsDTO{
+		CurrentMinor: minor(bands.CurrentMinor), Days30Minor: minor(bands.Days30Minor),
+		Days60Minor: minor(bands.Days60Minor), Days90Minor: minor(bands.Days90Minor),
+		OlderMinor: minor(bands.OlderMinor),
+	}
+	return envelope.Ok(out)
+}
+
+// VerifyBalances checks every partner's documents against the general ledger (§7.13 invariant 5).
+func (p *Partners) VerifyBalances() envelope.Result[[]BalanceDiscrepancyDTO] {
+	ctx, app, err := p.guard("VerifyBalances")
+	if err != nil {
+		return envelope.Fail[[]BalanceDiscrepancyDTO](err)
+	}
+	companyID, err := app.Org.CurrentCompanyID(ctx)
+	if err != nil {
+		return envelope.Fail[[]BalanceDiscrepancyDTO](err)
+	}
+
+	discrepancies, err := app.Partner.VerifyBalances(ctx, companyID)
+	if err != nil {
+		return envelope.Fail[[]BalanceDiscrepancyDTO](err)
+	}
+
+	out := make([]BalanceDiscrepancyDTO, 0, len(discrepancies))
+	for _, discrepancy := range discrepancies {
+		out = append(out, BalanceDiscrepancyDTO{
+			PartnerID: string(discrepancy.PartnerID), PartnerName: discrepancy.PartnerName,
+			Side:            discrepancy.Side,
+			DocumentsMinor:  minor(discrepancy.DocumentsMinor),
+			LedgerMinor:     minor(discrepancy.LedgerMinor),
+			DifferenceMinor: minor(discrepancy.DifferenceMinor),
+		})
+	}
+	return envelope.Ok(out)
+}
+
+func openItemRows(items []partner.OpenItem) []OpenItemDTO {
+	out := make([]OpenItemDTO, 0, len(items))
+	for _, item := range items {
+		out = append(out, OpenItemDTO{
+			DocumentType: item.DocumentType, DocumentID: string(item.DocumentID),
+			DocumentNumber: item.DocumentNumber, Date: item.Date, DueDate: item.DueDate,
+			TotalMinor: minor(item.TotalMinor), SettledMinor: minor(item.SettledMinor),
+			OutstandingMinor: minor(item.OutstandingMinor),
+		})
+	}
+	return out
 }

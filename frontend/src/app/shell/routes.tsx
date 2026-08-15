@@ -12,6 +12,8 @@ import { PartnersScreen } from "@/modules/partners/PartnersScreen";
 import { POSTerminal } from "@/modules/sales/POSTerminal";
 import { PurchaseOrdersScreen } from "@/modules/purchasing/PurchaseOrdersScreen";
 import { BillsScreen } from "@/modules/purchasing/BillsScreen";
+import { ExpensesScreen } from "@/modules/expenses/ExpensesScreen";
+import { DebtsScreen } from "@/modules/expenses/DebtsScreen";
 import { InvoicesScreen } from "@/modules/sales/InvoicesScreen";
 import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
@@ -117,6 +119,18 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.suppliers",
     element: <PartnersScreen role="supplier" />,
     permission: PERMISSIONS.supplierView,
+  },
+  {
+    path: "/money/expenses",
+    labelKey: "nav.expenses",
+    element: <ExpensesScreen />,
+    permission: PERMISSIONS.expenseView,
+  },
+  {
+    path: "/money/debts",
+    labelKey: "nav.debts",
+    element: <DebtsScreen />,
+    permission: PERMISSIONS.debtView,
   },
   {
     path: "/accounting/chart",

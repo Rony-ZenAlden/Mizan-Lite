@@ -406,6 +406,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		partnerControl{accounting: app.Accounting},
 	)
 
+	// Inventory gains the ledger side of its valuation check the same way, and for the same
+	// reason: accounting is built before inventory, so this could be a constructor argument —
+	// but making the two attachments look different would invite a reader to wonder why.
+	app.Inventory.AttachControlLedger(inventoryControl{accounting: app.Accounting})
+
 	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
 		app.Accounting, app.Catalog, settings, app.Messages, app.Bus)
 

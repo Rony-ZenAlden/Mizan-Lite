@@ -313,6 +313,14 @@ func (w WAC) counted(state State, m Movement) (Result, error) {
 //
 // The lesson is narrower than "test more": a scale conversion tested only at scale 1 is a
 // conversion nobody has tested.
+//
+// EXPORTED at its third caller (8.3), which is the same threshold `round.Allocate` was promoted
+// to the kernel at. A valuation report that wrote `quantity * cost / scale` itself would be a
+// third implementation of the conversion this comment records finding wrong in its second.
+func ValueOf(quantityMicro, unitCostMicro int64, decimals int) int64 {
+	return valueOf(quantityMicro, unitCostMicro, decimals)
+}
+
 func valueOf(quantityMicro, unitCostMicro int64, decimals int) int64 {
 	product := new(big.Int).Mul(big.NewInt(quantityMicro), big.NewInt(unitCostMicro))
 	product.Mul(product, pow10(decimals))

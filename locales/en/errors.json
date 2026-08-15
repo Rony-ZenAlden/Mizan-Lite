@@ -168,6 +168,7 @@
   "identity.user_not_found": "That user could not be found.",
   "identity.username_taken": "That username is already in use.",
   "identity.weak_pin": "That PIN is too easy to guess. Avoid repeated or sequential digits.",
+  "inventory.control_ledger_missing": "This build cannot compare the stock valuation with the ledger.",
   "inventory.count_not_in_review": "A stock count is applied from review, once its variances have been looked at.",
   "inventory.count_not_open": "This stock count is not at a stage where that is possible.",
   "inventory.count_terminal": "This stock count is finished and cannot be changed.",

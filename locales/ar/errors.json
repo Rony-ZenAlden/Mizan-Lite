@@ -168,6 +168,7 @@
   "identity.user_not_found": "تعذّر العثور على هذا المستخدم.",
   "identity.username_taken": "اسم المستخدم هذا مستخدم بالفعل.",
   "identity.weak_pin": "هذا الرمز السرّي سهل التخمين. تجنّب الأرقام المكرّرة أو المتسلسلة.",
+  "inventory.control_ledger_missing": "لا يمكن لهذا الإصدار مقارنة قيمة المخزون بدفتر الأستاذ.",
   "inventory.count_not_in_review": "يُطبَّق الجرد من مرحلة المراجعة، بعد النظر في الفروقات.",
   "inventory.count_not_open": "عملية الجرد ليست في مرحلة تسمح بذلك.",
   "inventory.count_terminal": "انتهت عملية الجرد هذه ولا يمكن تغييرها.",

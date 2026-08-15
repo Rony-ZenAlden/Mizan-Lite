@@ -457,6 +457,7 @@
   "permissions.expenses.expense.post": "تسجيل المصروفات",
   "permissions.expenses.expense.view": "عرض المصروفات",
   "permissions.expenses.settlement.post": "سداد ما تبقّى من المصروفات",
+  "permissions.inventory.valuation.view": "عرض قيمة المخزون",
   "permissions.partner.balance.view": "عرض أرصدة الشركاء وكشوف حساباتهم",
   "permissions.purchasing.bill.draft": "إدخال فواتير المورّدين",
   "permissions.purchasing.bill.post": "ترحيل فواتير المورّدين",

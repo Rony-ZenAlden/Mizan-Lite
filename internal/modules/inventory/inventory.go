@@ -192,6 +192,7 @@ type Service struct {
 	actors   ActorResolver
 	products Products
 	ledger   Ledger
+	control  ControlLedger
 	logger   *slog.Logger
 }
 
@@ -281,6 +282,7 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermStockTransfer, Description: "permissions.inventory.stock.transfer"},
 		{Code: PermStockCount, Description: "permissions.inventory.stock.count"},
 		{Code: PermCostView, Description: "permissions.inventory.cost.view"},
+		{Code: PermValuationView, Description: "permissions.inventory.valuation.view"},
 	}
 }
 

@@ -390,3 +390,63 @@ Both are the same lesson in different clothes, and it is worth stating plainly: 
 fixture cannot distinguish the right answer from the wrong one is not evidence, however carefully
 it is written.** D174's original even had a comment claiming the later day earned less — the
 comment described the test that should have been written.
+
+---
+
+## Step 8.3 — stock valuation, and whether the books agree
+
+What is on the shelf, what it is worth, and whether the general ledger says the same.
+
+### D1 — the valuation reads levels, not movements
+
+`stock_levels` carries `avg_cost_micro`, maintained by the same costing the ledger's entries were
+computed from, and 4.6's `VerifyLedger` already proves the levels reconcile to the movements.
+Recomputing from the movement history here would be a second costing implementation — which 8.2
+declined to write in SQL for the reason Phase 6 paid for.
+
+`valueOf` was EXPORTED at its third caller, the same threshold `round.Allocate` was promoted to
+the kernel at. A valuation writing `quantity * cost / scale` itself would be a third
+implementation of the conversion whose own comment records finding it wrong in its second.
+
+### D2 — inventory asks the ledger, through a port
+
+The shape Phase 7 used for partner balances. Inventory cannot import accounting, so it declares
+one method — `StockValueMinor` — and the composition root satisfies it from
+`BalanceOfMapping(…, "INVENTORY")`.
+
+The mapping, not an account code. A company that renumbered its chart is still checkable, and the
+port cannot start making accounting decisions (§20.3).
+
+### D3 — reported, never repaired; and refused when nobody asked
+
+`Valuation` returns the difference and still renders. `VerifyValuation` REFUSES when no control
+ledger is attached rather than returning zero — a scheduled check that only reports failures would
+read a zero as "the books agree" when they were never asked.
+
+### D4 — zero-stock rows are not valuation lines
+
+A shop that has ever stocked a thousand products has a level row for each. Nine hundred lines
+worth nothing bury the ninety that matter. `VerifyLedger` covers the empty ones and reads every
+row.
+
+### The drills
+
+D177–D182, six. Two passed:
+
+- **D179** — the first attempt left `errs` unused and did not compile, so it was not a drill at
+  all. Rewritten to return zero instead of refusing, it fails.
+- **D181** — pointing the composition root's adapter at the COGS mapping instead of INVENTORY left
+  **every inventory test green**, because the module's own tests use a fake ledger. A fake proves
+  the arithmetic and the reporting and says nothing about whether the real port asks the right
+  question.
+
+D181 is Phase 6's central finding arriving again: **a seam is only proven by a caller.**
+`TestTheStockValuationReconcilesToTheGeneralLedger` is that caller, and it lives in
+`internal/bootstrap` because that is where the two sides meet.
+
+Writing it turned up two things the fixture had to learn. Applying the chart is not enough — the
+posting RULES have to be applied too, or every movement fires an event that matches nothing and
+the ledger sits at zero, which reads as a reconciliation failure rather than as a fixture that
+never wired the books up. And a documentless ISSUE deliberately posts nothing (4.3), so using one
+would have reported a designed state as a defect; the test writes stock off with an adjustment
+instead.

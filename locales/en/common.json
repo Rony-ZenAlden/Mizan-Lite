@@ -400,6 +400,7 @@
   "permissions.expenses.expense.draft": "Enter expenses",
   "permissions.expenses.expense.post": "Record expenses",
   "permissions.expenses.expense.view": "View expenses",
+  "permissions.expenses.settlement.post": "Pay what expenses left owed",
   "permissions.purchasing.bill.draft": "Enter supplier invoices",
   "permissions.purchasing.bill.post": "Post supplier invoices",
   "permissions.purchasing.bill.view": "View supplier invoices",

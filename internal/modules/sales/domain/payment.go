@@ -5,6 +5,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/kernel/settle"
 )
 
 // Stable codes for payments.
@@ -154,9 +155,5 @@ func (p Payment) RequireAllocatable(allocations []Allocation) error {
 // column. A `paid_minor` field would drift from the allocations that justify it, and the drift
 // would show up as a customer chased for money they had paid.
 func Outstanding(totalMinor, allocatedMinor int64) int64 {
-	remaining := totalMinor - allocatedMinor
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
+	return settle.Outstanding(totalMinor, allocatedMinor)
 }

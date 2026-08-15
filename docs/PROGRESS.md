@@ -1489,3 +1489,23 @@ the thing cost.
 
 Two Phase 6 lessons applied from the start rather than discovered: audit actions and posting keys
 differ by construction, and the fixture uses a two-decimal currency.
+
+### Step 7.2 — settling what is owed ✅
+
+The third module to need payment-and-allocations, and Phase 6's rule applied with precision:
+**what moved is the ARITHMETIC, not the data.**
+
+`kernel/settle` now owns what over-allocation means, what outstanding means, and that neither may
+go negative — copied twice before this. Sales and purchasing delegate to it and their tests pass
+unchanged, which is what makes the extraction believable.
+
+The DATA stayed put. A shared allocation table would need a nullable foreign key to sales
+documents, purchase bills AND expenses plus a CHECK that exactly one is set — a discriminated union
+hand-rolled in SQL. A real foreign key to a real table is worth more than one fewer table.
+
+The kernel decides what the rule IS; each module decides what the user is TOLD, because a code is
+an i18n key.
+
+**Drill 132 is drill 108 again**, in the module written after it — and that repetition is the
+finding: any service that creates and commits a document in one call has a "drafts do not count"
+filter its own API cannot exercise. Both are now tested by writing a draft straight to the table.

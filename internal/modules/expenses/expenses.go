@@ -284,6 +284,7 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermExpenseDraft, Description: "permissions.expenses.expense.draft"},
 		{Code: PermExpensePost, Description: "permissions.expenses.expense.post"},
 		{Code: PermCategoryManage, Description: "permissions.expenses.category.manage"},
+		{Code: PermSettlePost, Description: "permissions.expenses.settlement.post"},
 	}
 }
 

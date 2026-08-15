@@ -258,3 +258,72 @@ is a job registration rather than a migration.
 iteration deliberately — so without a sort, one expense produces its journal lines in a different
 order on every run. Nothing else in this application posts from a map, so this is the only place
 the problem arises and the only place a test can catch it.
+
+---
+
+## Step 7.2 — settling what is owed
+
+**Delivered.** `0035_settlements.sql`, expense settlements with allocations, four posting rules —
+and **`kernel/settle`**, the settlement arithmetic extracted at its third caller.
+
+### The third caller, and what actually moved
+
+Sales settles invoices, purchasing settles bills, and this settles expenses left on account. Three
+copies of "payment + allocations" — which by Phase 6's own recorded rule looks like a mistake:
+
+> **The moment a fact needs a third home, the second home was the wrong one.**
+
+The rule applies, and the precision matters. **What moved is the ARITHMETIC**: what over-allocation
+means, what outstanding means, and that neither may go negative. That was genuinely copied twice
+and now lives in `kernel/settle`, the same resolution `round.Allocate` got.
+
+**What did not move is the DATA.** Phases 5 and 6 each rejected a shared table twice and
+independently, and the argument still holds: a shared allocation table would need a nullable
+foreign key to sales documents, purchase bills, *and* expenses, plus a `CHECK` that exactly one is
+set — a discriminated union hand-rolled in SQL, with a filter on every query that somebody
+eventually writes without.
+
+**A real foreign key to a real table is worth more than one fewer table.** Three small tables with
+integrity beat one wide table with a `CHECK` standing in for it.
+
+The extraction is proven the way the others were: sales and purchasing delegate to the new package
+and **their tests pass unchanged**.
+
+### D1 — the codes stay in the modules
+
+`kernel/settle` returns sentinel errors, because it sits below the vocabulary of categories and
+codes and reaching up for them would invert the layering. Each module translates into its own
+codes, because a code is an i18n key and a screen renders it.
+
+The kernel decides what the **rule** is; the module decides what the **user is told**.
+
+### D2 — settling touches the expense's category account not at all
+
+The expense reached its category account when it was **recorded**. Settling moves only what was
+owed and where the money came from — posting it again would double the cost and nothing downstream
+would look wrong.
+
+### D3 — an expense paid on the spot cannot be settled again
+
+It is already gone. Settling it would credit the bank twice for one payment, and the only symptom
+would be a bank balance quietly short.
+
+**Mutation drills — 6 run, 1 passed.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 127 | Outstanding is allowed to go negative | fails |
+| 128 | A document can be over-settled | 2 tests fail |
+| 129 | A payment allocates more than it is worth | 2 tests fail |
+| 130 | An expense paid on the spot is settled again | fails |
+| 131 | The settlement action ignores the method | 2 tests fail |
+| 132 | Draft settlements count as paid | **Passed → test written at the repository** |
+
+**Drill 132 is drill 108 again**, in the module written after it. `Settle` drafts and posts in one
+transaction, so no draft ever carries allocations through the service and the `posted`-only filter
+is unreachable from the API. It is still right for the day a draft flow exists, and is now
+asserted by writing a draft settlement straight to the table.
+
+That the *same* unreachable-guard shape appeared in two modules is itself the finding: **any
+service that creates and commits a document in one call has a "drafts do not count" filter that
+its own API cannot exercise.**

@@ -21,6 +21,10 @@ const (
 	CodeNoPayee           = "expenses.no_payee"
 	CodeMethodMismatch    = "expenses.method_mismatch"
 	CodeTemplateNotPosted = "expenses.template_not_posted"
+	CodeInvalidPayment    = "expenses.invalid_payment"
+	CodeAlreadyPaid       = "expenses.already_paid"
+	CodeOverAllocated     = "expenses.over_allocated"
+	CodeOverSettled       = "expenses.over_settled"
 )
 
 // Settlement is whether an expense is already paid.
@@ -355,4 +359,94 @@ func CostByAccount(lines []Line) map[id.ID]int64 {
 		out[line.AccountID] += line.CostMinor()
 	}
 	return out
+}
+
+// ── settling what is owed ───────────────────────────────────────────────────────
+
+// PaymentStatus is where a settlement has got to.
+type PaymentStatus string
+
+// The settlement statuses.
+const (
+	PaymentDraft     PaymentStatus = "draft"
+	PaymentPosted    PaymentStatus = "posted"
+	PaymentCancelled PaymentStatus = "cancelled"
+)
+
+// Payment is money paying off an expense recorded on account.
+type Payment struct {
+	ID        id.ID
+	CompanyID id.ID
+	BranchID  id.ID
+
+	PartnerID id.ID
+	PayeeName string
+
+	Number      string
+	PaymentDate string
+	Method      Method
+	Reference   string
+
+	CurrencyCode string
+	AmountMinor  int64
+
+	Status PaymentStatus
+}
+
+// NewPayment builds a settlement, or refuses.
+func NewPayment(
+	identifier, companyID, branchID id.ID,
+	payeeName, paymentDate, currencyCode string, method Method, amountMinor int64,
+) (Payment, error) {
+	payeeName = strings.TrimSpace(payeeName)
+
+	if identifier.IsZero() || companyID.IsZero() || branchID.IsZero() {
+		return Payment{}, errs.Validation(CodeInvalidPayment,
+			"a settlement needs an identity, a company, and a branch")
+	}
+	if payeeName == "" {
+		return Payment{}, errs.Validation(CodeNoPayee,
+			"a settlement needs to say who was paid")
+	}
+	if strings.TrimSpace(paymentDate) == "" {
+		return Payment{}, errs.Validation(CodeInvalidPayment, "a settlement needs a date")
+	}
+	if !method.Valid() {
+		return Payment{}, errs.Validation(CodeInvalidPayment,
+			"that is not a way of paying this build knows").WithParam("method", string(method))
+	}
+	if amountMinor <= 0 {
+		return Payment{}, errs.Validation(CodeNonPositiveAmount,
+			"a settlement must be for a positive amount")
+	}
+
+	return Payment{
+		ID: identifier, CompanyID: companyID, BranchID: branchID,
+		PayeeName: payeeName, PaymentDate: paymentDate, Method: method,
+		CurrencyCode: strings.ToUpper(currencyCode), AmountMinor: amountMinor,
+		Status: PaymentDraft,
+	}, nil
+}
+
+// PostingAction is the rule key a settlement fires.
+//
+// The METHOD again, for the same reason: which account the money left is a seed-file decision.
+func (p Payment) PostingAction() string {
+	return "expenses.settlement." + string(p.Method)
+}
+
+// RequireSettleable refuses to settle an expense that owes nothing.
+//
+// Only an expense recorded ON ACCOUNT can be settled. One paid immediately is already gone, and
+// settling it again would credit the bank twice for one payment.
+func (e Expense) RequireSettleable() error {
+	if e.Status != Posted {
+		return errs.Conflict(CodeNotDraft,
+			"only a recorded expense can be settled")
+	}
+	if e.Settlement != OnAccount {
+		return errs.Conflict(CodeAlreadyPaid,
+			"this expense was paid when it was recorded")
+	}
+	return nil
 }

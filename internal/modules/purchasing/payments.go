@@ -6,6 +6,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/kernel/settle"
 	accountingc "github.com/mizan-erp/mizan/internal/modules/accounting/contract"
 	auditc "github.com/mizan-erp/mizan/internal/modules/audit/contract"
 	"github.com/mizan-erp/mizan/internal/modules/purchasing/domain"
@@ -105,11 +106,13 @@ func (s *Service) Pay(ctx context.Context, in NewPaymentInput) (domain.Payment, 
 			if settledErr != nil {
 				return settledErr
 			}
-			if settled+allocation.AmountMinor > bill.TotalMinor {
+			if err = settle.RequireSettleable(
+				bill.TotalMinor, settled, allocation.AmountMinor); err != nil {
 				return errs.Conflict(domain.CodeOverSettled,
 					"that would pay more than the bill is for").
 					WithParam("bill", bill.Number).
-					WithParam("outstanding", itoa(bill.TotalMinor-settled))
+					WithParam("outstanding",
+						settle.Itoa(settle.Outstanding(bill.TotalMinor, settled)))
 			}
 
 			if err = s.repos.InsertAllocationFor(txCtx, payment.ID, allocation); err != nil {
@@ -224,27 +227,5 @@ func (s *Service) OutstandingOnBill(ctx context.Context, billID id.ID) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	return bill.TotalMinor - settled, nil
-}
-
-func itoa(v int64) string {
-	if v == 0 {
-		return "0"
-	}
-	negative := v < 0
-	if negative {
-		v = -v
-	}
-	var digits [20]byte
-	i := len(digits)
-	for v > 0 {
-		i--
-		digits[i] = byte('0' + v%10)
-		v /= 10
-	}
-	if negative {
-		i--
-		digits[i] = '-'
-	}
-	return string(digits[i:])
+	return settle.Outstanding(bill.TotalMinor, settled), nil
 }

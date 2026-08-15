@@ -598,6 +598,86 @@
           "memo": "owed"
         }
       ]
+    },
+    {
+      "code": "expense_settled_cash",
+      "event": "expenses.settlement.cash",
+      "sequence": 1,
+      "description": "Settling an expense that was recorded on account, paid from the till: what we owed falls and the money leaves the account the METHOD implies. The expense itself already reached its category account when it was recorded.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what was owed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:CASH",
+          "amount": "document.total",
+          "memo": "paid from the till"
+        }
+      ]
+    },
+    {
+      "code": "expense_settled_card",
+      "event": "expenses.settlement.card",
+      "sequence": 1,
+      "description": "Settling an expense that was recorded on account, paid by card: what we owed falls and the money leaves the account the METHOD implies. The expense itself already reached its category account when it was recorded.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what was owed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by card"
+        }
+      ]
+    },
+    {
+      "code": "expense_settled_bank_transfer",
+      "event": "expenses.settlement.bank_transfer",
+      "sequence": 1,
+      "description": "Settling an expense that was recorded on account, paid by transfer: what we owed falls and the money leaves the account the METHOD implies. The expense itself already reached its category account when it was recorded.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what was owed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by transfer"
+        }
+      ]
+    },
+    {
+      "code": "expense_settled_cheque",
+      "event": "expenses.settlement.cheque",
+      "sequence": 1,
+      "description": "Settling an expense that was recorded on account, paid by cheque: what we owed falls and the money leaves the account the METHOD implies. The expense itself already reached its category account when it was recorded.",
+      "lines": [
+        {
+          "side": "debit",
+          "account": "mapping:AP",
+          "amount": "document.total",
+          "memo": "settles what was owed"
+        },
+        {
+          "side": "credit",
+          "account": "mapping:BANK",
+          "amount": "document.total",
+          "memo": "paid by cheque"
+        }
+      ]
     }
   ]
 }

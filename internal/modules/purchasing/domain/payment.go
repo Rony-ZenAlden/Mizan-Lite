@@ -1,10 +1,12 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/kernel/settle"
 )
 
 // Method is how money left the business.
@@ -146,18 +148,24 @@ type Allocation struct {
 // paying a round figure against a statement leaves a few units unallocated, and forcing them to
 // balance would mean inventing an allocation.
 func RequireAllocatable(paymentMinor int64, allocations []Allocation) error {
-	var total int64
+	amounts := make([]settle.Allocation, 0, len(allocations))
 	for _, allocation := range allocations {
-		if allocation.AmountMinor <= 0 {
-			return errs.Validation(CodeNonPositiveAmount,
-				"an allocation must be for a positive amount")
-		}
-		total += allocation.AmountMinor
+		amounts = append(amounts, settle.Allocation{AmountMinor: allocation.AmountMinor})
 	}
-	if total > paymentMinor {
+
+	// The kernel decides what the rule IS; this decides what a user is told. The sentinel comes
+	// back as a coded error because a code is an i18n key and a screen renders it.
+	switch err := settle.RequireAllocatable(paymentMinor, amounts); {
+	case errors.Is(err, settle.ErrNonPositive):
+		return errs.Validation(CodeNonPositiveAmount,
+			"an allocation must be for a positive amount")
+	case errors.Is(err, settle.ErrOverAllocated):
 		return errs.Validation(CodeOverAllocated,
 			"that allocates more than the payment is worth").
-			WithParam("payment", itoa(paymentMinor)).WithParam("allocated", itoa(total))
+			WithParam("payment", settle.Itoa(paymentMinor)).
+			WithParam("allocated", settle.Itoa(settle.Total(amounts)))
+	case err != nil:
+		return errs.Validation(CodeOverAllocated, err.Error())
 	}
 	return nil
 }

@@ -154,6 +154,12 @@ func newFixture(t *testing.T) fixture {
 	}); err != nil {
 		t.Fatalf("CreateSeries: %v", err)
 	}
+	if _, err = salesSvc.CreateSeries(ctx, sales.NewSeriesInput{
+		CompanyID: provisioned.CompanyID, Code: expenses.SeriesSettlement,
+		Prefix: "EXPPAY-", Padding: 6,
+	}); err != nil {
+		t.Fatalf("CreateSeries: %v", err)
+	}
 
 	partnerID, _ := id.New()
 	if _, err = store.Writer(ctx).ExecContext(ctx, `

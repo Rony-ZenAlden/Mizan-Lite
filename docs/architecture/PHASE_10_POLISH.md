@@ -394,3 +394,50 @@ the corrected test asserts every signing invocation sits inside a guard.
 ### The drills
 
 D251–D255, five, all failed first time.
+
+---
+
+## Step 10.5 — documentation
+
+A README that orders what already exists, and a guide for the person who is not a programmer.
+
+### The finding: the entry point was ten phases stale
+
+The README said **"Phase 0 — Foundation (application kernel). No business features yet."**
+
+A reader arriving would have concluded the project was a kernel with nothing on top of it — while
+the repository held ten phases of modules, thirty-seven design documents, and a working till.
+**A stale entry point is worse than none**, because none prompts you to look and a wrong one
+answers your question.
+
+### D1 — order, not rewrite
+
+The phase documents ARE the architecture documentation and they are already written. What was
+missing was the order to read them in, and the instruction to **read a phase's DoD review first if
+short of time** — it is the most honest section, listing what was proven, by which test, and what
+was found wrong while proving it.
+
+The README also now carries the rules this codebase accumulated, each with where it was learned.
+They are the things worth knowing before changing anything, and they were scattered across
+thirty-seven documents.
+
+### D2 — known gaps are in the README, not implied
+
+Four, stated where a reader will see them: the installers are configured but never built here;
+signing is a no-op; the performance ceiling catches structural regressions and not drift;
+accounting is read-only by design. The alternative is a reader discovering them.
+
+### D3 — the user guide is a separate artefact
+
+A shopkeeper needs installing, first-run setup, and what to do when something looks wrong. A
+maintainer needs the architecture. Conflating them serves neither, so the guide is its own
+document in both English and Arabic — and the README says so where the two part.
+
+The guide's most important section is the one Mizan cannot do for the user: **copy backups off
+this computer.** A backup on the same disk does not survive that disk failing, and it is the only
+step automation cannot take.
+
+### The drills
+
+D256–D259, four. One did not apply: it renamed a document that the README mentions in a code span
+rather than a link, so the link walk had nothing to find. Re-aimed at a real link, it fails.

@@ -12,14 +12,89 @@ many business types and countries through **configuration and metadata, not code
 
 ## Status
 
-**Phase 0 — Foundation (application kernel).** No business features yet; building the
-reusable kernel that future modules plug into. See [`docs/architecture/`](docs/architecture/):
+**Phases 0–10 built.** The application keeps double-entry books, runs a till, manages stock,
+purchasing and expenses, reports on all of it, and looks after itself.
 
-| Document | Purpose |
-|---|---|
-| `ARCHITECTURE_v1.md` | System architecture (all 23 areas + tax/accounting/inventory) |
-| `ADDENDUM_v1.1_resolved_design.md` | Variants, UoM, country profiles, costing, currency |
-| `PHASE_0_FOUNDATION.md` | The current phase's detailed design |
+| Phase | What it built |
+|-------|---------------|
+| 0 | The kernel: numerics, database, migrations, config, events, jobs, i18n, currency, composition root, frontend foundation |
+| 1 | Core data: organisation, identity, RBAC, audit, profiles |
+| 2 | The financial spine: chart of accounts, posting rules, the ledger, tax |
+| 3 | Master data: units, categories, products, variants, partners, price lists |
+| 4 | Inventory: movements, costing, lots and serials, counts, valuation |
+| 5 | Sales and POS: quotations to invoices, returns, payments, shifts, printing |
+| 6 | Purchasing: orders, receipts, bills, landed costs, returns, payments |
+| 7 | Money out: expenses, settlements, debts, partner balances |
+| 8 | Insight: financial statements, sales and spend analysis, valuation, search, dashboard |
+| 9 | Operations: verified backup and restore, CSV import and export, notifications |
+| 10 | Polish: performance bounds, RTL and accessibility gates, installers, this document |
+
+### Known gaps
+
+Recorded rather than implied, because the alternative is a reader discovering them:
+
+- **The installers are configured but never built here.** This machine cannot run a Wails
+  package step, so `docs/architecture/PHASE_10_POLISH.md` claims configuration completeness and
+  nothing more. An installer that builds and then fails to run is invisible to every check in
+  the repository.
+- **Code signing is a no-op by design** (Phase 0). The macOS script signs only when
+  `MIZAN_MACOS_IDENTITY` is set; Windows binaries are unsigned.
+- **The performance ceiling catches structural regressions, not drift.** A report that goes from
+  46ms to five seconds still passes. The elapsed times are logged so a person can see it climbing.
+- **Accounting is exposed read-only** (§20.6 tier v1.1). Manual journal entries arrive with the
+  release that introduces them.
+
+## For the person using it
+
+- **[docs/guide/GETTING_STARTED.md](docs/guide/GETTING_STARTED.md)** — installing, first-run
+  setup, backups, and what to do when something looks wrong.
+- **[docs/guide/GETTING_STARTED.ar.md](docs/guide/GETTING_STARTED.ar.md)** — the same, in Arabic.
+
+A user guide and a maintainer guide are different artefacts, and conflating them serves neither.
+Everything below this line is for whoever maintains the code.
+
+## Reading this repository
+
+Thirty-seven design documents in `docs/architecture/`, in the order they are worth reading:
+
+1. **[ARCHITECTURE_v1.md](docs/architecture/ARCHITECTURE_v1.md)** — the system, all 23 areas.
+   Everything else assumes it.
+2. **[ADDENDUM_v1.1_resolved_design.md](docs/architecture/ADDENDUM_v1.1_resolved_design.md)** —
+   variants, units, country profiles, costing, currency. The decisions the architecture deferred.
+3. **[PHASE_0_FOUNDATION.md](docs/architecture/PHASE_0_FOUNDATION.md)** — the kernel, and the
+   `STEP_0_*.md` documents beneath it. Read these before any module: they explain why money is an
+   integer, why migrations back themselves up, and why the composition root looks as it does.
+4. **The phase documents in order**, `PHASE_1` through `PHASE_10`. Each records its analysis, its
+   design decisions with reasons, what it deliberately did NOT do, and a Definition-of-Done review
+   that says plainly where a criterion was not met.
+
+**Read a phase's DoD review first if you are short of time.** It is the most honest section: it
+lists what was proven, by which test, and what was found wrong while proving it.
+
+### The rules this codebase accumulated
+
+Written where they were learned, and worth knowing before changing anything:
+
+- *Before declaring a new place for a fact to live, look for the one an earlier phase already
+  left.* (4.4, and every phase since)
+- *A seam is only proven by a caller.* (Phase 6 — and 7.6, where thirteen number series existed
+  that nothing ever created)
+- *When a test needs a helper that imitates a production mechanism, that mechanism is untested.*
+  (5.4)
+- *A scale conversion tested only at scale 1 is a conversion nobody has tested.* (6.6)
+- *A test whose fixture cannot distinguish the right answer from the wrong one is not evidence.*
+  (Phase 8, five times)
+- *A detector tested only where it should stay silent is a detector nobody has heard.* (8.1)
+- *A check nobody can make fail is a claim nobody has verified.* (9.5)
+- *A path that cannot be tested is a path that has never run.* (9.7)
+
+### Mutation drills
+
+Every guarantee in this codebase is watched to fail. A drill changes production code so a test
+SHOULD break; a drill that passes is a defect in the test, the code, or the mutation, and each is
+recorded in its phase document with which of five resolutions it took.
+
+255 drills across ten phases. Roughly one in seven passed, and every one produced a change.
 
 ## Prerequisites
 
@@ -40,6 +115,8 @@ make arch        # architecture rules only (tools/archlint)
 make test        # go test with race + coverage (core packages)
 make dev         # wails dev (hot-reload desktop app)
 make build       # production desktop binary
+./scripts/package-windows.sh   # NSIS installer (.exe), cross-built from macOS
+./scripts/package-macos.sh     # disk image (.dmg), Universal
 make vendor      # vendor Go deps for fully offline, self-contained builds
 ```
 

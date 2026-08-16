@@ -51,6 +51,11 @@ export default [
         Element: "readonly",
         Event: "readonly",
         ResizeObserver: "readonly",
+        // File and btoa, for the import screen: a chosen file is read as bytes and encoded for
+        // the boundary. Declared rather than disabled, so the next global that appears is still
+        // caught.
+        File: "readonly",
+        btoa: "readonly",
         // Node globals, for the token gate that reads index.css off disk.
         process: "readonly",
       },

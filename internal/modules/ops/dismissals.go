@@ -36,9 +36,6 @@ func Migrations() fs.FS {
 // CodeDismissalFailed is this store's only failure.
 const CodeDismissalFailed = "ops.dismissal_failed"
 
-// PermNoticeView guards reading the notice centre.
-const PermNoticeView = "ops.notice.view"
-
 // Dismissals stores what a user has chosen not to be told again.
 type Dismissals struct {
 	db  database.DB

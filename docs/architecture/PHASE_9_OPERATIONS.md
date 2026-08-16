@@ -530,3 +530,65 @@ existed. Phase 9 added 0037 legitimately, and there is no version of that test t
 window between Phase 8's last migration and Phase 9's first is EMPTY. Weakening it to stay green
 would have been worse than deleting it: **a check nobody can make fail is a claim nobody has
 verified.** It is recorded in place of the test, with what it did and did not prove.
+
+---
+
+## Step 9.6 — bindings and screens
+
+One `Operations` façade; three screens.
+
+### D1 — three invented permissions, caught by the coverage check
+
+The first version of `operationsPolicies` demanded `system.manage`, `partner.manage`, and an
+`ops.notice.view` declared in a package that is not a module. **None of the three exists**, and
+7.6's coverage check named all of them: *a permission no module declares can never be granted, so
+the method is permanently unreachable.*
+
+The replacements are permissions that already mean the thing:
+
+- Backups and restore use `identity.user.manage`. Whoever may create and delete users administers
+  this installation, and a backup contains every user's data — the two powers are the same power.
+- Notices use `identity.session.view`, which the Jobs and Runs screens already use. They answer
+  the same question: how is this installation running.
+- Imports use the catalog's and partner's own manage permissions, because an import CREATES
+  records and there is no separate "may import" — that would be a second way to grant one power.
+
+`ops.PermNoticeView` was deleted rather than left as a constant nothing can grant.
+
+### D2 — the restore screen's job is to be understood, not to warn
+
+Three things do that, and none is a warning triangle: the confirmation NAMES the backup and its
+date; the result says a RESTART is required; and the safety snapshot is named on screen before it
+is needed, so the way back is visible in advance.
+
+A backup from a newer build is LISTED and marked, never hidden — a user hunting for a file they
+know they made is worse off than one told why it cannot be used, and "update, then restore" is
+something they can act on.
+
+### D3 — the import screen's commit button does not exist until a check has run
+
+A user who has not seen what would happen cannot agree to it, and an import is not something to
+discover the shape of afterwards. Every row is shown, not only the failures.
+
+### The drills
+
+D234–D237, four, all failed first time.
+
+### The defect CI could not see
+
+Every interpolated message added in Phases 8 and 9 used `{{name}}`. This catalogue interpolates
+`{name}`, and the renderer leaves unknown syntax alone — so "3 hidden" rendered as **"{3} hidden"**
+in both locales, across seventeen keys.
+
+`TestEveryErrorCodeHasATranslation` checks that a key EXISTS, which every one of them did. The Go
+tests assert on message keys rather than rendered text. The only thing that caught it was one
+frontend test that happened to assert a rendered interpolation.
+
+The lesson is narrower than "test rendering": **a message catalogue has a syntax, and nothing was
+checking that the messages were written in it.** `TestNoTranslationUsesDoubleBracePlaceholders`
+now does, and it is drilled.
+
+A second collision came out of the same fix: `imports.failed` existed in both `common.json` and
+`errors.json`, which the catalogue loader refuses as "defined twice in the same locale" — at
+STARTUP, so every binding test failed at once. The error code owns the key; the screen's heading
+got its own.

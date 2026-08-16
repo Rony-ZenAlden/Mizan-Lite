@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -265,4 +266,70 @@ func TestGoAndFrontendShareTheSameCatalog(t *testing.T) {
 			t.Errorf("%s is missing; the frontend build imports it", rel)
 		}
 	}
+}
+
+// TestNoTranslationUsesDoubleBracePlaceholders
+//
+// # A defect that shipped in seventeen keys before a frontend test found it
+//
+// This catalogue interpolates `{name}`. Phases 8 and 9 wrote `{{name}}` throughout — the
+// convention most i18n libraries use — and the renderer left the outer braces alone, so
+// "3 hidden" came out as "{3} hidden" in both locales.
+//
+// Nothing caught it. `TestEveryErrorCodeHasATranslation` checks that a key EXISTS, which every
+// one of them did; the Go tests assert on message keys rather than rendered text; and the one
+// frontend test that happened to assert a rendered interpolation is what found it.
+//
+// The lesson is narrower than "test rendering": **a message catalogue has a syntax, and nothing
+// was checking that the messages were written in it.** This is that check.
+func TestNoTranslationUsesDoubleBracePlaceholders(t *testing.T) {
+	doubled := regexp.MustCompile(`\{\{\s*\w+\s*\}\}`)
+
+	var checked int
+	for _, locale := range localeDirs(t) {
+		for _, file := range []string{"common.json", "errors.json"} {
+			path := filepath.Join(locale, file)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("reading %s: %v", path, err)
+			}
+			var messages map[string]string
+			if err = json.Unmarshal(raw, &messages); err != nil {
+				t.Fatalf("parsing %s: %v", path, err)
+			}
+			for key, value := range messages {
+				checked++
+				if doubled.MatchString(value) {
+					t.Errorf("%s: %q uses {{name}}, which this catalogue renders literally — "+
+						"the placeholder is {name}", path, key)
+				}
+			}
+		}
+	}
+
+	// The scan read the catalogues. A path that matched nothing would pass while checking
+	// nothing at all.
+	if checked < 100 {
+		t.Fatalf("only %d messages were checked; the catalogues hold far more", checked)
+	}
+}
+
+// localeDirs finds the shipped locale directories.
+func localeDirs(t *testing.T) []string {
+	t.Helper()
+	root := filepath.Join("..", "..", "..", "locales")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("reading the locales directory: %v", err)
+	}
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			out = append(out, filepath.Join(root, entry.Name()))
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("no locales found")
+	}
+	return out
 }

@@ -1479,3 +1479,102 @@ export function globalSearch(query: string, limit = 8): Promise<SearchResponse> 
 export function dashboard(from = "", to = ""): Promise<DashboardBoard> {
   return call<DashboardBoard>("Insight", "Dashboard", from, to);
 }
+
+// ── Operations: backups, restore, import, notices (Phase 9) ─────────────────────
+
+export interface BackupFile {
+  /** The identifier passed back to restore. Never a path. */
+  name: string;
+  takenAt: string;
+  reason: string;
+  schemaVersion: number;
+  sizeBytes: number;
+  appVersion: string;
+  /** Whether THIS build can read it. A newer backup is listed and marked, never hidden. */
+  restorable: boolean;
+}
+
+export interface RestoreIntent {
+  from: string;
+  replacingVersion: number;
+  restoringVersion: number;
+  safetyBackup: string;
+  preparedAt: string;
+}
+
+export interface ImportRow {
+  /** The line in the user's spreadsheet, header counted. */
+  line: number;
+  key: string;
+  ok: boolean;
+  message: string;
+  code: string;
+}
+
+export interface ImportReport {
+  dryRun: boolean;
+  kind: string;
+  total: number;
+  succeeded: number;
+  failed: number;
+  rows: ImportRow[];
+}
+
+export interface Notice {
+  key: string;
+  rule: string;
+  severity: "danger" | "warning" | "info";
+  messageKey: string;
+  params: Record<string, string>;
+  entityId: string;
+  entityKind: string;
+}
+
+export interface NoticeCentre {
+  notices: Notice[];
+  /** How many are hidden, so a screen can offer to show them. */
+  dismissed: number;
+  /** Rules that could not run. Silence would otherwise read as "nothing is wrong". */
+  failed: string[];
+}
+
+export function backups(): Promise<BackupFile[]> {
+  return call<BackupFile[]>("Operations", "Backups");
+}
+
+export function takeBackup(): Promise<BackupFile> {
+  return call<BackupFile>("Operations", "TakeBackup");
+}
+
+export function prepareRestore(name: string): Promise<RestoreIntent> {
+  return call<RestoreIntent>("Operations", "PrepareRestore", name);
+}
+
+/** An empty `from` means nothing is waiting — the ordinary answer, not a failure. */
+export function pendingRestore(): Promise<RestoreIntent> {
+  return call<RestoreIntent>("Operations", "PendingRestore");
+}
+
+export function cancelRestore(): Promise<boolean> {
+  return call<boolean>("Operations", "CancelRestore");
+}
+
+export function importProducts(contentBase64: string, dryRun: boolean): Promise<ImportReport> {
+  return call<ImportReport>("Operations", "ImportProducts", contentBase64, dryRun);
+}
+
+export function importPartners(contentBase64: string, dryRun: boolean): Promise<ImportReport> {
+  return call<ImportReport>("Operations", "ImportPartners", contentBase64, dryRun);
+}
+
+export function notices(): Promise<NoticeCentre> {
+  return call<NoticeCentre>("Operations", "Notices");
+}
+
+export function dismissNotice(key: string): Promise<boolean> {
+  return call<boolean>("Operations", "DismissNotice", key);
+}
+
+export function restoreNotice(key: string): Promise<boolean> {
+  return call<boolean>("Operations", "RestoreNotice", key);
+}

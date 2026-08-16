@@ -34,9 +34,13 @@ const (
 
 // The permissions. An import CREATES records, so it demands the permission to create them —
 // there is no separate "may import", because that would be a second way to grant the same power.
+//
+// The VALUES are the ones the catalog and partner modules declare. The first version invented
+// `partner.manage`, which no module declares — so the binding requiring it would have been
+// permanently unreachable, and the 7.6 coverage check caught it before anything shipped.
 const (
 	PermImportProducts = "catalog.manage"
-	PermImportPartners = "partner.manage"
+	PermImportPartners = "partner.customer.manage"
 )
 
 // Kind is what a file contains.

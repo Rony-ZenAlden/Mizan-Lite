@@ -402,6 +402,7 @@
   "strategy.duplicate": "تم تسجيل مكوّنين بالاسم نفسه.",
   "strategy.invalid": "تم تسجيل مكوّن بدون اسم.",
   "strategy.unknown": "المكوّن المطلوب \"{key}\" غير مثبّت.",
+  "tabular.write_failed": "تعذّرت كتابة ملف التصدير.",
   "tax.calculation_failed": "تعذّر احتساب الضريبة.",
   "tax.invalid": "الضريبة غير صالحة.",
   "tax.invalid_group": "مجموعة الضرائب غير صالحة.",

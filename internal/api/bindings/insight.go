@@ -213,6 +213,13 @@ func insightPolicies() map[string]policy.Policy {
 		// mark themselves failed when a source refuses. The board itself needs the lowest bar
 		// its tiles share.
 		"Dashboard": policy.Requires(sales.PermAnalysisView),
+
+		// The exports (9.3). Each demands the permission of the report it renders — an export is
+		// the same data in a different container, and a grant that let somebody download what
+		// they could not read would protect nothing.
+		"ExportAnalysis":  policy.Requires(sales.PermAnalysisView),
+		"ExportValuation": policy.Requires(inventory.PermValuationView),
+		"ExportStatement": policy.Requires(accounting.PermProfitAndLossView),
 	}
 }
 

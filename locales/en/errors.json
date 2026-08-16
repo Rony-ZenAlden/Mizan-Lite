@@ -402,6 +402,7 @@
   "strategy.duplicate": "Two components are registered under the same name.",
   "strategy.invalid": "A component was registered without a name.",
   "strategy.unknown": "The required component \"{key}\" is not installed.",
+  "tabular.write_failed": "The export could not be written.",
   "tax.calculation_failed": "The tax could not be calculated.",
   "tax.invalid": "The tax is not valid.",
   "tax.invalid_group": "The tax group is not valid.",

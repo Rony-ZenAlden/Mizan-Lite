@@ -343,3 +343,62 @@ result is believed.
 company, backs up, renames the company, prepares a restore, asserts the RUNNING application still
 sees the new name, shuts down, restarts, and asks again. The package's own tests could show none
 of that.
+
+---
+
+## Step 9.3 — export
+
+`internal/platform/tabular` writes CSV; three binding methods render Phase 8's reports.
+
+### D1 — the export takes the SCREEN's data, and cannot re-query
+
+`ExportAnalysis(analysis AnalysisDTO, …)` receives the DTO the screen already has. It has no
+service to call — nothing in its signature can reach a report — so DoD criterion 7 holds by
+CONSTRUCTION rather than by discipline.
+
+A second query with the same arguments would be a second answer, and the user would have a
+spreadsheet that disagrees with the screen it came from the moment anything changed in between.
+
+### D2 — the byte-order mark is not decoration
+
+Excel on Windows reads a UTF-8 file as the system's legacy code page unless it begins with a BOM.
+Without it, an Arabic product name opens as mojibake **for exactly the users this application is
+built for**. Every other consumer tolerates the BOM; Excel does not tolerate its absence.
+
+### D3 — a cell that would become a formula is defused
+
+A cell beginning with `=`, `+`, `-` or `@` is a FORMULA to Excel, LibreOffice and Google Sheets.
+`=1+1` displays as 2, which is merely wrong.
+
+The values come from a shop's own data — a product named "-- clearance --", a note starting
+"+974…" — so this is primarily about an export that silently changes what the data SAYS. That it
+also closes an injection route is the second reason, not the first. An ordinary value is left
+alone: prefixing everything would be safe and would also put an apostrophe in front of every
+product name in the file.
+
+### D4 — a short row is refused
+
+It silently shifts every value after it into the wrong column, and the file still opens. The
+reader sees a cost under a quantity heading with no way to know.
+
+### D5 — base64 over the boundary, not a path
+
+Writing the file and returning where it went means this process choosing a directory on the user's
+machine — a permission question on macOS, a different directory on Windows, a surprise on both.
+Handing the bytes back lets the webview use the platform's own save dialog.
+
+### The drills
+
+D218–D222, five, all failed first time.
+
+### A mistake worth recording
+
+I created `internal/api/bindings/export_test.go` without checking whether the name was taken — and
+it was, by a Phase 5 file holding `PublicMethodsForTest` and `DeclaredPoliciesForTest`. The build
+broke four tests away from the change, which is the only reason it was caught immediately.
+
+This is the second file-destroying collision in the project. The first was a drill backup keyed on
+a BASENAME, where two files called `printing.go` overwrote each other; the rule recorded then was
+*backup paths derive from the full path, never the basename*. The rule this one adds is narrower
+and should have followed from it: **check whether a filename exists before writing it.** The new
+file is `csv_export_test.go`.

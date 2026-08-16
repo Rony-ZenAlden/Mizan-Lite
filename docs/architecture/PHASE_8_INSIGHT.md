@@ -574,3 +574,53 @@ D188–D191, four. Two passed:
 D191 is the one the end-to-end test exists for: removing `app.Partner.Searcher()` from the
 registry left every unit test in `platform/search` green. A searcher that compiles, is never
 registered, and silently contributes nothing is invisible to everything except a caller.
+
+---
+
+## Step 8.6 — the dashboard
+
+Six tiles from three modules, assembled in the composition root.
+
+### D1 — an assembly, and a structural test that keeps it one
+
+Phase 8's analysis called the dashboard an assembly rather than a computation: every tile is one
+module's own answer, and nothing combines two modules' data into a third number. A tile that
+multiplied two modules together would be a REPORT, belonging to whichever module owns the
+multiplication — and this file would have quietly become the reporting module the analysis
+refused.
+
+A comment saying so is not a check. `TestTheDashboardDoesNoCrossModuleArithmetic` PARSES
+`dashboard.go` and requires every tile's amount to be a single selector, literal, or call — not
+`x - y`. It is a blunt rule, and being blunt is what makes it hold: the moment a tile needs
+arithmetic, it fails, and somebody has to decide where the work belongs rather than adding one
+more line.
+
+The scan also asserts it found at least four tiles, because a parser that matched nothing would
+pass while checking nothing — 7.6's D162 in a different shape.
+
+### D2 — `Periodic` exists because two kinds of figure share one screen
+
+Sales is a figure over a range; stock value is a position as at now. Rendering them side by side
+without saying which is which is how "stock value 40,000" gets read as this month's purchases.
+
+The test requires BOTH kinds to be present, so the distinction is exercised rather than being a
+field nobody sets differently.
+
+### D3 — a broken tile is marked, not fatal
+
+A home screen that renders nothing because one query broke fails entirely for a reason nobody can
+see. Same choice as `search.Response.Failed`, same reason.
+
+The test breaks it with a backwards date range — which sales and purchasing both refuse and
+inventory does not read — so one source fails while another still answers, with no fake involved.
+
+### D4 — the range is the caller's
+
+No hidden default of "this month". A screen showing figures for a period the user did not choose
+is a screen whose numbers cannot be checked; 8.1 D5 made the same call for statements.
+`MonthToDate` exists so a caller can ASK for the common range rather than have it assumed, and it
+reads the injected clock so a test can make "today" deterministic.
+
+### The drills
+
+D192–D195, four, all failed on the first attempt.

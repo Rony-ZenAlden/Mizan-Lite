@@ -441,3 +441,128 @@ step automation cannot take.
 
 D256–D259, four. One did not apply: it renamed a document that the README mentions in a code span
 rather than a link, so the link walk had nothing to find. Re-aimed at a real link, it fails.
+
+---
+
+## Step 10.6 — Phase 10 Definition-of-Done review, and the project's
+
+### Phase 10: 12/12 met
+
+| # | Proven by |
+|---|-----------|
+| 1 | 10.1's four screens, and the two bindings that were missing under them |
+| 2 | `TestEveryReportCompletesWithinItsBoundOverAYearOfHistory`, in CI |
+| 3 | Nothing was optimised, because the measurement found nothing to optimise |
+| 4 | `direction.test.ts` — nine logical properties, zero physical |
+| 5 | `rtl.test.tsx` — eleven screens under an Arabic catalogue |
+| 6 | `accessible-names.test.tsx` |
+| 7 | `packaging_test.go` — presence, one version source, templates still templated |
+| 8 | `TestSigningIsOptInAndTheBuildDoesNotNeedIt` |
+| 9 | `TestTheReadingOrderNamesDocumentsThatExist`, `TestEveryPhaseHasADesignDocument` |
+| 10 | `docs/guide/GETTING_STARTED.md` and its Arabic twin, linked and asserted |
+| 11 | Below |
+| 12 | `make ci` green; drills D241–D259 |
+
+### Criterion 11 — every phase's result, restated
+
+| Phase | Recorded verdict | Now |
+|-------|------------------|-----|
+| 0 | Reviewed in `STEP_0_12` | Unchanged |
+| 1 | Reviewed in 1.12 | Unchanged |
+| 2 | 12 of 12 | Unchanged |
+| 3 | 11 of 12 in full, 1 with a documented exception | **Still an exception.** See below |
+| 4 | 13 of 13, after the review FOUND criterion 3 unmet and fixed it | Unchanged |
+| 5 | 14 of 14 | Unchanged |
+| 6 | 13 of 14 — **criterion 13 NOT met** | **Permanently false.** See below |
+| 7 | 12 of 12, one by a mechanism the criterion did not describe | Unchanged |
+| 8 | 12 of 12 | One check has since EXPIRED — see below |
+| 9 | 12 of 12 | Unchanged |
+| 10 | 12 of 12 | This review |
+
+#### Phase 3, criterion 2 — still an exception, and still the right one
+
+`price_list_items.variant_id` is nullable, where §1.2 asks for `NOT NULL` everywhere.
+
+The criterion exists to prevent a nullable `variant_id` meaning "the product itself", forcing every
+query to handle two cases forever. What is actually true is narrower: a CHECK constraint makes any
+row that is not exactly one of the two kinds unrepresentable, and exactly one function —
+`domain.Resolve`, whose job IS choosing between granularities — reads both cases.
+
+Four phases have passed and no second reader of that column has appeared. The exception stands.
+
+#### Phase 6, criterion 13 — false, and it cannot become true
+
+*"Every seam Phase 4 left has a caller and none needed reshaping."*
+
+Three of four served their first caller unchanged. `Revaluation` did not: it was structurally
+unwritable, guarded by a positive-quantity check in both the domain and the schema, and 6.6 had to
+rebuild the table to let its own feature exist.
+
+**This is a statement about what happened, and no later work can make it true.** It was recorded
+rather than reworded, and restating it here is the honest close: the seam was guessed, the guess
+was wrong, and the cost was a migration.
+
+#### Phase 8 — one check has expired
+
+`TestPhaseEightAddedNoSchema` asserted no migration numbered above Phase 7's last. It passed when
+Phase 8 closed, which is what it was for. Phase 9 then added `0037` legitimately, and no version
+of the test survives — the window between the two is empty, and **a check nobody can make fail is
+a claim nobody has verified**. It was deleted with a note in its place.
+
+The criterion it proved remains true of Phase 8. Nothing enforces it going forward, and that is
+recorded rather than implied.
+
+---
+
+## The project, closed
+
+Eleven phases. `make ci` green.
+
+### What was built
+
+An offline-first desktop ERP and point of sale: double-entry books with table-driven posting
+rules, a till with shifts and printing, stock with moving-average costing and lots, purchasing
+from order to payment, expenses and debts, financial statements and margin analysis, verified
+backup and restore, CSV import through the real services, and notifications computed from rules
+rather than stored.
+
+Fifteen modules, thirty-seven migrations, seventeen binding façades, two locales.
+
+### What the discipline cost and returned
+
+**255 mutation drills.** Roughly one in seven passed, and every pass produced a change: a
+strengthened test, a deleted redundancy, a re-aimed mutation, or a rule narrowed to what it
+actually meant.
+
+Six defects would have shipped without them, and each was invisible to review:
+
+- A costing conversion **wrong by a factor of a hundred** for two phases, hidden because every
+  consuming test used a zero-decimal currency.
+- **Thirteen number series nothing ever created** — a freshly installed company could not post a
+  single document.
+- A `Revaluation` movement that was **structurally unwritable**.
+- A whole module wired into the application and **absent from its declaration list**, making its
+  permissions ungrantable.
+- Seventeen message keys using a placeholder syntax the catalogue **renders literally**.
+- Two documents with **no binding at all**, unreachable from the interface for four phases.
+
+### What is not done
+
+Stated plainly, because a project that ends by listing its strengths has not ended honestly:
+
+1. **The installers have never been built.** The configuration is complete and consistent; no
+   `.exe` or `.dmg` has been produced or run.
+2. **Nobody has used this.** Every guarantee is proven by a test. No shopkeeper has opened it,
+   and the first hour of real use will find things no test looked for.
+3. **The performance ceiling catches structural regressions, not drift.**
+4. **`runEveryReport` lists the phase's reads by hand** (9.7), so a report added later and left
+   out is one nobody proves is read-only.
+5. **Accounting is read-only**, by §20.6's release plan. Manual journal entries are a later tier.
+6. **Two locales.** A third is a data change, and the machinery supports it.
+
+### The rule that held throughout
+
+*Correctness over convenience, and say plainly what is not true.* Every phase document records
+what it declined to build and why; every DoD review names a criterion it failed rather than
+rewording it; and the two that stayed failed — Phase 3's exception and Phase 6's criterion 13 —
+are restated here rather than quietly dropped at the end.

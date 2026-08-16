@@ -292,3 +292,55 @@ D245, one, and it took three attempts to become a drill at all: the first hung, 
 rolled back before the test ran, and the third failed correctly. Counting the mutation's effect
 before believing its result — the habit this project acquired in Phase 8 — is what caught the
 second.
+
+---
+
+## Step 10.3 — RTL and accessibility
+
+Three gates. All three passed on the day they were written, which is the point: they exist so the
+NEXT screen cannot be the first to break.
+
+### D1 — the direction gate is a source scan, and the codebase already passed it
+
+`margin-left` is always the left, in every language. `margin-inline-start` is the side the reader
+begins on. The second is correct in both directions and costs nothing, so the rule has no
+exceptions — which is what makes a blunt scan the right shape.
+
+The scan found **nine logical properties and zero physical ones**, because every earlier phase used
+them without being told to. A gate that finds nothing on the day it is written is not a wasted
+gate; it is a rule that was being followed by convention and is now enforced.
+
+It asserts it walked more than fifty files, for the reason this project has now hit three times:
+a walk that matches nothing passes while checking nothing.
+
+### D2 — the RTL gate proves a screen MOUNTS, not that it looks right
+
+Eleven screens, rendered under an Arabic catalogue with `dir="rtl"`. It does not prove a layout is
+correct — that needs a browser this environment cannot drive, and a screenshot comparison fails on
+every legitimate change until nobody reads it.
+
+What it proves is the class of failure that takes a screen from "mirrored oddly" to **blank**: a
+missing translation throwing, a component assuming a direction at render, a key that only exists in
+English. The direction gate next door covers the layout half at the source.
+
+The first version asserted the direction SYNCHRONOUSLY and read `ltr` every time — the direction
+comes from the preferences the provider loads, not from the render helper's initial attribute.
+Awaiting it turned a test of `renderApp` into a test of the application applying a locale.
+
+### D3 — accessible names, because the failure is invisible to sighted review
+
+An element with no accessible name is announced as "button", and the user cannot find out which.
+The label is right there on screen, drawn by an icon or a sibling the accessibility tree never
+sees.
+
+`getByLabelText` resolves through the accessibility tree, so the input test passes only if the
+label is BOUND — a label sitting next to an input looks identical and is nameless. A table with no
+caption is a grid of numbers with no announced purpose, and forty rows in, a screen-reader user has
+no way to know what they are reading.
+
+### The drills
+
+D246–D250, five. One did not apply on the first attempt — a regex that removed more than the
+caption and broke the file, which reports as "no tests" rather than as a failure. **Fourth
+non-mutation this project has caught**, and the reason the effect is counted before the result is
+believed.

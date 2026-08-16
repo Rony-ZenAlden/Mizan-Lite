@@ -50,6 +50,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 	"github.com/mizan-erp/mizan/internal/platform/paths"
+	"github.com/mizan-erp/mizan/internal/platform/search"
 	"github.com/mizan-erp/mizan/migrations"
 )
 
@@ -132,7 +133,10 @@ type App struct {
 	Purchasing *purchasing.Service
 	Expenses   *expenses.Service
 	Setup      *setup.Service
-	Modules    []modules.Module
+	// Search is the cross-module registry (8.5), assembled after the graph because a searcher
+	// needs its module's service.
+	Search  *search.Registry
+	Modules []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
 	// of the graph, and they are assembled statically in internal/api/bindings (0.11 D2). This
 	// field held whatever Module.Bindings() returned, which for two phases was nothing at all
@@ -404,6 +408,20 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		partnerReceivables{sales: app.Sales},
 		partnerPayables{purchasing: app.Purchasing, expenses: app.Expenses},
 		partnerControl{accounting: app.Accounting},
+	)
+
+	// 11d. The search registry (8.5). Each module contributes a searcher and the root collects
+	// them, which is the shape the module contract already uses for jobs and permissions.
+	//
+	// It is assembled HERE rather than declared on the Module interface, and that is a real
+	// difference from Series() and Permissions(): those are properties of a module readable with
+	// no database and no services, which is what lets them be enumerated before the graph exists.
+	// A searcher needs its module's SERVICE, so it can only be collected once the graph is built.
+	app.Search = search.New(
+		app.Catalog.Searcher(),
+		app.Partner.Searcher(),
+		app.Sales.Searcher(),
+		app.Purchasing.Searcher(),
 	)
 
 	// Inventory gains the ledger side of its valuation check the same way, and for the same

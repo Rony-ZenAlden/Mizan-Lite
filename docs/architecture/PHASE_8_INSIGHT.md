@@ -499,3 +499,78 @@ were applied while writing these tests rather than after: the draft test asserts
 which is the field a draft can leak, and the period test puts the SMALLER bill on the earlier day
 so that ranking and chronology disagree. Both assertions exist because a drill in the previous
 step found their absence.
+
+---
+
+## Step 8.5 — global search
+
+The phase's one genuinely new mechanism, and the only thing in it that no single module can
+answer.
+
+### D1 — a registry the composition root fills
+
+The alternatives were a package importing every module — which `module-isolation` forbids, and
+which would be the single file that breaks whenever any module changes a column — or a search
+index maintained by events, which is a projection carrying every obligation this phase's analysis
+refused: its own rebuild, its own verifier, its own drift report.
+
+Each module contributes a `Searcher`; the root collects them. A module that becomes searchable
+adds one method and nothing in `platform/search` changes.
+
+### D2 — assembled after the graph, unlike Series() and Permissions()
+
+Worth stating because it looks inconsistent. `Series()` and `Permissions()` are on the module
+CONTRACT, readable with no database and no services — which is what lets them be enumerated
+before the graph exists, and it is why `runMigrations` can work at all.
+
+A searcher needs its module's SERVICE. It can only be collected once the graph is built, so it is
+wired in the composition root beside the ports rather than declared on the interface.
+
+### D3 — one broken searcher does not break the search
+
+A search box that fails entirely because one module's query is broken fails for reasons the user
+cannot see or fix. `Response.Failed` names who did not answer, and the rest is returned — 7.4 D3
+again: report rather than refuse, so the evidence survives. Finding nothing and failing are
+different answers, and a caller deciding between "nothing found" and "search is having trouble"
+needs to tell them apart.
+
+### D4 — the bound is PER SEARCHER
+
+A shop searching "AH" must not get two hundred products and no partners purely because the
+catalogue was asked first. "Find me Ahmad" is the query a shared budget fails on.
+
+### D5 — grouped by kind and ranked within it, never one global score
+
+Comparing "how well does this product match" with "how well does this invoice match" needs a scale
+neither module knows about. Inventing one would make the order look meaningful when it is
+arbitrary.
+
+Within a kind the rank is real and it is what makes search usable: a shopkeeper with a scanner
+searches by SKU or code, both exact, and without a rank the product whose NAME merely contains the
+same characters appears above the one they meant.
+
+### D6 — `Like` escapes, and the ESCAPE clause is its other half
+
+A query containing `%` matches everything; one containing `_` matches any character. So a customer
+searching for a product called "50%" gets the whole catalogue.
+
+SQLite honours the escape only when the query says `ESCAPE '\'`, which means a searcher can use
+the helper, look correct, and have escaping that does nothing.
+`TestEverySearcherEscapesItsWildcards` is what catches that, and it is written against real data —
+a product actually named "50% off bundle".
+
+### The drills
+
+D188–D191, four. Two passed:
+
+- **D189** — subtracting what had already been found from each searcher's budget changed nothing,
+  because both stubs returned nothing at all. A shared budget and a separate one are the same
+  number when nobody has found anything. The stubs now return results.
+- **D190** — the first two attempts did not remove the `ESCAPE` clauses at all; the escaping in
+  the Python replacement did not match what was in the file. **A mutation that does not apply is
+  not a passing drill, it is no drill** — and the only way to know the difference was to count
+  the occurrences afterwards, which is now part of how these are run.
+
+D191 is the one the end-to-end test exists for: removing `app.Partner.Searcher()` from the
+registry left every unit test in `platform/search` green. A searcher that compiles, is never
+registered, and silently contributes nothing is invisible to everything except a caller.

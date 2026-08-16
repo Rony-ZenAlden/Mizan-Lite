@@ -40,6 +40,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/modules"
 	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
+	"github.com/mizan-erp/mizan/internal/platform/search"
 )
 
 // The module owns its schema (§10.3). Sales owns 0023–0025 and identity took 0026.
@@ -269,4 +270,17 @@ func (m *Module) Series() []numbering.SeriesSpec {
 		{Code: SeriesPayment, Prefix: "PAY-", Padding: 6},
 		{Code: SeriesReturn, Prefix: "DN-", Padding: 6},
 	}
+}
+
+// Searcher lets the composition root add posted bills to the global search.
+func (s *Service) Searcher() search.Searcher { return billSearcher{svc: s} }
+
+type billSearcher struct{ svc *Service }
+
+func (b billSearcher) Name() string { return "purchasing" }
+
+func (b billSearcher) Search(
+	ctx context.Context, companyID id.ID, query string, limit int,
+) ([]search.Result, error) {
+	return b.svc.repos.SearchBills(ctx, companyID, query, limit)
 }

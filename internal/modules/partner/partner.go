@@ -31,6 +31,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/modules"
 	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
+	"github.com/mizan-erp/mizan/internal/platform/search"
 )
 
 // The module owns its schema (§10.3). Catalog owns 0015–0017, so partner owns 0018.
@@ -216,3 +217,16 @@ func (s *Service) MarkHistory(
 
 // Series is empty: this module numbers no documents of its own.
 func (m *Module) Series() []numbering.SeriesSpec { return nil }
+
+// Searcher lets the composition root add partners to the global search.
+func (s *Service) Searcher() search.Searcher { return partnerSearcher{svc: s} }
+
+type partnerSearcher struct{ svc *Service }
+
+func (p partnerSearcher) Name() string { return "partner" }
+
+func (p partnerSearcher) Search(
+	ctx context.Context, companyID id.ID, query string, limit int,
+) ([]search.Result, error) {
+	return p.svc.repos.SearchPartners(ctx, companyID, query, limit)
+}

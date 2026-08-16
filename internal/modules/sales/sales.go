@@ -35,6 +35,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/modules"
 	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
+	"github.com/mizan-erp/mizan/internal/platform/search"
 )
 
 // The module owns its schema (§10.3). Inventory owns 0020–0022, so sales owns 0023.
@@ -334,4 +335,17 @@ func (m *Module) Series() []numbering.SeriesSpec {
 		{Code: SeriesQuotation, Prefix: "QT-", Padding: 6},
 		{Code: SeriesPayment, Prefix: "RCT-", Padding: 6},
 	}
+}
+
+// Searcher lets the composition root add posted sales documents to the global search.
+func (s *Service) Searcher() search.Searcher { return salesSearcher{svc: s} }
+
+type salesSearcher struct{ svc *Service }
+
+func (d salesSearcher) Name() string { return "sales" }
+
+func (d salesSearcher) Search(
+	ctx context.Context, companyID id.ID, query string, limit int,
+) ([]search.Result, error) {
+	return d.svc.repos.SearchDocuments(ctx, companyID, query, limit)
 }

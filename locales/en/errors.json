@@ -377,6 +377,7 @@
   "sales.unknown_shift": "There is no shift with that identity.",
   "sales.unknown_source_line": "That line is not on this invoice.",
   "sales.unknown_template": "There is no print template with that name.",
+  "search.query_too_short": "Type at least two characters to search.",
   "seeds.invalid": "A configuration file is not valid and was ignored.",
   "seeds.shipped_invalid": "A configuration file included with this version is invalid. Contact support.",
   "seeds.too_large": "A configuration file is too large to be read.",

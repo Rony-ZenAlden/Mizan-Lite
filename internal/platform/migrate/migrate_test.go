@@ -17,6 +17,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/platform/backup"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/migrations"
 )
@@ -416,11 +417,16 @@ func TestDrillInjectedFailureRestoresData(t *testing.T) {
 	}
 
 	// Assert: the backup exists and is a valid database.
-	backups, _ := filepath.Glob(filepath.Join(backupDir, "pre-migration-*.db"))
+	//
+	// The filename gained its prefix from `backup.BeforeMigration` when the snapshot moved to
+	// `internal/platform/backup` (9.1), and LOST the version range it used to carry. That is not
+	// a regression: the range now lives in a manifest read from the database itself, where the
+	// old filename recorded what the caller believed it was backing up.
+	backups, _ := filepath.Glob(filepath.Join(backupDir, "before_migration-*.db"))
 	if len(backups) != 1 {
 		t.Fatalf("found %d backups, want 1", len(backups))
 	}
-	if vErr := verifyBackup(ctx, backups[0], "PRAGMA integrity_check"); vErr != nil {
+	if _, vErr := backup.Verify(ctx, backups[0], "PRAGMA integrity_check"); vErr != nil {
 		t.Errorf("backup does not verify: %v", vErr)
 	}
 

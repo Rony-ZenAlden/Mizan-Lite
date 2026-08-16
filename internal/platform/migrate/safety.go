@@ -13,6 +13,8 @@ import (
 	_ "modernc.org/sqlite" // the backup verifier opens a standalone connection
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/platform/backup"
+	"github.com/mizan-erp/mizan/internal/platform/database"
 )
 
 // freeSpaceMargin is headroom demanded beyond the computed requirement, so a migration
@@ -139,60 +141,43 @@ func nearestExistingDir(dir string) string {
 	}
 }
 
-// backup writes a consistent snapshot via the dialect's online-backup statement, then
-// verifies it before it is trusted (§4.2) — an unverified backup is a rumour.
+// backup writes a consistent snapshot through the shared mechanism.
+//
+// # Why this is now four lines
+//
+// The snapshot-and-verify this method used to contain moved to `internal/platform/backup` in
+// Phase 9, when a second caller appeared: an operator taking one on demand or on a schedule.
+//
+// Promoting at the SECOND caller, rather than the third where `round.Allocate` and
+// `domain.ValueOf` were promoted, was deliberate. Those were arithmetic — cheap to duplicate and
+// obvious when wrong. A silently unverified backup looks identical to a verified one, and the
+// cost of finding out is a customer's whole database. Two implementations means two things that
+// can be wrong about whether a backup is trustworthy.
+//
+// The migration path keeps the SAME guarantees it had: the snapshot is opened independently,
+// integrity-checked, and its migration history read back before it is trusted (§4.2).
 func (r *Runner) backup(ctx context.Context, fromV, toV int64) (string, error) {
-	if err := os.MkdirAll(r.backupDir, 0o750); err != nil {
-		return "", errs.Wrap(err, errs.CategoryInternal, CodeBackupFailed, "creating backup directory")
-	}
-	name := fmt.Sprintf("pre-migration-%s-v%d-to-v%d.db",
-		r.clock.Now().UTC().Format("20060102T150405Z"), fromV, toV)
-	dest := filepath.Join(r.backupDir, name)
+	_ = fromV
+	_ = toV
 
-	stmt := r.db.Dialect().OnlineBackupStatement(dest)
-	if stmt == "" {
-		// The engine cannot snapshot itself. Proceeding would mean migrating with no
-		// safety net while reporting that one exists.
-		return "", errs.Internal(CodeBackupFailed, fmt.Sprintf(
-			"dialect %q provides no online backup; refusing to migrate without a safety snapshot",
-			r.db.Dialect().Name()))
-	}
-
-	// The statement refuses to overwrite; a stale file from an aborted run would block us.
-	_ = os.Remove(dest)
-
-	if _, err := r.db.WriterPool().ExecContext(ctx, stmt); err != nil {
-		return "", errs.Wrap(err, errs.CategoryInternal, CodeBackupFailed, "writing backup")
-	}
-	if err := verifyBackup(ctx, dest, r.db.Dialect().IntegrityCheckStatement()); err != nil {
+	service := backup.New(migrationDatabase{db: r.db}, backup.Options{
+		Dir: r.backupDir, Clock: r.clock,
+	})
+	taken, err := service.Take(ctx, backup.BeforeMigration)
+	if err != nil {
 		return "", err
 	}
-	return dest, nil
+	return taken.Path, nil
 }
 
-// verifyBackup opens the backup independently, integrity-checks it, and confirms the
-// migration history reads back. Anything less is trusting a file we never opened.
-func verifyBackup(ctx context.Context, path, integrityStmt string) error {
-	db, err := sql.Open("sqlite", fileDSN(path))
-	if err != nil {
-		return errs.Wrap(err, errs.CategoryInternal, CodeBackupFailed, "opening backup for verification")
-	}
-	defer db.Close()
+// migrationDatabase adapts the migration runner's store to the backup package's narrow surface.
+//
+// Two methods, because that is all a snapshot needs. Handing over `database.DB` would let the
+// backup package grow into something that reads application tables.
+type migrationDatabase struct{ db *database.Store }
 
-	if err := integrityCheck(ctx, db, integrityStmt); err != nil {
-		return errs.Wrap(err, errs.CategoryInternal, CodeBackupFailed, "backup failed integrity check")
-	}
-	// The history table must read back; if it cannot, the snapshot is not usable.
-	var n int64
-	if err := db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM schema_migrations").Scan(&n); err != nil {
-		// A fresh database that has never migrated has no history table yet; that is fine.
-		if !isMissingTable(err) {
-			return errs.Wrap(err, errs.CategoryInternal, CodeBackupFailed, "backup history unreadable")
-		}
-	}
-	return nil
-}
+func (m migrationDatabase) WriterPool() *sql.DB     { return m.db.WriterPool() }
+func (m migrationDatabase) Dialect() backup.Dialect { return m.db.Dialect() }
 
 // fileDSN builds a file: DSN with the path properly encoded.
 //

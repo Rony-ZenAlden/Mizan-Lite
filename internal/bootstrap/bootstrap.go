@@ -39,6 +39,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/sales"
 	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
+	"github.com/mizan-erp/mizan/internal/platform/backup"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/eventbus"
@@ -76,6 +77,10 @@ type Options struct {
 	DispatchInterval time.Duration
 	// HeartbeatInterval is how often the heartbeat job runs. Default 1m.
 	HeartbeatInterval time.Duration
+	// BackupInterval is how often the scheduled snapshot runs. Default 24h.
+	BackupInterval time.Duration
+	// AppVersion is recorded in every backup manifest, for a support conversation.
+	AppVersion string
 	// Progress, if set, receives migration progress.
 	//
 	// Step 0.4 has emitted these since it was built and nothing consumed them, because until
@@ -135,7 +140,10 @@ type App struct {
 	Setup      *setup.Service
 	// Search is the cross-module registry (8.5), assembled after the graph because a searcher
 	// needs its module's service.
-	Search  *search.Registry
+	Search *search.Registry
+	// Backups takes and lists verified snapshots (9.1). Built with the scheduled job, because
+	// that is where its directory and clock are already to hand.
+	Backups *backup.Service
 	Modules []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
 	// of the graph, and they are assembled statically in internal/api/bindings (0.11 D2). This
@@ -460,6 +468,11 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	if err := app.registerJobs(ordered); err != nil {
 		abandon(db)
 		return nil, err
+	}
+	if err := app.registerBackupJob(opts.BackupInterval); err != nil {
+		abandon(db)
+		return nil, errs.Wrap(err, errs.CategoryInternal, CodeStartupFailed,
+			"registering the scheduled backup")
 	}
 
 	// 11b. Permission sync (Step 1.4). Permissions are CODE-DEFINED (§14.1): each module says

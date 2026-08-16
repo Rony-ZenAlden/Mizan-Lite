@@ -208,3 +208,70 @@ each destroys or creates data, and none has a correct default.
 11. Every new binding has a declared policy, and every destructive operation is audited.
 12. `make ci` green, with the mutation drills each step declares — and a drill that PASSES is
     treated as a defect in the test, the code, or the mutation.
+
+---
+
+## Step 9.1 — the backup platform
+
+`internal/platform/backup`: take, verify, list, find, prune. The migration runner's private
+snapshot became its first caller.
+
+### D1 — the promotion kept the reasoning, and one line of it was nearly lost
+
+Moving code is where behaviour quietly changes. This one nearly did.
+
+0.7's `verifyBackup` tolerated a database with no `schema_migrations` table, on one line of
+comment: *"a fresh database that has never migrated has no history table yet; that is fine."* The
+promoted `Verify` refused it — and the migration suite failed within minutes, because **the
+snapshot taken before the very first migration has no history table**, since the migration that
+creates it has not run.
+
+The fix drew a line worth keeping: `Verify` reports what it FOUND, including version 0, and the
+stricter question — *is this something we can restore from* — belongs to the restore in 9.2, where
+the policy is. A verification enforcing a restore's rules could not serve the migration path at
+all.
+
+### D2 — an unverifiable snapshot is REMOVED, never left on disk
+
+A file in the backup directory is a promise. One that cannot be opened is a promise that will be
+discovered broken at the worst possible moment — which is the moment somebody needs it.
+
+### D3 — retention is per REASON
+
+A nightly scheduled backup would otherwise push out the pre-migration snapshot from the upgrade
+that broke something, which is the one a support conversation is about.
+
+### D4 — pruning rides with the backup job
+
+A separate prune job would be a second thing that can fail, and its failure — a disk filling over
+months — is silent. And a prune failure never fails the RUN: the snapshot succeeded, and reporting
+"backup failed" would send an operator looking for a file that exists.
+
+### D5 — `CatchUp: RunOnce`
+
+A laptop closed for a week gets ONE backup when it opens, not seven. Six would be identical and
+the seventh would push the useful older ones out of the retention window.
+
+### The drills
+
+D204–D211, eight. Three passed, and the three resolutions were all different — which is the point
+of having five:
+
+- **D204** (*strengthen the test*) — deleting the cleanup of an unverifiable snapshot changed
+  nothing, because `Take` removes the destination BEFORE writing, so the rubbish the test
+  pre-created was gone before the statement ran and `Verify` failed on a missing file rather than
+  an unusable one. The fake now writes the unusable file itself, which is what a truncated copy
+  does.
+- **D208** (*delete the redundant code*) — `max(s.keep, 1)` in `Prune` read as the floor that stops
+  a misconfiguration emptying the directory. It cannot fire: `New` already normalises a
+  non-positive `Keep` to the default. **The floor belongs in one place**, and the test now
+  exercises the normalisation, where a drill can reach it.
+- **D209** (*keep it, document that it saves work not answers, write no test*) — `Find`'s rejection
+  of names containing separators or `..` is defensive. `Find` only ever returns entries from
+  `List`, whose paths are built by joining this service's directory with basenames from `ReadDir`,
+  so a traversal cannot escape a set it is never compared against. The guard stays for the
+  validation error and the stated intent; what is now ASSERTED is the mechanism — every listed
+  backup lives in the backup directory and names a file rather than a path.
+
+`TestThereIsOnlyOneBackupImplementation` walks the tree and requires every online-backup statement
+to be executed from this package. DoD criterion 1 is a claim a comment cannot keep.

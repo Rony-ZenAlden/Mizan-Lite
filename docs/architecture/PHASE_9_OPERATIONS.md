@@ -592,3 +592,74 @@ A second collision came out of the same fix: `imports.failed` existed in both `c
 `errors.json`, which the catalogue loader refuses as "defined twice in the same locale" — at
 STARTUP, so every binding test failed at once. The error code owns the key; the screen's heading
 got its own.
+
+---
+
+## Step 9.7 — Phase 9 Definition-of-Done review
+
+**Result: 12/12 met.**
+
+| # | Proven by | Written in this step |
+|---|-----------|----------------------|
+| 1 | `TestThereIsOnlyOneBackupImplementation` | — |
+| 2 | `TestAnUnverifiableSnapshotIsRemovedRatherThanListed` | — |
+| 3 | `TestASnapshotIsVerifiedAndCarriesWhatItIsABackupOf`, `TestABackupFromANewerBuildIsRefused` | — |
+| 4 | `TestPreparingARestoreTouchesNothingAndSnapshotsWhatItWillReplace` | — |
+| 5 | `TestARestoreSurvivesARestartAndTakesEffect` | `TestAFailedSwapLeavesTheOriginalIntact` |
+| 6 | `TestPruningKeepsTheNewestOfEachReason…`, `TestKeepingZeroStillKeepsOne` | — |
+| 7 | `TestAnExportRendersTheReportItWasGivenAndDoesNotRequery` | — |
+| 8 | `TestTheImporterContainsNoSQL`, `TestAnImportGoesThroughTheService…` | — |
+| 9 | `TestADryRunWritesNothing`, `TestAFailingRowDoesNotDiscardTheRowsThatSucceeded` | — |
+| 10 | `TestANoticeDisappearsWhenItsConditionDoes`, `TestAFreshInstallIsToldItHasNoBackup` | — |
+| 11 | 7.6's policy-coverage check | `TestEveryDestructiveOperationLeavesAnAuditEntry`, `TestADryRunIsNotAudited` |
+| 12 | `make ci` | drills D204–D240 |
+
+### Criterion 5's second half had no test, and could not have one
+
+*"A failed swap leaves the original intact."*
+
+`Apply` renames the outgoing database aside, then renames the incoming one into place. If the
+SECOND rename fails, the live path holds nothing, and putting the original back is the difference
+between "the restore did not happen" and "the shop has no database".
+
+There is no way to make that rename fail from outside the process. **A path that cannot be tested
+is a path that has never run** — so the package exposes the rename as a replaceable variable,
+declared in a test-only file, used by exactly one test.
+
+That is a seam added for a test, which this codebase otherwise avoids. The alternative was leaving
+the three most dangerous lines in the phase unexercised behind a comment saying they were careful.
+
+### Criterion 11 was half-met and read as met
+
+*"Every destructive operation is audited."*
+
+Every BINDING had a policy — 7.6's check guarantees that. Nothing was audited. A restore, the
+single most destructive act the application offers, left no entry at all.
+
+Three acts are now audited: a prepared restore, a cancelled one, and a completed import. A dry run
+is NOT, because it writes nothing and auditing it would fill the trail with entries about decisions
+nobody made.
+
+The prepared-restore entry names the SAFETY SNAPSHOT, and the test asserts that specifically —
+an auditor reading "a restore was prepared" wants to know what the shop could go back to, and
+that name is the answer.
+
+Auditing here happens AFTER the act rather than in-transaction, unlike every document in Phases
+5–7. There is no transaction: the act is a file on disk. A failure to write the entry is reported
+and does not fail the call, because reporting a staged, correct restore as failed would send an
+operator looking for a problem that is not there.
+
+### Phase 9 in total
+
+37 drills, D204–D240. Seven passed and every one produced a change — including three where the
+mutation had not applied at all, which is why counting a mutation's effect before believing its
+result became part of how these are run.
+
+The two most valuable findings came from neither a drill nor a criterion:
+
+- **`{{name}}` in seventeen message keys.** The catalogue interpolates `{name}`, the existence
+  check only checks existence, and the Go tests assert on keys rather than rendered text. One
+  frontend test asserting a rendered interpolation caught it. *A message catalogue has a syntax,
+  and nothing was checking that the messages were written in it.*
+- **Three invented permissions**, caught by 7.6's coverage check the moment the façade was
+  registered — the check earning its keep two phases after it was built.

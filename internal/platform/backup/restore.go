@@ -165,6 +165,20 @@ func Cancel(livePath string) error {
 	return nil
 }
 
+// rename is os.Rename, replaceable so the UNWINDABLE path can be tested.
+//
+// # Why this seam exists when no other in the package does
+//
+// `Apply` has one branch that cannot be reached by arranging the filesystem: the second rename
+// failing after the first succeeded. That is the moment the live path holds nothing, and the
+// recovery — putting the original back — is the difference between a restore that did not happen
+// and a shop with no database.
+//
+// A path that cannot be tested is a path that has never run. The alternative was to leave the
+// most dangerous three lines in the phase unexercised and write a comment saying they were
+// careful.
+var rename = os.Rename
+
 // Apply performs the swap. Called at STARTUP, before anything opens the database.
 //
 // # Why the original is renamed rather than deleted
@@ -198,15 +212,15 @@ func Apply(livePath string) (Intent, bool, error) {
 
 	// Move the outgoing file aside FIRST. A missing live file at this point is not an error: a
 	// restore onto a fresh install has nothing to displace.
-	if err = os.Rename(livePath, displaced); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err = rename(livePath, displaced); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Intent{}, false, errs.Wrap(err, errs.CategoryInternal, CodeRestoreFailed,
 			"moving the current database aside")
 	}
 
-	if err = os.Rename(intent.StagedPath, livePath); err != nil {
+	if err = rename(intent.StagedPath, livePath); err != nil {
 		// Put it back. The shop's database is where it was, and the restore simply did not
 		// happen — which is the only acceptable outcome of a failed swap.
-		_ = os.Rename(displaced, livePath)
+		_ = rename(displaced, livePath)
 		return Intent{}, false, errs.Wrap(err, errs.CategoryInternal, CodeRestoreFailed,
 			"putting the restored database in place")
 	}

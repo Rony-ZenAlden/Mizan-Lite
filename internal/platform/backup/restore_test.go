@@ -3,6 +3,7 @@ package backup_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -257,5 +258,73 @@ func TestCancellingAStagedRestoreLeavesNothingBehind(t *testing.T) {
 	// where it was.
 	if _, err = service.Find(taken.Name); err != nil {
 		t.Errorf("cancelling a restore consumed the backup: %v", err)
+	}
+}
+
+// TestAFailedSwapLeavesTheOriginalIntact
+//
+// # DoD criterion 5, and the only path in this phase that cannot be reached by arranging files
+//
+// `Apply` renames the outgoing database aside, then renames the incoming one into place. If the
+// SECOND rename fails, the live path holds nothing — and putting the original back is the
+// difference between "the restore did not happen" and "the shop has no database".
+//
+// Those three lines are the most dangerous in the phase, and there is no way to make the second
+// rename fail from outside the process. **A path that cannot be tested is a path that has never
+// run**, so the package exposes the rename as a replaceable variable for exactly this.
+func TestAFailedSwapLeavesTheOriginalIntact(t *testing.T) {
+	service, livePath, taken := restoreFixture(t)
+
+	if _, err := service.Prepare(context.Background(), taken.Name, livePath, 36); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	before, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatalf("reading the live database: %v", err)
+	}
+
+	// The FIRST rename succeeds — the original is moved aside — and the second fails, which is
+	// the window this test exists for.
+	var calls int
+	backup.SetRenameForTest(func(from, to string) error {
+		calls++
+		if calls == 2 {
+			return errors.New("the disk went away")
+		}
+		return os.Rename(from, to)
+	})
+	t.Cleanup(backup.ResetRenameForTest)
+
+	_, applied, err := backup.Apply(livePath)
+	if err == nil {
+		t.Error("a failed swap was reported as a success")
+	}
+	if applied {
+		t.Error("a failed swap reported the restore as applied")
+	}
+
+	// The shop's database is EXACTLY where it was. This is the assertion the whole seam exists
+	// for: a failed restore must be a restore that did not happen, never a missing database.
+	after, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatalf("the live database is gone after a failed swap: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Error("a failed swap changed the live database")
+	}
+
+	// And it is still usable, not merely present.
+	pool, err := sql.Open("sqlite", "file:"+livePath)
+	if err != nil {
+		t.Fatalf("opening the database after a failed swap: %v", err)
+	}
+	defer func() { _ = pool.Close() }()
+	var rows int
+	if err = pool.QueryRow(`SELECT COUNT(*) FROM things`).Scan(&rows); err != nil {
+		t.Fatalf("the database after a failed swap is unreadable: %v", err)
+	}
+	if rows != 2 {
+		t.Errorf("%d rows after a failed swap, want the 2 that were there", rows)
 	}
 }

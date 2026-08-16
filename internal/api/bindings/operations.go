@@ -181,6 +181,13 @@ func (o *Operations) PrepareRestore(name string) envelope.Result[RestoreIntentDT
 	if err != nil {
 		return envelope.Fail[RestoreIntentDTO](err)
 	}
+	// Audited AFTER the act, unlike a document's in-transaction entry: there is no transaction
+	// here, because the act is a file on disk. What matters is that the entry exists and names
+	// the safety snapshot — and a failure to write it must not undo a restore that is staged and
+	// correct, so it is reported rather than returned.
+	if auditErr := app.AuditRestorePrepared(ctx, intent); auditErr != nil {
+		app.LogWarn(ctx, "a prepared restore was not audited", auditErr)
+	}
 	return envelope.Ok(intentDTO(intent))
 }
 
@@ -204,12 +211,21 @@ func (o *Operations) PendingRestore() envelope.Result[RestoreIntentDTO] {
 
 // CancelRestore discards a staged restore.
 func (o *Operations) CancelRestore() envelope.Result[bool] {
-	_, app, err := o.guard("CancelRestore")
+	ctx, app, err := o.guard("CancelRestore")
+	if err != nil {
+		return envelope.Fail[bool](err)
+	}
+	intent, staged, err := backup.PendingIntent(app.Paths.DBFile)
 	if err != nil {
 		return envelope.Fail[bool](err)
 	}
 	if err = backup.Cancel(app.Paths.DBFile); err != nil {
 		return envelope.Fail[bool](err)
+	}
+	if staged {
+		if auditErr := app.AuditRestoreCancelled(ctx, intent.From); auditErr != nil {
+			app.LogWarn(ctx, "a cancelled restore was not audited", auditErr)
+		}
 	}
 	return envelope.Ok(true)
 }
@@ -248,6 +264,16 @@ func (o *Operations) runImport(
 	report, err := app.Imports.Import(ctx, companyID, kind, content, dryRun)
 	if err != nil {
 		return envelope.Fail[ImportReportDTO](err)
+	}
+
+	// Only a COMMITTED import. A dry run writes nothing, and auditing it would fill the trail
+	// with entries about decisions nobody made.
+	if !dryRun {
+		if auditErr := app.AuditImport(
+			ctx, string(report.Kind), report.Total, report.Succeeded, report.Failed,
+		); auditErr != nil {
+			app.LogWarn(ctx, "an import was not audited", auditErr)
+		}
 	}
 
 	rows := make([]ImportRowDTO, 0, len(report.Rows))

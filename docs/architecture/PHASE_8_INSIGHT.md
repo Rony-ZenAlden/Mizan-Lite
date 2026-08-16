@@ -677,3 +677,89 @@ the books are kept in. `App.MonthToDate` reads the injected clock, which also ma
 
 D196–D199, four, all failed on the first attempt. Each targets one of D4's four qualifications,
 because those are the parts of a screen that look like decoration and are not.
+
+---
+
+## Step 8.8 — Phase 8 Definition-of-Done review
+
+Each of §5's twelve criteria mapped to the test that proves it. Where none existed, one was
+written and drilled.
+
+**Result: 12/12 met.**
+
+| # | Proven by | Written in this step |
+|---|-----------|----------------------|
+| 1 | `TestRevenueReadsPositiveOnAProfitAndLoss`, `TestASubtotalIsTheSumOfItsChildrenAndNotAStoredFigure` | — |
+| 2 | `TestABalanceSheetBalancesBeforeTheYearIsClosed`, `TestABalanceSheetThatDoesNotBalanceSaysSo` | — |
+| 3 | the statements screen test | `TestNothingInThePhaseIsCalledProfitAlone` |
+| 4 | `TestMarginIsRevenueLessTheCostFrozenAtTheTimeOfSale`, `TestACreditNoteSubtractsRatherThanAdding` | — |
+| 5 | `TestTheStockValuationReconcilesToTheGeneralLedger` | — |
+| 6 | `TestOneQueryFindsThingsFromMoreThanOneModule` | `TestEverySearcherHonoursItsOwnEscape` |
+| 7 | `TestEveryTileNamesItsSourceAndItsRange` | — |
+| 8 | — | `TestNoReportWritesAnything` |
+| 9 | — | `TestPhaseEightAddedNoSchema` |
+| 10 | 5.8's reflection check, `insightPolicies` | — |
+| 11 | five "empty company" tests, one per report family | — |
+| 12 | `make ci` | drills D163–D203 |
+
+### The gap that mattered: criterion 8 had no test at all
+
+*"No report writes anything: every method in this phase is safe to call twice."*
+
+This is the criterion the rest of the phase rests on. D2 says a report is a query, never a
+document — no numbering, no audit entry, no posting — and every other guarantee assumes it. The
+drills re-run reports freely, the dashboard calls six of them on every mount, and a screen
+refreshes on every focus.
+
+A report that wrote would not fail loudly. It would allocate a number, or leave an audit row, or
+touch an `updated_at` — and the symptom would arrive months later as a gap in an invoice sequence
+nobody can explain.
+
+`TestNoReportWritesAnything` fingerprints EVERY table — row count plus the sum of `row_version`
+where the column exists — runs every report twice, and compares. The whole database, not a list of
+tables somebody remembered. A drill that made one analysis bump a `row_version` was caught by name.
+
+### The gap the 8.5 write-up left, closed
+
+`TestEverySearcherEscapesItsWildcards` exercised the CATALOGUE query and nothing else. The
+partner, sales and purchasing queries carry the same `ESCAPE` clause and had no test that would
+catch one of them losing it — **7.6's "proven about one of three documents is proven about none"
+in a fourth place**, and one I had already flagged before writing this step.
+
+`TestEverySearcherHonoursItsOwnEscape` reads all four query files and requires every `LIKE ?` to
+be followed by its escape clause. Blunt, and blunt is what makes it survive a fifth searcher.
+
+### Criterion 3 took three attempts, and the corrections are the interesting part
+
+*"Neither is called 'profit' alone."*
+
+- **First version**: `\bprofit\b`, word-bounded. It matches nothing inside `NetProfitMinor` — the
+  P is between two letters, so there is no boundary — which meant every identifier the check
+  existed to police was invisible to it. The "did the scan find anything" guard caught it, and
+  that guard is now in three tests for exactly this reason.
+- **Second version**: substring match, which flagged all seven occurrences of `ProfitAndLoss`.
+  That was the TEST being wrong, not the code: "profit and loss" is what accountants call the
+  document, and a permission named after it is not ambiguous.
+- **Third version**: the rule applies to identifiers naming a FIGURE — those ending in `Minor`,
+  `Micro`, or `Amount`. That is what the criterion is about: an amount on a screen where the
+  reader cannot tell whether rent has been deducted.
+
+### A gap recorded rather than closed
+
+`runEveryReport` lists the phase's reads BY HAND. A report added later and left out of that list
+is a report nobody proves is read-only.
+
+The alternative was reflection over the `Insight` façade, which needs a session and a permission
+set — real work for a check whose failure mode is "somebody forgot". It is recorded here rather
+than quietly accepted, and if Phase 9 or 10 adds reports it should be revisited.
+
+### Phase 8 in total
+
+41 drills, D163–D203. Nine passed and every one produced a change: a strengthened test five times,
+a narrowed rule once, a re-aimed mutation twice, and once a mutation that had never applied at all.
+
+The recurring finding across the phase was a single shape in different clothes — **a test whose
+fixture cannot distinguish the right answer from the wrong one is not evidence, however carefully
+it is written**. A covered range tested across one period. A period report where the bigger sale
+sat on the earlier day. An out-of-balance detector tested only where it stays silent. A valuation
+port tested only against a fake. Two search stubs that both returned nothing.

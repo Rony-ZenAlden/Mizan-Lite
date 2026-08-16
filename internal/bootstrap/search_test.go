@@ -1,6 +1,8 @@
 package bootstrap_test
 
 import (
+	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -133,6 +135,52 @@ func TestEverySearcherEscapesItsWildcards(t *testing.T) {
 	}
 	if !foundTheBundle {
 		t.Error("a product whose name contains a percent sign cannot be found by it")
+	}
+}
+
+// TestEverySearcherHonoursItsOwnEscape
+//
+// # The gap the 8.5 write-up left, closed
+//
+// `TestEverySearcherEscapesItsWildcards` exercises the CATALOGUE query and nothing else. The
+// partner, sales and purchasing queries use the same `ESCAPE '\'` clause and had no test that
+// would catch one of them losing it — which is the "proven about one of three documents is proven
+// about none" finding from 7.6, in a fourth place.
+//
+// Rather than four near-identical data fixtures, this reads the SOURCE: every `LIKE ?` in a
+// searcher's query must be followed by its escape clause. A blunt check, and blunt is what makes
+// it survive somebody adding a fifth searcher.
+func TestEverySearcherHonoursItsOwnEscape(t *testing.T) {
+	searchQueries := map[string]string{
+		"catalog":    "../modules/catalog/infra/sqlite/search.go",
+		"partner":    "../modules/partner/infra/sqlite/search.go",
+		"sales":      "../modules/sales/infra/sqlite/search.go",
+		"purchasing": "../modules/purchasing/infra/sqlite/search.go",
+	}
+
+	// `LIKE ?` optionally followed by whitespace and the escape clause. The negative lookahead
+	// Go's regexp does not have is expressed by matching the whole thing and counting.
+	likes := regexp.MustCompile(`LIKE \?`)
+	escaped := regexp.MustCompile(`LIKE \? ESCAPE '\\'`)
+
+	for module, path := range searchQueries {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("%s contributes a searcher and its query file is missing: %v", module, err)
+			continue
+		}
+		total := len(likes.FindAll(source, -1))
+		withEscape := len(escaped.FindAll(source, -1))
+
+		if total == 0 {
+			t.Errorf("%s's search query has no LIKE at all, so this check is looking at the "+
+				"wrong file", module)
+			continue
+		}
+		if withEscape != total {
+			t.Errorf("%s: %d of %d LIKE clauses carry ESCAPE — the ones that do not will match "+
+				"a query containing %% against everything", module, withEscape, total)
+		}
 	}
 }
 

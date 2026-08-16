@@ -153,9 +153,10 @@ type App struct {
 	// Ctx is the root context with settings bound, from which per-call contexts derive.
 	Ctx context.Context
 
-	log      *slog.Logger
-	opts     Options
-	shutdown []shutdownStep
+	schemaVersion int64
+	log           *slog.Logger
+	opts          Options
+	shutdown      []shutdownStep
 }
 
 type shutdownStep struct {
@@ -187,6 +188,25 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		return nil, errs.Internal(CodeStartupFailed, "bootstrap: Options.Paths is required")
 	}
 	app := &App{Paths: opts.Paths, log: opts.Logger, opts: opts}
+
+	// 2b. A staged restore, applied BEFORE the database is opened (9.2).
+	//
+	// This is the one moment when nothing holds the file. The alternative — closing every pool
+	// mid-session, swapping, reopening — leaves a window in which a background job or an
+	// in-flight binding call touches a file that no longer exists.
+	//
+	// A failure here does NOT stop the start. The swap either happened or it did not, and both
+	// outcomes leave a usable database; refusing to boot would strand a shop with a working
+	// database and no way in.
+	if restored, applied, restoreErr := backup.Apply(opts.Paths.DBFile); restoreErr != nil {
+		opts.Logger.ErrorContext(ctx, "a staged restore could not be applied",
+			slog.String("error", restoreErr.Error()))
+	} else if applied {
+		opts.Logger.InfoContext(ctx, "a backup was restored",
+			slog.String("from", restored.From),
+			slog.Int64("schema_version", restored.RestoringVersion),
+			slog.String("safety_backup", restored.SafetyBackup))
+	}
 
 	// 3. Database.
 	db, err := database.Open(database.Config{Path: opts.Paths.DBFile})
@@ -570,6 +590,13 @@ func (a *App) runMigrations(ctx context.Context, mods ...modules.Module) error {
 			slog.Int("applied", result.Applied),
 			slog.Int64("to_version", result.ToVersion))
 	}
+	// Recorded so a restore can refuse a backup this build cannot read (9.2 D3). Read from the
+	// migration RESULT rather than from the migration list, because what the file actually holds
+	// and what the binary targets can differ if a migration was interrupted.
+	a.schemaVersion = result.ToVersion
+	if a.schemaVersion == 0 {
+		a.schemaVersion = result.FromVersion
+	}
 	return nil
 }
 
@@ -734,3 +761,10 @@ func (a *App) Shutdown(ctx context.Context) error {
 
 // Context returns a per-call context: settings bound, locale and correlation id stamped.
 func (a *App) Context() context.Context { return appctx.Enrich(a.Ctx) }
+
+// SchemaVersion is the migration version this database is at.
+//
+// A restore compares it with a backup's, and refuses one taken by a newer build. Read from what
+// the migration run REPORTED rather than from the binary's migration list: a database left behind
+// by an interrupted migration is at a version the list does not describe.
+func (a *App) SchemaVersion() int64 { return a.schemaVersion }

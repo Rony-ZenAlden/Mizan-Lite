@@ -275,3 +275,71 @@ of having five:
 
 `TestThereIsOnlyOneBackupImplementation` walks the tree and requires every online-backup statement
 to be executed from this package. DoD criterion 1 is a claim a comment cannot keep.
+
+---
+
+## Step 9.2 — restore
+
+`Prepare` while running, `Apply` at startup, and a restart between them.
+
+### D1 — the split is the design, not a limitation
+
+The application HOLDS the database. Everything that can fail happens in `Prepare`, while the
+application is running and nothing is at risk; the one act that cannot be undone happens in
+`Apply`, at the one moment when nothing has the file open.
+
+Closing every pool mid-session and swapping would leave a window in which a background job or an
+in-flight binding call touches a file that no longer exists. A desktop application can get this
+wrong in a way a server cannot, because a server restarts as a matter of course.
+
+### D2 — the order in `Prepare` is not negotiable
+
+Verify the incoming file → refuse one newer than this build → **snapshot what is about to be
+replaced** → stage → record the intent.
+
+The snapshot is the step easiest to leave out and worst to omit. A restore that goes wrong having
+left nothing to go back to is worse than no restore feature at all, because the user chose it
+believing it was safe.
+
+The version check prevents a specific failure: a shop that upgraded, took backups, then
+reinstalled an older build to work around something. Restoring would give them a database whose
+schema the code does not match, and the symptom would be a column that does not exist appearing
+hours later in an unrelated screen.
+
+### D3 — `Apply` renames the outgoing file before it renames the incoming one
+
+A delete-then-rename has a window in which the live path holds nothing at all, and a crash there
+costs the shop everything. Renaming aside first means a failure between the two leaves something
+at the live path — and a failed second rename puts the original back, so a failed swap is a
+restore that simply did not happen.
+
+The displaced original is KEPT, under `.replaced`. It and the safety snapshot are the two things a
+support conversation has to work with, and deleting one to save space is a trade nobody asked for.
+
+The `-wal` and `-shm` sidecars are removed, because they belong to the database that was replaced
+and a stale write-ahead log replayed over a restored file is corruption that looks like a restore
+that half-worked.
+
+### D4 — staging COPIES, and a failed restore is not a lost backup
+
+An abandoned or cancelled restore leaves the backup exactly where it was.
+`TestCancellingAStagedRestoreLeavesNothingBehind` asserts it, and a drill that changed the copy to
+a move failed there.
+
+### D5 — a failed `Apply` does not stop the application starting
+
+The swap either happened or it did not, and both outcomes leave a usable database. Refusing to
+boot would strand a shop with a working database and no way in.
+
+### The drills
+
+D212–D217, six, all failed once each was a real mutation. D214's first attempt did not compile —
+`backup.Intent{}` in a short assignment needs parentheses — which is the same class as 8.5's D190:
+**a mutation that does not apply is not a passing drill, it is no drill.** It is the second time
+this phase's tooling has caught that, and the reason each drill's effect is now checked before its
+result is believed.
+
+`TestARestoreSurvivesARestartAndTakesEffect` is the one that matters. It boots, provisions a
+company, backs up, renames the company, prepares a restore, asserts the RUNNING application still
+sees the new name, shuts down, restarts, and asks again. The package's own tests could show none
+of that.

@@ -459,6 +459,7 @@
   "permissions.expenses.settlement.post": "Pay what expenses left owed",
   "permissions.inventory.valuation.view": "View what the stock is worth",
   "permissions.partner.balance.view": "View partner balances and statements",
+  "permissions.purchasing.analysis.view": "View purchase analysis",
   "permissions.purchasing.bill.draft": "Enter supplier invoices",
   "permissions.purchasing.bill.post": "Post supplier invoices",
   "permissions.purchasing.bill.view": "View supplier invoices",

@@ -450,3 +450,52 @@ the ledger sits at zero, which reads as a reconciliation failure rather than as 
 never wired the books up. And a documentless ISSUE deliberately posts nothing (4.3), so using one
 would have reported a designed state as a defect; the test writes stock off with an adjustment
 instead.
+
+---
+
+## Step 8.4 — purchase analysis
+
+Spend by period, by product, by supplier. Structurally 8.2's mirror, with three differences worth
+recording rather than three that were copied.
+
+### D1 — spend is BILLS, not orders and not receipts
+
+An order is an intention; a receipt is goods arriving. Neither is money owed. The bill is where
+the supplier states the price — which is the whole reason 6.5 made it a separate document — and a
+spend report built on orders would count what was asked for rather than what was charged.
+
+`TestAnOrderIsNotSpendAndNeitherIsADelivery` posts a full delivery and requires the report to stay
+empty.
+
+### D2 — one UNION, not two queries
+
+Bills and supplier returns live in different tables with different date columns. Reading them in
+one query rather than merging two in the service puts `status = 'posted'` and the sign in one
+place each — which is 8.2's finding approached from the other side.
+
+### D3 — Spend is not sales' Figures, and the reason is not module-isolation
+
+The two shapes are nearly identical and `module-isolation` would forbid sharing anyway, but that
+is the weaker half of the argument. The stronger half: **a sale has a cost and therefore a margin;
+a purchase does not, because the cost IS the purchase.** A shared type would carry a
+`GrossMarginMinor` that means nothing here, and a reader would have to work out which fields
+apply.
+
+Promotion to a shared kernel type is the answer at the THIRD caller — where `round.Allocate` and
+`domain.ValueOf` were both promoted. Two is not a pattern.
+
+### D4 — no walk-in row
+
+A bill's supplier is NOT NULL: money is owed to somebody, and 6.5 made that a schema constraint
+rather than a convention. So unlike the sales side there is no unattributed bucket, and a row
+without a partner would be a defect — which the test asserts rather than assumes.
+
+### The drills
+
+D183–D187, five, all failed on the first attempt.
+
+That is worth a sentence, because it is not a boast. The two lessons 8.2's passing drills produced
+were applied while writing these tests rather than after: the draft test asserts on the QUANTITY,
+which is the field a draft can leak, and the period test puts the SMALLER bill on the earlier day
+so that ranking and chronology disagree. Both assertions exist because a drill in the previous
+step found their absence.

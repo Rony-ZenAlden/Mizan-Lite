@@ -234,6 +234,7 @@ func (m *Module) Permissions() []auth.PermissionDef {
 		{Code: PermReturnPost, Description: "permissions.purchasing.return.post"},
 		{Code: PermPaymentView, Description: "permissions.purchasing.payment.view"},
 		{Code: PermPaymentPost, Description: "permissions.purchasing.payment.post"},
+		{Code: PermAnalysisView, Description: "permissions.purchasing.analysis.view"},
 	}
 }
 

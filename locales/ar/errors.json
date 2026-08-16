@@ -251,6 +251,7 @@
   "numbering.number_too_long": "تنتج سلسلة الترقيم هذه أرقامًا أطول من أن تُحفظ.",
   "numbering.storage": "تعذّرت قراءة تسلسل الترقيم أو الكتابة فيه.",
   "numbering.unknown_series": "لا توجد سلسلة ترقيم لمستندات من نوع {code}.",
+  "ops.dismissal_failed": "تعذّر تحديث هذا التنبيه.",
   "org.already_provisioned": "تم إعداد هذا التثبيت مسبقًا.",
   "org.branch_not_found": "تعذّر العثور على الفرع.",
   "org.company_not_found": "تعذّر العثور على الشركة.",

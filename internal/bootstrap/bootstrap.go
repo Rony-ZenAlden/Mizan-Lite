@@ -32,6 +32,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/imports"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
+	"github.com/mizan-erp/mizan/internal/modules/ops"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/partner"
 	"github.com/mizan-erp/mizan/internal/modules/pricing"
@@ -49,6 +50,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/platform/metadata"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+	"github.com/mizan-erp/mizan/internal/platform/notify"
 	"github.com/mizan-erp/mizan/internal/platform/numbering"
 	"github.com/mizan-erp/mizan/internal/platform/outbox"
 	"github.com/mizan-erp/mizan/internal/platform/paths"
@@ -148,6 +150,8 @@ type App struct {
 	// Imports brings products and partners in from a spreadsheet (9.4), through the same services
 	// a screen calls.
 	Imports *imports.Service
+	// Notices computes what a user should be told, from rules over current state (9.5).
+	Notices *notify.Centre
 	Modules []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
 	// of the graph, and they are assembled statically in internal/api/bindings (0.11 D2). This
@@ -468,6 +472,10 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		importPartners{partner: app.Partner},
 	)
 
+	// The notice centre (9.5). Every rule reads across modules, which is why they live at the
+	// root — the same reason search and the dashboard do.
+	app.Notices = app.buildNoticeCentre(ops.NewDismissals(db, opts.Clock))
+
 	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
 		app.Accounting, app.Catalog, settings, app.Messages, app.Bus)
 
@@ -564,6 +572,11 @@ func (a *App) runMigrations(ctx context.Context, mods ...modules.Module) error {
 	for _, m := range mods {
 		merged = migrate.Merge(merged, m.Migrations())
 	}
+	// `ops` owns a table (notice dismissals, 0037) and is NOT a module: it declares no
+	// permissions of its own beyond one, registers no jobs, and exists to hold the operational
+	// surface the composition root assembles. Merging its schema explicitly is the honest
+	// alternative to making it a module so that one loop finds it.
+	merged = migrate.Merge(merged, ops.Migrations())
 
 	runner, err := migrate.New(a.DB, migrate.Options{
 		FS:         merged,

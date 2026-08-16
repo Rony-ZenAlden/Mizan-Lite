@@ -5,10 +5,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
@@ -138,42 +136,20 @@ func itoa(n int64) string {
 //
 // "No new document table, and every index added is justified by a query that exists."
 //
-// Phase 8 was designed to add no schema at all. Asserting it is cheap and the alternative —
-// noticing in Phase 9 that a reporting table appeared — is not.
-func TestPhaseEightAddedNoSchema(t *testing.T) {
-	// Migration 0036 is the last Phase 7 wrote. Anything numbered above it was added by this
-	// phase, and this phase was designed to add none.
-	const lastPhaseSevenMigration = 36
-
-	var found []string
-	err := filepath.WalkDir("../..", func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".sql") {
-			return err
-		}
-		name := filepath.Base(path)
-		number := regexp.MustCompile(`^(\d{4})_`).FindStringSubmatch(name)
-		if number == nil {
-			return nil
-		}
-		var version int
-		for _, digit := range number[1] {
-			version = version*10 + int(digit-'0')
-		}
-		if version > lastPhaseSevenMigration {
-			found = append(found, name)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walking the migrations: %v", err)
-	}
-
-	if len(found) > 0 {
-		sort.Strings(found)
-		t.Errorf("Phase 8 added migrations %v — the phase was designed to add no schema, so "+
-			"either the design changed or a table crept in", found)
-	}
-}
+// # This check was a point in time, and the point has passed
+//
+// `TestPhaseEightAddedNoSchema` asserted that no migration numbered above 0036 — Phase 7's last —
+// existed. It passed when Phase 8 closed, which is what it was for.
+//
+// Phase 9 then added 0037 for notice dismissals, legitimately, and the test failed. There is no
+// version of it that survives: the bound it needs is "the highest migration when Phase 8 closed",
+// which is 36, and the window between 36 and Phase 9's 37 is EMPTY. A test that cannot fail is
+// not a test, and weakening this one to keep it green would have been worse than deleting it —
+// a check nobody can make fail is a claim nobody has verified.
+//
+// It is recorded here rather than removed silently, because the criterion it proved is real and a
+// later phase adding a reporting projection would now go unnoticed. The honest statement is:
+// **Phase 8 added no schema, verified at the time; nothing enforces it going forward.**
 
 // ── Criterion 3 ─────────────────────────────────────────────────────────────────
 //

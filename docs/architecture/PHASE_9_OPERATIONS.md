@@ -460,3 +460,73 @@ comes back with the mark still on it, and the first header would otherwise match
 ### The drills
 
 D223–D227, five, all failed first time.
+
+---
+
+## Step 9.5 — notifications
+
+`internal/platform/notify` runs rules; `internal/modules/ops` stores dismissals; the rules
+themselves live in the composition root.
+
+### D1 — the table holds DISMISSALS, and that is the whole design
+
+A `notifications` table would be a projection of facts living elsewhere, with no rebuild, no
+verifier and no drift report — the shape Phase 8 refused for reporting. It would also go stale:
+"invoice 4471 is overdue" survives the invoice being paid, and **a user told three times about
+something they already fixed stops reading notifications at all**, which costs more than never
+having had them.
+
+`TestAFreshInstallIsToldItHasNoBackup` asserts the distinction directly: taking a backup silences
+the notice, and `Dismissed` stays at zero. The condition resolved; nothing was suppressed.
+
+### D2 — a key is prefixed by its rule
+
+A dismissal is stored against the key, so two rules both emitting "overdue" would mean dismissing
+one silences the other — with no way for the user to tell which, or to get it back.
+
+### D3 — one key per CONDITION, or one per THING, decided per rule
+
+The valuation rule emits ONE notice however many variants are involved: a shop whose books are out
+by a hundred does not need four hundred notices, and a key per variant would let somebody dismiss
+the difference away one line at a time.
+
+The job rule emits one per JOB, because a failing backup and a failing outbox dispatch are
+different problems with different fixes.
+
+### D4 — a broken RULE is reported; an unreadable DISMISSAL STORE fails
+
+Opposite calls, deliberately. A centre that goes quiet because one rule broke is worse than one
+that says so — **silence reads as "nothing is wrong"**. But a dismissal store that cannot be read
+means every notice reappears including the ones the user explicitly silenced, and nagging somebody
+who already said no is how a feature gets turned off entirely.
+
+### D5 — the job rule reads the MOST RECENT outcome
+
+9.5's design named a gap: a rule cannot tell a user about something that happened and is over. The
+job history is the answer, because a rule over that history is still derived from current state.
+
+"Most recent" is what makes it a rule rather than a stored message. A job that failed at midnight
+and succeeded at one o'clock is working, and reporting it would teach the reader that these
+notices do not mean anything.
+
+### The drills
+
+D228–D233, six. One passed and one did not apply:
+
+- **D233** — removing the "most recent outcome" filter changed nothing, because NO test covered
+  the job rule at all. `TestAJobIsReportedOnlyWhileItsMostRecentRunFailed` now writes a failed run
+  straight to `job_runs`, asserts the notice, writes a later success, and asserts it resolves.
+- **D230** — left `strings` unused and did not compile. Third time this phase's tooling has caught
+  a non-mutation, and the reason each drill's effect is verified before its result is believed.
+
+### Two findings from CI rather than from a drill
+
+**The foreign key caught a fake user.** `notice_dismissals.user_id` references `users(id)`, and
+the first version of the per-user test used made-up ids. The schema refusing to store a preference
+for somebody who does not exist is the constraint doing exactly its job.
+
+**A Phase 8 test had expired.** `TestPhaseEightAddedNoSchema` asserted no migration above 0036
+existed. Phase 9 added 0037 legitimately, and there is no version of that test that survives — the
+window between Phase 8's last migration and Phase 9's first is EMPTY. Weakening it to stay green
+would have been worse than deleting it: **a check nobody can make fail is a claim nobody has
+verified.** It is recorded in place of the test, with what it did and did not prove.

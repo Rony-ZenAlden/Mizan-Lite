@@ -84,3 +84,40 @@ func TestTheScheduledBackupIsRegistered(t *testing.T) {
 			"none", bootstrap.KeyScheduledBackup)
 	}
 }
+
+// TestABackupManifestRecordsTheBuildThatTookIt
+//
+// # A field added in Phase 9 that nothing set until Phase 10 went looking
+//
+// 9.1 D2 put `AppVersion` in the manifest "for a support conversation", and `bootstrap.Options`
+// gained the field — and nothing ever assigned it. Every manifest carried an empty string where a
+// build number belongs, which is exactly the value it was added to avoid.
+//
+// It is set from `buildinfo.Version` in `shell.go` now, stamped by the Makefile and both packaging
+// scripts from `scripts/version.sh` — one source, four consumers.
+//
+// This test passes an explicit version rather than reading `buildinfo`, because in a test binary
+// that variable is empty: asserting it were non-empty would assert the ldflags, which no test run
+// has.
+func TestABackupManifestRecordsTheBuildThatTookIt(t *testing.T) {
+	app := bootWithVersion(t, "1.2.3-test")
+	ctx := app.Context()
+
+	taken, err := app.Backups.Take(ctx, backup.OnDemand)
+	if err != nil {
+		t.Fatalf("Take: %v", err)
+	}
+	if taken.Manifest.AppVersion != "1.2.3-test" {
+		t.Errorf("the manifest records app version %q, want the build's — a support conversation "+
+			"starts by asking which version wrote a backup", taken.Manifest.AppVersion)
+	}
+
+	// And it survives to the listing, which is what a screen reads.
+	listed, err := app.Backups.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Manifest.AppVersion != "1.2.3-test" {
+		t.Errorf("the listed backup records %+v", listed)
+	}
+}

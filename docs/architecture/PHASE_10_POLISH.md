@@ -344,3 +344,53 @@ D246–D250, five. One did not apply on the first attempt — a regex that remov
 caption and broke the file, which reports as "no tests" rather than as a failure. **Fourth
 non-mutation this project has caught**, and the reason the effect is counted before the result is
 believed.
+
+---
+
+## Step 10.4 — installer configuration
+
+Less new work than expected, and one real defect.
+
+### What already existed
+
+Phase 1.13 built the packaging: `scripts/package-windows.sh` cross-builds the NSIS `.exe` from
+macOS (possible only because 0.3 chose a pure-Go SQLite driver), `scripts/package-macos.sh` builds
+the `.dmg`, `scripts/version.sh` derives the version from `VERSION`, and the Wails manifests
+template from `wails.json`.
+
+### The defect: a field added in Phase 9 that nothing set
+
+9.1 D2 put `AppVersion` in the backup manifest "for a support conversation", and
+`bootstrap.Options` gained the field. **Nothing ever assigned it.** Every manifest carried an empty
+string where a build number belongs — precisely the value it was added to avoid.
+
+This is the shape 7.6 found at its worst and 10.1 found again: a mechanism built, wired
+half-way, and never connected to its caller. It is now set from `buildinfo.Version` in `shell.go`,
+which the Makefile and both packaging scripts already stamp — one source, four consumers.
+
+### D1 — the test says what it verified, and what it could not
+
+This environment cannot run a Wails build, so **nothing here claims the installers work.** What is
+asserted is that the configuration is complete and internally CONSISTENT: every file a packaged
+build needs is present, `wails.json` agrees with `VERSION`, and both manifests still READ their
+version from the config rather than hardcoding it.
+
+That last one matters more than it looks. If somebody replaces a template placeholder with a
+literal, the file still builds and Explorer shows a number nobody updated.
+
+**The gap is named rather than hidden: an installer that builds and then fails to run is invisible
+to everything above.**
+
+### D2 — the signing check was wrong before the script was
+
+The first version asserted the scripts must not mention `codesign`, and failed —
+`package-macos.sh` invokes it, guarded by `MIZAN_MACOS_IDENTITY`.
+
+That guard is what makes it a no-op: unset, the build produces an unsigned `.dmg` and says so;
+set, somebody with a certificate opted in. Phase 0's decision was that signing must not be
+REQUIRED, not that the word must not appear. **The script was right and the test was wrong**, and
+the corrected test asserts every signing invocation sits inside a guard.
+
+### The drills
+
+D251–D255, five, all failed first time.

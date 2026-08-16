@@ -51,6 +51,29 @@ func boot(t *testing.T) *bootstrap.App {
 	return bootIn(t, t.TempDir())
 }
 
+// bootWithVersion starts the application claiming a particular build version.
+//
+// `buildinfo.Version` is empty in a test binary — it is set by ldflags at package time — so a test
+// that wanted to assert the version reaches a backup manifest had to be able to supply one.
+func bootWithVersion(t *testing.T, version string) *bootstrap.App {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv(paths.EnvOverride, dir)
+
+	resolved, err := paths.Resolve("Mizan")
+	if err != nil {
+		t.Fatalf("paths.Resolve: %v", err)
+	}
+	app, err := bootstrap.Start(context.Background(), bootstrap.Options{
+		Paths: resolved, SkipBackup: true, AppVersion: version,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap.Start: %v", err)
+	}
+	t.Cleanup(func() { _ = app.Shutdown(context.Background()) })
+	return app
+}
+
 // ── the happy path ──────────────────────────────────────────────────────────────
 
 func TestStartBuildsAWorkingGraph(t *testing.T) {

@@ -59,6 +59,13 @@ func (s *Shell) boot(ctx context.Context) {
 	built, err := bootstrap.Start(ctx, bootstrap.Options{
 		Paths:          s.paths,
 		StartScheduler: true,
+		// The version a backup's manifest records (9.1 D2). Added in Phase 9 and never set until
+		// 10.4 went looking — so every manifest carried an empty string where a support
+		// conversation expects a build number.
+		//
+		// From `buildinfo`, which the Makefile and both packaging scripts stamp from
+		// `scripts/version.sh` — one source, three consumers, and now a fourth.
+		AppVersion: buildinfo.Version,
 		Progress: func(p migrate.Progress) {
 			s.bindings.Progress(p)
 			wailsruntime.EventsEmit(ctx, eventBootProgress)

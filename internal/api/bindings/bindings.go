@@ -95,6 +95,7 @@ type Set struct {
 	Sales      *Sales
 	Purchasing *Purchasing
 	Expenses   *Expenses
+	Insight    *Insight
 	session    *currentSession
 	// remember is the "stay signed in" token store. Zero until Attach, because it needs the
 	// data directory and the set is built before the graph exists (0.11 D2).
@@ -124,6 +125,7 @@ func New() *Set {
 		Sales:      &Sales{graph: mk(salesPolicies())},
 		Purchasing: &Purchasing{graph: mk(purchasingPolicies())},
 		Expenses:   &Expenses{graph: mk(expensePolicies())},
+		Insight:    &Insight{graph: mk(insightPolicies())},
 		Auth:       &Auth{graph: mk(authPolicies()), session: session},
 		session:    session,
 	}
@@ -135,7 +137,7 @@ func New() *Set {
 func (s *Set) All() []any {
 	return []any{s.Boot, s.System, s.Setup, s.Auth, s.Identity, s.Accounting,
 		s.Catalog, s.Partners, s.Inventory, s.Sales, s.Purchasing, s.Expenses,
-		s.Config, s.Ops, s.Money, s.Audit}
+		s.Config, s.Ops, s.Money, s.Audit, s.Insight}
 }
 
 // Attach wires the built graph into every façade and marks boot ready.
@@ -164,6 +166,7 @@ func (s *Set) Attach(app *bootstrap.App) {
 	s.Sales.attach(app)
 	s.Purchasing.attach(app)
 	s.Expenses.attach(app)
+	s.Insight.attach(app)
 	// Ready is set LAST, after every façade can serve. The shell treats "ready" as permission
 	// to mount and immediately calls bindings; marking ready first would open a window in
 	// which those calls fail with not-ready for no reason.

@@ -624,3 +624,56 @@ reads the injected clock so a test can make "today" deterministic.
 ### The drills
 
 D192–D195, four, all failed on the first attempt.
+
+---
+
+## Step 8.7 — bindings and screens
+
+One façade, five screens.
+
+### D1 — one `Insight` façade, not five
+
+Every method is a READ, and each is guarded by the view permission of whichever module answers.
+Splitting them across five façades would put the same permissions in five files and give the
+frontend five imports for one screen area.
+
+It is also where 8.6's rule has to hold a second time: this file MAPS and does not compute. A DTO
+built by subtracting two services' figures would be the reporting module Phase 8 refused,
+relocated to the API layer.
+
+### D2 — `Search` is guarded by the catalogue's permission, and the reasoning is worth keeping
+
+There is no "any signed-in user" policy, and inventing one for this method would be a hole the
+coverage check cannot reason about.
+
+The alternative was demanding all four contributing modules' permissions. That is worse: a user
+missing one would get a SILENTLY INCOMPLETE box rather than a refusal — the failure nobody
+reports, because it looks like "no results".
+
+### D3 — a spend row leaves the margin columns EMPTY, not zero
+
+A purchase has no margin, because the cost is the purchase. "0" on screen claims it broke even,
+which is a different statement from "this column does not apply here". The frontend already
+handles empty strings, because every money field crosses as one.
+
+### D4 — the screens say what the figures are, not just what they are
+
+Four decisions, all the same shape — **a number without its qualification is a number that will
+be misread**:
+
+- Every dashboard tile carries its source and whether it is a period or a position. "Stock value
+  1,200.00" beside "revenue 450.00" is read as this month's purchases otherwise.
+- A failed tile says so rather than showing zero. Zero is a real figure — a shop that sold nothing
+  has revenue of zero — so a failure rendered as one is a lie the reader cannot detect.
+- The statement shows the COVERED range whenever it differs from the requested one.
+- The valuation shows "the books were not checked" as its own state, never as agreement.
+
+### D5 — an empty dashboard range means month-to-date, resolved by the BACKEND
+
+Computing it in the browser would use the browser's timezone, which can be a day out from the one
+the books are kept in. `App.MonthToDate` reads the injected clock, which also makes it testable.
+
+### The drills
+
+D196–D199, four, all failed on the first attempt. Each targets one of D4's four qualifications,
+because those are the parts of a screen that look like decoration and are not.

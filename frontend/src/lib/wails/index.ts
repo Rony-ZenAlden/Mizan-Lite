@@ -308,6 +308,11 @@ export const PERMISSIONS = {
   expenseSettle: "expenses.settlement.post",
   debtView: "expenses.debt.view",
   debtRecord: "expenses.debt.record",
+  profitAndLossView: "accounting.profit_and_loss.view",
+  balanceSheetView: "accounting.balance_sheet.view",
+  salesAnalysisView: "sales.analysis.view",
+  purchaseAnalysisView: "purchasing.analysis.view",
+  valuationView: "inventory.valuation.view",
   partnerBalanceView: "partner.balance.view",
 } as const;
 
@@ -1304,4 +1309,173 @@ export function partnerStatement(partnerId: string, asAt = ""): Promise<PartnerS
 
 export function verifyPartnerBalances(): Promise<BalanceDiscrepancy[]> {
   return call<BalanceDiscrepancy[]>("Partners", "VerifyBalances");
+}
+
+// ── Insight: statements, analyses, valuation, search, dashboard (Phase 8) ───────
+
+export interface StatementNode {
+  accountId: string;
+  code: string;
+  name: string;
+  type: string;
+  depth: number;
+  isPostable: boolean;
+  amountMinor: string;
+  children: StatementNode[];
+}
+
+export interface ProfitAndLoss {
+  requestedFrom: string;
+  requestedTo: string;
+  /**
+   * The whole fiscal periods the figures actually come from.
+   *
+   * Differs from the requested range when a request lands mid-period. A screen showing one
+   * without the other reports a month's figures under a fortnight's heading.
+   */
+  coveredFrom: string;
+  coveredTo: string;
+  coveredPeriods: number;
+
+  revenue: StatementNode[];
+  expense: StatementNode[];
+
+  revenueMinor: string;
+  expenseMinor: string;
+  /** The LEDGER's answer, including costs no sale knows about. Never labelled "profit" alone. */
+  netProfitMinor: string;
+}
+
+export interface BalanceSheet {
+  asAt: string;
+  asset: StatementNode[];
+  liability: StatementNode[];
+  equity: StatementNode[];
+
+  assetMinor: string;
+  liabilityMinor: string;
+  equityMinor: string;
+  /** The profit not yet closed into retained earnings, already included in equityMinor. */
+  resultMinor: string;
+
+  outOfBalanceMinor: string;
+  balanced: boolean;
+}
+
+export interface AnalysisRow {
+  key: string;
+  label: string;
+  id: string;
+  documents: number;
+
+  quantityMicro: string;
+  revenueMinor: string;
+  /** Empty on a spend analysis: a purchase has no margin, because the cost is the purchase. */
+  costMinor: string;
+  grossMarginMinor: string;
+  marginPercentMicro: string;
+}
+
+export interface Analysis {
+  from: string;
+  to: string;
+  rows: AnalysisRow[];
+  total: AnalysisRow;
+}
+
+export interface ValuedLine {
+  warehouseId: string;
+  warehouseName: string;
+  productId: string;
+  variantId: string;
+  variantSku: string;
+  productName: string;
+  quantityMicro: string;
+  avgCostMicro: string;
+  valueMinor: string;
+}
+
+export interface Valuation {
+  lines: ValuedLine[];
+  totalMinor: string;
+  /** Distinguishes "the books agree" from "nobody asked the books". */
+  hasLedger: boolean;
+  ledgerMinor: string;
+  differenceMinor: string;
+  reconciled: boolean;
+}
+
+export interface SearchResult {
+  kind: string;
+  id: string;
+  label: string;
+  subtitle: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+  /** Modules that could not answer. "Nothing found" and "search is broken" differ. */
+  failed: string[];
+}
+
+export interface Tile {
+  key: string;
+  source: string;
+  kind: string;
+  amountMinor: string;
+  count: number;
+  periodic: boolean;
+  failed: boolean;
+}
+
+export interface DashboardBoard {
+  from: string;
+  to: string;
+  tiles: Tile[];
+}
+
+export function profitAndLoss(from: string, to: string): Promise<ProfitAndLoss> {
+  return call<ProfitAndLoss>("Insight", "ProfitAndLoss", from, to);
+}
+
+export function balanceSheet(asAt: string): Promise<BalanceSheet> {
+  return call<BalanceSheet>("Insight", "BalanceSheet", asAt);
+}
+
+export function salesByPeriod(from: string, to: string, grouping: string): Promise<Analysis> {
+  return call<Analysis>("Insight", "SalesByPeriod", from, to, grouping);
+}
+
+export function salesByProduct(from: string, to: string): Promise<Analysis> {
+  return call<Analysis>("Insight", "SalesByProduct", from, to);
+}
+
+export function salesByPartner(from: string, to: string): Promise<Analysis> {
+  return call<Analysis>("Insight", "SalesByPartner", from, to);
+}
+
+export function spendByPeriod(from: string, to: string, grouping: string): Promise<Analysis> {
+  return call<Analysis>("Insight", "SpendByPeriod", from, to, grouping);
+}
+
+export function spendByProduct(from: string, to: string): Promise<Analysis> {
+  return call<Analysis>("Insight", "SpendByProduct", from, to);
+}
+
+export function spendBySupplier(from: string, to: string): Promise<Analysis> {
+  return call<Analysis>("Insight", "SpendBySupplier", from, to);
+}
+
+export function stockValuation(): Promise<Valuation> {
+  return call<Valuation>("Insight", "Valuation");
+}
+
+export function globalSearch(query: string, limit = 8): Promise<SearchResponse> {
+  return call<SearchResponse>("Insight", "Search", query, limit);
+}
+
+/** An empty range asks the backend for month-to-date, from ITS clock rather than the browser's. */
+export function dashboard(from = "", to = ""): Promise<DashboardBoard> {
+  return call<DashboardBoard>("Insight", "Dashboard", from, to);
 }

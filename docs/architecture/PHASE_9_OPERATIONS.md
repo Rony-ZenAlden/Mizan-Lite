@@ -402,3 +402,61 @@ a BASENAME, where two files called `printing.go` overwrote each other; the rule 
 *backup paths derive from the full path, never the basename*. The rule this one adds is narrower
 and should have followed from it: **check whether a filename exists before writing it.** The new
 file is `csv_export_test.go`.
+
+---
+
+## Step 9.4 — import
+
+`internal/modules/imports`, over the real catalog and partner services.
+
+### D1 — the adapter is four lines, and every one is the argument
+
+`importCatalog.CreateProduct` calls `catalog.CreateProduct`. That call refuses a duplicate code,
+resolves the unit, creates the DEFAULT VARIANT, and writes the audit entry, inside one
+transaction. An importer with its own `INSERT` would do none of it, and a shop's first four
+thousand products would be the only rows in the database no invariant was ever applied to —
+indistinguishable from good ones until somebody tried to sell one.
+
+`TestAnImportGoesThroughTheServiceAndGetsEverythingItDoes` asserts on the default variant, because
+nothing in the CSV mentions one. A product that has a variant went through the service; a product
+that does not was inserted around it.
+
+### D2 — a structural check, because a comment is not a rule
+
+`TestTheImporterContainsNoSQL` reads the package and refuses any statement keyword in a string
+literal, any database import, and any query method.
+
+Its first version matched the file's BYTES and failed on this package's own doc comment — which
+says an importer must not "`INSERT` the rows, done". The comment is the argument for the rule;
+failing on it would have meant deleting the explanation to satisfy the check. SQL has to be in a
+string to be executed, so a literal is the only place worth looking.
+
+### D3 — a failing row does not discard the rows that succeeded
+
+A partial import that says exactly what did not go in beats an all-or-nothing one that says only
+"row 3000 was bad". Re-importing a file whose good rows are already in is safe, because the
+services refuse duplicates — which is the same property that makes the failure legible.
+
+The row after a failure especially: an importer that stopped at the first error would have left it
+out, and the test asserts it is in.
+
+### D4 — `Line` is the SPREADSHEET's line, header included
+
+An index into the parsed rows is off by one and sends the user to the wrong line of a
+four-thousand-row file.
+
+I then made exactly that mistake in the test that checks it — indexing `Rows[3]` and getting the
+row after the failure. The test now searches for the failure instead. **The off-by-one a field
+exists to prevent is one the test writer makes too.**
+
+### D5 — columns are read by NAME
+
+A spreadsheet somebody edited has its columns in whatever order they left them, and an importer
+reading by position would put SKUs in the price column without complaining.
+
+The exported BOM is stripped on the way back in: a file this application exported and Excel edited
+comes back with the mark still on it, and the first header would otherwise match nothing.
+
+### The drills
+
+D223–D227, five, all failed first time.

@@ -30,6 +30,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/currency"
 	"github.com/mizan-erp/mizan/internal/modules/expenses"
 	"github.com/mizan-erp/mizan/internal/modules/identity"
+	"github.com/mizan-erp/mizan/internal/modules/imports"
 	"github.com/mizan-erp/mizan/internal/modules/inventory"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/partner"
@@ -144,6 +145,9 @@ type App struct {
 	// Backups takes and lists verified snapshots (9.1). Built with the scheduled job, because
 	// that is where its directory and clock are already to hand.
 	Backups *backup.Service
+	// Imports brings products and partners in from a spreadsheet (9.4), through the same services
+	// a screen calls.
+	Imports *imports.Service
 	Modules []modules.Module
 	// There is no Bindings field: the structs handed to Wails are a property of the BUILD, not
 	// of the graph, and they are assembled statically in internal/api/bindings (0.11 D2). This
@@ -456,6 +460,13 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// reason: accounting is built before inventory, so this could be a constructor argument —
 	// but making the two attachments look different would invite a reader to wonder why.
 	app.Inventory.AttachControlLedger(inventoryControl{accounting: app.Accounting})
+
+	// The importer, over the real services (9.4). Assembled here for the same reason the search
+	// registry is: it needs built services, so it cannot be declared on the module contract.
+	app.Imports = imports.New(
+		importCatalog{catalog: app.Catalog},
+		importPartners{partner: app.Partner},
+	)
 
 	app.Setup = setup.NewService(db, app.Org, app.Identity, app.Profile, app.Currency,
 		app.Accounting, app.Catalog, settings, app.Messages, app.Bus)

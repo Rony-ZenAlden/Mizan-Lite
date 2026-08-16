@@ -224,3 +224,71 @@ one delivery can cost two products very differently depending on how they are sp
 ### The drills
 
 D241–D244, four, all failed first time.
+
+---
+
+## Step 10.2 — performance
+
+Measured first. **Nothing needed optimising**, and that is the step's result rather than a step
+skipped.
+
+### The measurement
+
+A generated year of a busy shop: 20 products, 50 customers, 40 sales a day for 365 days —
+**14,600 posted documents and their lines**.
+
+| Report | Uninstrumented |
+|--------|----------------|
+| Profit and loss | ~0ms |
+| Balance sheet | ~0ms |
+| Sales by day | 47ms |
+| Sales by product | 45ms |
+| Sales by partner | 46ms |
+| Stock valuation | ~0ms |
+| Search | 6ms |
+| Dashboard | 46ms |
+
+Phase 8's D1 said the lines come back raw and the arithmetic happens in Go, and that *if it is
+ever too slow the answer is an index, then a projection with a verifier, in that order, driven by
+a measurement.* The measurement says it is not too slow. **DoD criterion 3 is satisfied by nothing
+having been optimised**, which is the honest outcome of measuring first.
+
+### The fixture writes rows directly, and says so
+
+Every other fixture goes through the services, because a row inserted around them skips the
+invariants they keep — 9.4's entire design. This one does not. It exists to make the DATABASE
+big, and posting fifteen thousand documents through the full pipeline would take minutes and
+measure the pipeline rather than the reports.
+
+The rows are shaped exactly as the services shape them. That is the trade, stated rather than
+hidden.
+
+### D1 — a stopwatch cannot stop the thing it is timing
+
+The first version timed each report and compared afterwards. The drill — making the sales analysis
+re-query per row — did not fail it. It **HUNG**, past a ten-minute timeout.
+
+That is the worst possible way to report the exact case this test exists for: the run is killed,
+the output truncated, and nobody learns which report was slow. Each report now runs under a
+context DEADLINE, which turns a pathological regression into a named failure in bounded time — the
+re-drill failed in five seconds with the report named and the cause quoted.
+
+### D2 — the ceiling has to clear the INSTRUMENTED figure
+
+A ceiling of one second — twenty times the clean 46ms — failed under `make ci`, which runs
+`-race -covermode=atomic`. The instrumentation costs more than twenty-fold.
+
+This is the design's own warning arriving in practice: *a test that fails on a small regression
+fails on a busy build machine.* Fifteen seconds clears the instrumented figure by roughly ten
+times, and the N+1 drill still breaches it in seconds.
+
+**The known limit, recorded rather than papered over:** a report that drifts from 46ms to five
+seconds is a hundred times worse and still passes. The elapsed times are logged for that reason —
+a person reading a CI run can watch a report climb long before the ceiling notices.
+
+### The drills
+
+D245, one, and it took three attempts to become a drill at all: the first hung, the second was
+rolled back before the test ran, and the third failed correctly. Counting the mutation's effect
+before believing its result — the habit this project acquired in Phase 8 — is what caught the
+second.

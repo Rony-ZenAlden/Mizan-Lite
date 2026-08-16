@@ -1578,3 +1578,116 @@ export function dismissNotice(key: string): Promise<boolean> {
 export function restoreNotice(key: string): Promise<boolean> {
   return call<boolean>("Operations", "RestoreNotice", key);
 }
+
+// ── Purchasing: returns and landed costs (Phase 10.1) ──────────────────────────
+//
+// Phase 6 built both documents and shipped neither a binding nor a screen, so a return a user
+// could create in the domain was unreachable from the interface for four phases.
+
+export interface ReturnLine {
+  id: string;
+  lineNumber: number;
+  receiptLineId: string;
+  productName: string;
+  variantSku: string;
+  uomCode: string;
+  quantityMicro: string;
+  unitPriceMicro: string;
+  /** The ORIGINAL delivery's cost, not today's average — which is why a credit and a stock
+   *  movement can differ on the same line. */
+  unitCostMicro: string;
+  netMinor: string;
+  totalMinor: string;
+}
+
+export interface SupplierReturn {
+  id: string;
+  number: string;
+  status: string;
+  supplierId: string;
+  supplierName: string;
+  returnDate: string;
+  reason: string;
+  currency: string;
+  netMinor: string;
+  taxMinor: string;
+  totalMinor: string;
+  /** What the goods cost US, at the original delivery's figure. */
+  costMinor: string;
+  lines: ReturnLine[];
+}
+
+export interface NewSupplierReturn {
+  supplierId: string;
+  supplierName: string;
+  warehouseId: string;
+  returnDate: string;
+  reason: string;
+  supplierReference: string;
+  currency: string;
+}
+
+export interface LandedCost {
+  id: string;
+  receiptId: string;
+  chargeType: string;
+  description: string;
+  /** How the charge is spread: by value, quantity, or weight. It decides where the money lands. */
+  basis: string;
+  currency: string;
+  amountMinor: string;
+  status: string;
+}
+
+export interface NewLandedCost {
+  receiptId: string;
+  chargeType: string;
+  description: string;
+  partnerId: string;
+  basis: string;
+  currency: string;
+  amountMinor: string;
+}
+
+export function supplierReturns(status = ""): Promise<SupplierReturn[]> {
+  return call<SupplierReturn[]>("Purchasing", "Returns", status);
+}
+
+export function supplierReturn(returnId: string): Promise<SupplierReturn> {
+  return call<SupplierReturn>("Purchasing", "Return", returnId);
+}
+
+export function draftSupplierReturn(input: NewSupplierReturn): Promise<SupplierReturn> {
+  return call<SupplierReturn>("Purchasing", "DraftReturn", input);
+}
+
+export function addReturnLine(input: {
+  returnId: string;
+  receiptLineId: string;
+  quantityMicro: string;
+  notes: string;
+}): Promise<boolean> {
+  return call<boolean>("Purchasing", "AddReturnLine", input);
+}
+
+export function postSupplierReturn(returnId: string): Promise<SupplierReturn> {
+  return call<SupplierReturn>("Purchasing", "PostReturn", returnId);
+}
+
+export function cancelSupplierReturn(returnId: string): Promise<boolean> {
+  return call<boolean>("Purchasing", "CancelReturn", returnId);
+}
+
+export function landedCosts(receiptId: string): Promise<LandedCost[]> {
+  return call<LandedCost[]>("Purchasing", "LandedCosts", receiptId);
+}
+
+export function addLandedCost(input: NewLandedCost): Promise<LandedCost> {
+  return call<LandedCost>("Purchasing", "AddLandedCost", input);
+}
+
+/** Separate from adding it: recording a charge is bookkeeping, deciding it belongs in the cost of
+ *  these goods is a judgement somebody makes. */
+export function applyLandedCost(chargeId: string): Promise<boolean> {
+  return call<boolean>("Purchasing", "ApplyLandedCost", chargeId);
+}

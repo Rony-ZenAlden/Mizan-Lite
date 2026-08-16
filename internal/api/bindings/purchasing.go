@@ -140,6 +140,20 @@ func purchasingPolicies() map[string]policy.Policy {
 		"AddBillLine": policy.Requires(purchasing.PermBillDraft),
 		"PostBill":    policy.Requires(purchasing.PermBillPost),
 
+		// Returns and landed costs (10.1). Phase 6 built both and shipped neither a binding nor
+		// a screen — so a document a user could create in the domain was unreachable from the
+		// interface for four phases.
+		"Returns":       policy.Requires(purchasing.PermReturnView),
+		"Return":        policy.Requires(purchasing.PermReturnView),
+		"DraftReturn":   policy.Requires(purchasing.PermReturnPost),
+		"AddReturnLine": policy.Requires(purchasing.PermReturnPost),
+		"PostReturn":    policy.Requires(purchasing.PermReturnPost),
+		"CancelReturn":  policy.Requires(purchasing.PermReturnPost),
+
+		"LandedCosts":     policy.Requires(purchasing.PermBillView),
+		"AddLandedCost":   policy.Requires(purchasing.PermLandedCostManage),
+		"ApplyLandedCost": policy.Requires(purchasing.PermLandedCostManage),
+
 		"Pay":      policy.Requires(purchasing.PermPaymentPost),
 		"Payments": policy.Requires(purchasing.PermPaymentView),
 	}

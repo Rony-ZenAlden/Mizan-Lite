@@ -175,3 +175,52 @@ A user guide is a separate artefact from a maintainer guide, and conflating them
     recorded as NOT MET is either fixed or restated as a known gap.
 12. `make ci` green, with the mutation drills each step declares — and a drill that PASSES is
     treated as a defect in the test, the code, or the mutation.
+
+---
+
+## Step 10.1 — the purchasing screens Phase 6 did not ship
+
+Four screens, and the two bindings that were missing under them.
+
+### The finding: two documents had no binding at all
+
+Receipts and payments had bindings and no screens. **Returns and landed costs had neither** — so
+a document a user could create in the domain, with its own permissions, its own posting rules and
+its own tests, was unreachable from the interface for four phases.
+
+That is 7.6's number series in a smaller shape: a mechanism built, tested, and never connected to
+a caller. The difference is that the series failed loudly the first time anybody tried; this
+failed silently, because nobody could try.
+
+### D1 — the GRNI total is on the screen, not in the reader's head
+
+A delivery nobody has invoiced sits in goods-received-not-invoiced, and that balance is what an
+accountant reconciles at every month end. The screen totals it above the list. Making somebody add
+a column to find the figure they came for is how a screen fails a person already under time
+pressure.
+
+### D2 — a return shows the CREDIT and the COST side by side
+
+They are different numbers and the difference is real: the supplier credits what they charged, the
+stock leaves at what the original delivery cost us (§D.3). A screen showing only the credit leaves
+somebody unable to explain why the inventory account moved by a different figure.
+
+### D3 — the payment method is a column, because 6.7's defect was invisible
+
+One posting rule credited cash whatever the method, so a bank transfer would have reduced the
+till — and **the till would have been short at every close with no transaction to explain it.**
+Showing the method on every row is what lets somebody reconciling see immediately that the money
+left the bank.
+
+### D4 — recording a charge and applying it stay two acts
+
+Recording that freight was charged is bookkeeping. Deciding it belongs in the cost of these
+particular goods — and therefore in the margin every future sale is measured against — is a
+judgement somebody makes. 6.6 made them two service calls; the screen keeps them two actions.
+
+The BASIS is shown rather than hidden behind the total, because two charges of the same amount on
+one delivery can cost two products very differently depending on how they are spread.
+
+### The drills
+
+D241–D244, four, all failed first time.

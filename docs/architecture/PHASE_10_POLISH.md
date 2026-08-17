@@ -370,10 +370,14 @@ which the Makefile and both packaging scripts already stamp — one source, four
 
 ### D1 — the test says what it verified, and what it could not
 
-This environment cannot run a Wails build, so **nothing here claims the installers work.** What is
-asserted is that the configuration is complete and internally CONSISTENT: every file a packaged
-build needs is present, `wails.json` agrees with `VERSION`, and both manifests still READ their
-version from the config rather than hardcoding it.
+The configuration tests assert completeness and internal CONSISTENCY: every file a packaged build
+needs is present, `wails.json` agrees with `VERSION`, and both manifests still READ their version
+from the config rather than hardcoding it.
+
+> **Corrected in 10.7.** This step originally claimed the environment could not run a Wails build
+> and recorded the criterion as "configuration complete" for that reason. **That claim was never
+> checked.** `wails`, Go 1.26, Node 22 and `makensis` were all present, and both installers built
+> on the first attempt. See Step 10.7.
 
 That last one matters more than it looks. If somebody replaces a template placeholder with a
 literal, the file still builds and Explorer shows a number nobody updated.
@@ -566,3 +570,98 @@ Stated plainly, because a project that ends by listing its strengths has not end
 what it declined to build and why; every DoD review names a criterion it failed rather than
 rewording it; and the two that stayed failed — Phase 3's exception and Phase 6's criterion 13 —
 are restated here rather than quietly dropped at the end.
+
+---
+
+## Step 10.7 — the installers, actually built
+
+### The correction that made this step necessary
+
+Step 10.4 recorded criterion 7 as *"configuration complete and internally consistent"* rather than
+*"the installers build"*, on the stated grounds that **this environment cannot run a Wails build**.
+
+That was asserted and never checked. `wails`, Go 1.26, Node 22 and `makensis` were all present the
+whole time, and both installers built on the first attempt.
+
+The DoD wording was defensible; **the reason given for it was false**, and a limitation claimed
+without testing is worse than one discovered, because it stops anybody looking. The criterion is
+now met in its stronger form.
+
+### What was built and what was verified
+
+| Artefact | Verified |
+|----------|----------|
+| `Mizan ERP 0.1.0-dev.d17a9c1.dmg` (14M) | Mounts; carries the `.app` and an `/Applications` symlink; `lipo` reports **`x86_64 arm64`** |
+| `Mizan ERP 0.1.0-dev.d17a9c1 Setup.exe` (9.4M) | `PE32 … Nullsoft Installer self-extracting archive`; names the product and version in its UTF-16 strings |
+| `Mizan ERP 0.1.0-dev.d17a9c1.exe` (20M) | `PE32+ … x86-64` |
+
+`AppVersion` is confirmed populated end to end: the ldflags value `0.1.0-dev.d17a9c1` appears in
+the shipped macOS binary, and the commit `d17a9c1` is stamped eight times. 10.4 wired it into
+`bootstrap.Options`; this is the artefact carrying it.
+
+### The defect the build found that no test had
+
+The shipped `.dmg` declared **`CFBundleIdentifier = com.wails.mizan-erp`** — the Wails scaffold's
+namespace, still in place because nothing had ever read the built bundle.
+
+It is not cosmetic. macOS keys preferences, keychain entries, TCC permissions and Gatekeeper
+records against the bundle identifier, so `com.wails.*` puts this application's state in a
+framework's namespace, where a second Wails application with the same product name would collide
+with it. **And it can never change after a release** — everything keyed to it would be orphaned.
+
+Now `com.mizanerp.desktop`, in both plists, asserted by test, and confirmed on the rebuilt image.
+
+This is the class of defect 10.4's own DoD wording predicted: *"an installer that builds and then
+fails to run is invisible to everything above."* One level down from that — an installer that
+builds, runs, and quietly claims the wrong identity — was invisible too, until somebody mounted
+the image.
+
+### D1 — the identifier check reads the VALUE, not the file
+
+The first version matched the whole plist and failed on the comment explaining why `com.wails.` is
+wrong. **The same mistake 9.4's no-SQL check made against its own doc comment**, in a second
+place, three weeks later — which suggests the lesson is not "watch for that" but *a scan that can
+match its own explanation should read structure rather than text.*
+
+### The second defect: the fix was in a file nobody tracked
+
+`git status` did not list `build/darwin/Info.plist` after the identifier was corrected. Phase 0 had
+ignored `/build/darwin/` as stock Wails scaffolding, with a note in the ignore file itself:
+
+> *"Phase 10 is where the real icon and a customised Info.plist become tracked assets — REMOVE
+> THESE TWO LINES THEN, or the customisation will be silently ignored."*
+
+The note was exactly right about the consequence. The fix lived in a file `wails build`
+regenerates: correct on this machine, absent from the repository, **gone on the next clean
+checkout — while every test kept passing, because they read the working copy.**
+
+Both paths are tracked now, and `TestTheCustomisedBuildAssetsAreTracked` refuses to let them be
+ignored again. A note left for a future phase is only as good as somebody reading it; this one was
+found by a `git status` that did not show a file which had definitely been edited.
+
+### Signing, unchanged
+
+Both artefacts are UNSIGNED, by Phase 0's decision. The hooks are present and opt-in:
+`MIZAN_MACOS_IDENTITY` activates `codesign` and prints the notarization commands; Windows has no
+`signtool` invocation at all. `TestSigningIsOptInAndTheBuildDoesNotNeedIt` asserts the guard, and
+a build on a clean machine with no certificate still produces a working artefact — which is what
+makes the packaging testable.
+
+### Criterion 7, restated
+
+**Met in full.** Both installers build, and each was inspected rather than trusted: the image
+mounted, the binary's architectures read, the version resource confirmed, the bundle identity
+corrected.
+
+What remains untested is what no build can prove from here: **neither installer has been run on a
+clean Windows or macOS machine.** Structure and metadata are verified; first-run behaviour on
+another person's computer is not.
+
+### The drills for this step
+
+D260–D261, two, both failed first time — one for the ignore rule, one for the identifier itself.
+
+### Criterion 12, restated for the phase
+
+**261 drills across eleven phases.** `make ci` green, and both installers built from a clean
+`build/bin` and `dist`.

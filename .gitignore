@@ -23,14 +23,18 @@ frontend/wailsjs/
 # `wails build` caches the hash of package.json to decide whether to reinstall.
 frontend/package.json.md5
 
-# Stock Wails scaffolding, regenerated on demand by `wails build`: the placeholder
-# logo and a templated Info.plist. Ignored rather than committed because tracking
-# the default Wails logo would read as a deliberate branding choice it is not.
-# Phase 10 (polish / installers) is where the real icon and a customised Info.plist
-# become tracked assets — REMOVE THESE TWO LINES THEN, or the customisation will be
-# silently ignored.
-/build/appicon.png
-/build/darwin/
+# Phase 0 ignored `/build/appicon.png` and `/build/darwin/` as stock Wails scaffolding, with a
+# note: "Phase 10 is where the real icon and a customised Info.plist become tracked assets —
+# REMOVE THESE TWO LINES THEN, or the customisation will be silently ignored."
+#
+# 10.7 is that moment, and the note was right about the consequence. The bundle identifier was
+# corrected from `com.wails.mizan-erp` to `com.mizanerp.desktop` in `build/darwin/Info.plist`,
+# and had these lines stayed, the fix would have lived in an untracked file that `wails build`
+# regenerates — present on this machine, absent from the repository, and gone on the next clean
+# checkout.
+#
+# A note left in an ignore file for a future phase is only as good as somebody reading it. This
+# one was found by `git status` failing to show a file that had definitely been edited.
 
 # Node
 node_modules/

@@ -27,18 +27,41 @@ purchasing and expenses, reports on all of it, and looks after itself.
 | 7 | Money out: expenses, settlements, debts, partner balances |
 | 8 | Insight: financial statements, sales and spend analysis, valuation, search, dashboard |
 | 9 | Operations: verified backup and restore, CSV import and export, notifications |
-| 10 | Polish: performance bounds, RTL and accessibility gates, installers, this document |
+| 10 | Polish: performance bounds, RTL and accessibility gates, **built installers**, this document |
+
+### Installers
+
+Both are built and validated. `dist/` holds:
+
+| Artefact | What it is |
+|----------|------------|
+| `Mizan ERP <version>.dmg` | macOS disk image, drag-to-Applications, **Universal** (`x86_64` + `arm64`) |
+| `Mizan ERP <version> Setup.exe` | Windows NSIS installer, cross-built from macOS |
+| `Mizan ERP <version>.exe` | the bare Windows binary, for a portable install |
+
+```bash
+make package-macos            # .app → .dmg
+./scripts/package-windows.sh  # .exe → NSIS Setup.exe
+make release                  # ci + both, everything shippable
+```
+
+The Windows cross-build works because Step 0.3 chose a pure-Go SQLite driver over the cgo one —
+a decision made for the offline constraint that turned out to make a Windows release buildable
+from a Mac.
 
 ### Known gaps
 
-Recorded rather than implied, because the alternative is a reader discovering them:
+Recorded rather than implied, and set out in full with recommended next steps in
+**[docs/architecture/KNOWN_GAPS.md](docs/architecture/KNOWN_GAPS.md)**:
 
-- **The installers are configured but never built here.** This machine cannot run a Wails
-  package step, so `docs/architecture/PHASE_10_POLISH.md` claims configuration completeness and
-  nothing more. An installer that builds and then fails to run is invisible to every check in
-  the repository.
-- **Code signing is a no-op by design** (Phase 0). The macOS script signs only when
-  `MIZAN_MACOS_IDENTITY` is set; Windows binaries are unsigned.
+- **Both installers are unsigned**, by Phase 0's decision. macOS Gatekeeper and Windows
+  SmartScreen will warn until a Developer ID and an Authenticode certificate sign them. The hooks
+  exist and activate on an identity being set.
+- **Nobody has used this.** Every guarantee is proven by a test; no shopkeeper has opened it.
+- **`price_list_items.variant_id` is nullable**, against §1.2 — narrowed by a CHECK constraint
+  that makes the feared state unrepresentable, and read by exactly one function.
+- **Phase 6's criterion 13 is permanently false.** One of Phase 4's four seams needed reshaping;
+  the code is correct and the record stands.
 - **The performance ceiling catches structural regressions, not drift.** A report that goes from
   46ms to five seconds still passes. The elapsed times are logged so a person can see it climbing.
 - **Accounting is exposed read-only** (§20.6 tier v1.1). Manual journal entries arrive with the

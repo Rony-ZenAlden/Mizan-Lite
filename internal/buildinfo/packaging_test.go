@@ -167,6 +167,48 @@ func TestTheMacBundleReadsItsVersionFromTheConfig(t *testing.T) {
 	if !strings.Contains(body, "{{.Info.ProductVersion}}") {
 		t.Error("the macOS bundle no longer reads its version from wails.json")
 	}
+
+	// # The bundle identifier is the product's, not the framework's
+	//
+	// Wails scaffolds `com.wails.{{safeBundleID .Name}}`, and that is what the FIRST .dmg this
+	// project built actually carried — found by inspecting the mounted image rather than by any
+	// test, because nothing was checking.
+	//
+	// It is not cosmetic. macOS keys preferences, keychain entries, TCC permissions and Gatekeeper
+	// records against it, so `com.wails.*` puts this application's state in a framework's
+	// namespace, where a second Wails application with the same product name collides with it.
+	// And it can never change after a release: everything keyed to it would be orphaned.
+	// Read the VALUE, not the file. The first version matched the whole body and failed on the
+	// plist's own comment, which explains why `com.wails.` is wrong — the same mistake 9.4's
+	// no-SQL check made against its own doc comment, in a second place.
+	identifier := plistString(t, body, "CFBundleIdentifier")
+	if strings.HasPrefix(identifier, "com.wails.") {
+		t.Errorf("the bundle identifier is %q — the Wails scaffold's namespace. macOS keys "+
+			"preferences, keychain and permissions against it, and it can never change once "+
+			"something has shipped", identifier)
+	}
+	if !strings.HasPrefix(identifier, "com.mizanerp.") {
+		t.Errorf("the bundle identifier is %q, not the product's own reverse-DNS namespace",
+			identifier)
+	}
+}
+
+// plistString reads the <string> following a <key>, which is all the structure this needs.
+//
+// A full plist parser would be a dependency for one lookup in one test, and this file's whole
+// point is checking configuration without adding any.
+func plistString(t *testing.T, body, key string) string {
+	t.Helper()
+	at := strings.Index(body, "<key>"+key+"</key>")
+	if at < 0 {
+		t.Fatalf("the plist has no %s", key)
+	}
+	open := strings.Index(body[at:], "<string>")
+	closed := strings.Index(body[at:], "</string>")
+	if open < 0 || closed < 0 || closed < open {
+		t.Fatalf("%s has no value", key)
+	}
+	return body[at+open+len("<string>") : at+closed]
 }
 
 // TestSigningIsOptInAndTheBuildDoesNotNeedIt
@@ -231,6 +273,42 @@ func TestSigningIsOptInAndTheBuildDoesNotNeedIt(t *testing.T) {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "#") && strings.HasPrefix(trimmed, "signtool") {
 			t.Error("scripts/package-windows.sh signs the binary; Phase 0 decided it does not")
+		}
+	}
+}
+
+// TestTheCustomisedBuildAssetsAreTracked
+//
+// # The fix that would have been silently discarded
+//
+// Phase 0 ignored `/build/darwin/` as stock Wails scaffolding and left a note: *"Phase 10 is where
+// the real icon and a customised Info.plist become tracked assets — REMOVE THESE TWO LINES THEN,
+// or the customisation will be silently ignored."*
+//
+// 10.7 corrected the bundle identifier in that very file. Had the note gone unread, the fix would
+// have lived in an untracked file that `wails build` regenerates: present on one machine, absent
+// from the repository, and gone on the next clean checkout — while every test above kept passing,
+// because they read the working copy.
+//
+// The note was found by `git status` failing to list a file that had definitely been edited. This
+// test is what makes the next one unnecessary.
+func TestTheCustomisedBuildAssetsAreTracked(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), ".gitignore"))
+	if err != nil {
+		t.Fatalf("reading .gitignore: %v", err)
+	}
+
+	for _, line := range strings.Split(string(raw), "\n") {
+		entry := strings.TrimSpace(line)
+		if entry == "" || strings.HasPrefix(entry, "#") {
+			continue
+		}
+		for _, customised := range []string{"/build/darwin/", "/build/appicon.png"} {
+			if entry == customised {
+				t.Errorf(".gitignore still ignores %s, which now holds customisation — the "+
+					"bundle identifier fix would live in a file `wails build` regenerates, "+
+					"present on one machine and absent from the repository", customised)
+			}
 		}
 	}
 }

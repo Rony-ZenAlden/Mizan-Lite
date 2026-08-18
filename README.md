@@ -45,6 +45,12 @@ make package-macos            # .app → .dmg
 make release                  # ci + both, everything shippable
 ```
 
+**[docs/RELEASE.md](docs/RELEASE.md)** covers what is verified, what is not, and the two steps that
+need a certificate. The short version: the macOS artefact has been **first-run on real hardware**
+against a clean data directory — 37 migrations, 13 number series, zero errors — and the Windows
+installer has **never been executed**, because no Windows machine or VM exists in the build
+environment.
+
 The Windows cross-build works because Step 0.3 chose a pure-Go SQLite driver over the cgo one —
 a decision made for the offline constraint that turned out to make a Windows release buildable
 from a Mac.
@@ -54,9 +60,14 @@ from a Mac.
 Recorded rather than implied, and set out in full with recommended next steps in
 **[docs/architecture/KNOWN_GAPS.md](docs/architecture/KNOWN_GAPS.md)**:
 
-- **Both installers are unsigned**, by Phase 0's decision. macOS Gatekeeper and Windows
-  SmartScreen will warn until a Developer ID and an Authenticode certificate sign them. The hooks
-  exist and activate on an identity being set.
+- **Both installers are unsigned.** The hooks are tested end to end and activate on an identity
+  being set — but a certificate is tied to a legal identity and a payment, so it cannot be
+  supplied here. **Signing alone is also not enough on macOS:** an ad-hoc-signed image verifies
+  and Gatekeeper still rejects it, because notarization is a separate step. See
+  [docs/RELEASE.md §4](docs/RELEASE.md).
+- **The Windows installer has never been run.** Structure and metadata are verified; first-run
+  behaviour on a clean Windows machine is not. [docs/RELEASE.md §3](docs/RELEASE.md) is the
+  checklist.
 - **Nobody has used this.** Every guarantee is proven by a test; no shopkeeper has opened it.
 - **`price_list_items.variant_id` is nullable**, against §1.2 — narrowed by a CHECK constraint
   that makes the feared state unrepresentable, and read by exactly one function.

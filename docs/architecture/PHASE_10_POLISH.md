@@ -665,3 +665,100 @@ D260–D261, two, both failed first time — one for the ignore rule, one for th
 
 **261 drills across eleven phases.** `make ci` green, and both installers built from a clean
 `build/bin` and `dist`.
+
+---
+
+## Step 10.8 — first run, and the limits of signing
+
+Three items were asked for. **One was completed, one was completed as far as it can be here, and
+one cannot be done from a build machine at all** — and saying which is which is the whole content
+of this step.
+
+### macOS first run — done, on real hardware
+
+The `.dmg` was mounted, the `.app` copied out, and launched **against a clean data directory**.
+The application had never run on this machine; only been built.
+
+```
+INFO mizan window ready version=0.1.0-dev.d17a9c1
+INFO pre-migration backup created path=…/backups/before_migration-….db
+INFO migration applied version=1 name=platform
+…37 migrations…
+INFO database updated applied=37 to_version=37
+INFO permissions synced declared=65
+INFO number series synced declared=13 created=13
+INFO mizan started modules=14
+INFO mizan ready
+```
+
+**Zero errors.** The resulting database holds 96 tables, 13 number series, 65 permissions.
+
+Two earlier fixes are confirmed in a shipped artefact rather than in a test:
+
+- **13 number series created on first run** — 7.6's defect, where a freshly installed company
+  could not post a single document.
+- **`"appVersion": "0.1.0-dev.d17a9c1"` in the scheduled backup's manifest** — 10.4's defect,
+  where a field added in Phase 9 was never assigned.
+
+The scheduled backup fired on first run and wrote both a snapshot and its manifest, which is
+`CatchUp: RunOnce` behaving as 9.1 D5 designed.
+
+### The signing hook — exercised, and the result is the interesting part
+
+A self-signed certificate was created, found not to be trusted for code signing, and **the
+temporary keychain was deleted rather than adding trust settings to the machine.** Modifying a
+developer's system trust store to make a test pass is not a trade worth making.
+
+Instead the hook was run with macOS's native **ad-hoc identity**:
+
+```
+MIZAN_MACOS_IDENTITY=- ./scripts/package-macos.sh
+```
+
+Every step worked: `codesign --force --deep --options runtime --timestamp` succeeded,
+`--verify --strict` reported *valid on disk, satisfies its Designated Requirement*, the image
+built, the image was signed, and the notarization commands printed. The signature carries
+`Identifier=com.mizanerp.desktop`.
+
+**And `spctl --assess --type execute` returns `rejected`** — `Signature=adhoc`,
+`TeamIdentifier=not set`.
+
+That is the finding: **signing is necessary and not sufficient.** A Developer ID signature *and*
+notarization are both required, and a release that signs but skips notarization ships an artefact
+that still warns. `docs/RELEASE.md §4` says so with the commands.
+
+The hook is therefore proven; only the certificate is missing, and a certificate is tied to a
+legal identity and a payment that cannot be supplied by a build machine.
+
+### Windows first run — NOT done, and not doable here
+
+No Windows machine, no VM tooling, no Wine. The `.exe` is a PE binary and this is macOS.
+
+What is verified is structural: `PE32 … Nullsoft Installer self-extracting archive`, `PE32+
+x86-64`, product and version present in the installer's UTF-16 strings. **The installer has never
+been executed.**
+
+`docs/RELEASE.md §3` is the checklist for whoever has a Windows machine, and its most important
+line is the one nothing here can test: **the WebView2 runtime**, which is the single most likely
+first-run failure on a fresh Windows and which no static check can reach.
+
+### D1 — the release document states what was verified and how
+
+Not "installers work". The document separates *verified on real hardware*, *verified
+structurally*, and *not verified*, and puts the manual checks in a checklist with the reason each
+one exists — including that a `.dmg` copied locally never carries `com.apple.quarantine`, so the
+build machine's own copy **never faces Gatekeeper at all**.
+
+### Release artefacts
+
+Rebuilt clean at the committed version, with checksums:
+
+```
+363a736b…  Mizan ERP 0.1.0-dev.0d9100b Setup.exe
+c352ccb8…  Mizan ERP 0.1.0-dev.0d9100b.dmg
+f8a98975…  Mizan ERP 0.1.0-dev.0d9100b.exe
+```
+
+They are marked `-dev` because no tag exists. That is `scripts/version.sh` working as Step 1.13
+designed: **a binary must never be mistaken for a release it is not**, and tagging is the act that
+makes one.

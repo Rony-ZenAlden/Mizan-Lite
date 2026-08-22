@@ -15,9 +15,9 @@ cd dist && shasum -a 256 * > SHA256SUMS.txt
 
 | Artefact | Size | What it is |
 |----------|------|------------|
-| `Mizan ERP <version>.dmg` | ~14M | macOS disk image, Universal (`x86_64` + `arm64`) |
-| `Mizan ERP <version> Setup.exe` | ~9.4M | Windows NSIS installer |
-| `Mizan ERP <version>.exe` | ~20M | bare Windows binary, portable install |
+| `Mizan ERP 1.0.0.dmg` | 14M | macOS disk image, Universal (`x86_64` + `arm64`) |
+| `Mizan ERP 1.0.0 Setup.exe` | 9.4M | Windows NSIS installer |
+| `Mizan ERP 1.0.0.exe` | 20M | bare Windows binary, portable install |
 | `SHA256SUMS.txt` | — | checksums, verified with `shasum -a 256 -c` |
 
 The Windows build cross-compiles from macOS because Step 0.3 chose a pure-Go SQLite driver.
@@ -37,7 +37,8 @@ Observed:
 - **13 number series created** — the Phase 7.6 defect, confirmed fixed in a shipped artefact
 - 14 modules started; `mizan ready`
 - the scheduled backup job fired, writing a snapshot **and its manifest**
-- the manifest recorded `"appVersion": "0.1.0-dev.…"` — the Phase 10.4 fix, confirmed end to end
+- the manifest recorded `"appVersion": "1.0.0"` — the Phase 10.4 fix, confirmed end to end
+- **6 background jobs registered**, including the daily backup
 - **zero errors in the log**
 - resulting database: 96 tables, 13 number series, 65 permissions
 

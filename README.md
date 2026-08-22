@@ -12,7 +12,7 @@ many business types and countries through **configuration and metadata, not code
 
 ## Status
 
-**Phases 0–10 built.** The application keeps double-entry books, runs a till, manages stock,
+**v1.0.0 — released.** Phases 0–10 built. The application keeps double-entry books, runs a till, manages stock,
 purchasing and expenses, reports on all of it, and looks after itself.
 
 | Phase | What it built |

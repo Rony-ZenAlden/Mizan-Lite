@@ -283,7 +283,9 @@ export const PERMISSIONS = {
   catalogView: "catalog.view",
   catalogManage: "catalog.manage",
   customerView: "partner.customer.view",
+  customerManage: "partner.customer.manage",
   supplierView: "partner.supplier.view",
+  supplierManage: "partner.supplier.manage",
   priceView: "pricing.view",
   stockView: "inventory.stock.view",
   stockAdjust: "inventory.stock.adjust",
@@ -1740,4 +1742,95 @@ export function countStock(input: {
   reason: string;
 }): Promise<MovementRow> {
   return call<MovementRow>("Inventory", "CountStock", input);
+}
+
+// ── The write path that was missing (10.13) ────────────────────────────────────
+//
+// `TestEveryWriteBindingHasAFrontEndCaller` found seven bindings that changed something and had
+// no caller here, so deliveries, bills, supplier payments and expense lines could be read and not
+// created. The partner create bindings did not exist at all — a binding that was never written
+// has nothing for that test to find.
+
+export interface NewPartner {
+  code: string;
+  name: string;
+  isCustomer: boolean;
+  isSupplier: boolean;
+  phone: string;
+  email: string;
+  taxNumber: string;
+  paymentTermsDays: number;
+  /** Minor units, like every amount. "0" means no limit. */
+  creditLimitMinor: string;
+}
+
+export function createCustomer(input: NewPartner): Promise<PartnerRow> {
+  return call<PartnerRow>("Partners", "CreateCustomer", input);
+}
+
+export function createSupplier(input: NewPartner): Promise<PartnerRow> {
+  return call<PartnerRow>("Partners", "CreateSupplier", input);
+}
+
+/** Removes a line from a DRAFT expense. Refused once it is recorded. */
+export function removeExpenseLine(expenseId: string, lineId: string): Promise<boolean> {
+  return call<boolean>("Expenses", "RemoveLine", expenseId, lineId);
+}
+
+export interface NewReceipt {
+  orderId: string;
+  warehouseId: string;
+  receiptDate: string;
+  deliveryNoteReference: string;
+}
+
+/** Starts a delivery against a placed order. Nothing moves until it is confirmed. */
+export function draftGoodsReceipt(input: NewReceipt): Promise<GoodsReceipt> {
+  return call<GoodsReceipt>("Purchasing", "DraftReceipt", input);
+}
+
+/** Records what actually arrived on one order line. Less than ordered is ordinary. */
+export function receiveLine(input: {
+  receiptId: string;
+  orderLineId: string;
+  quantityMicro: string;
+  notes: string;
+}): Promise<boolean> {
+  return call<boolean>("Purchasing", "ReceiveLine", input);
+}
+
+export interface NewBill {
+  supplierId: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  billDate: string;
+  dueDate: string;
+  currency: string;
+}
+
+export function draftBill(input: NewBill): Promise<PurchaseBill> {
+  return call<PurchaseBill>("Purchasing", "DraftBill", input);
+}
+
+/** Puts a confirmed delivery onto a bill. The accrual it raised clears when the bill posts. */
+export function addBillLine(input: { billId: string; receiptLineId: string }): Promise<boolean> {
+  return call<boolean>("Purchasing", "AddBillLine", input);
+}
+
+export function paySupplier(input: {
+  supplierId: string;
+  supplierName: string;
+  billId: string;
+  paymentDate: string;
+  method: string;
+  reference: string;
+  currency: string;
+  amountMinor: string;
+}): Promise<boolean> {
+  return call<boolean>("Purchasing", "Pay", input);
+}
+
+/** Closes an order that will receive nothing further, so it stops appearing as outstanding. */
+export function closePurchaseOrder(orderId: string): Promise<boolean> {
+  return call<boolean>("Purchasing", "CloseOrder", orderId);
 }

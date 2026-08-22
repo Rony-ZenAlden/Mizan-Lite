@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { NewPartnerForm } from "./NewPartnerForm";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import {
+  PERMISSIONS,
   customer, customers, supplier, suppliers,
   type PartnerDetail as PartnerDetailData, type PartnerRow,
 } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Input, Table } from "@/shared/ui";
+import { Alert, Badge, Button, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
+import { Can } from "@/app/session/Can";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { PartnerDetail } from "./PartnerDetail";
 
@@ -25,6 +28,7 @@ export function PartnersScreen({ role }: { role: "customer" | "supplier" }) {
 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const rows = useQuery({
     queryKey: ["partners", role, search],
@@ -48,10 +52,27 @@ export function PartnersScreen({ role }: { role: "customer" | "supplier" }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{title}</h2>
-        <p className="text-sm text-text-muted">{t(`partners.${role}.help`)}</p>
-      </header>
+      <PageHeader
+        title={title}
+        description={t(`partners.${role}.help`)}
+        actions={
+          <Can
+            permission={
+              role === "customer" ? PERMISSIONS.customerManage : PERMISSIONS.supplierManage
+            }
+          >
+            <Button onClick={() => setAdding((open) => !open)}>
+              {adding
+                ? t("catalog.done")
+                : role === "customer"
+                  ? t("partners.newCustomer")
+                  : t("partners.newSupplier")}
+            </Button>
+          </Can>
+        }
+      />
+
+      {adding ? <NewPartnerForm role={role} /> : null}
 
       <Input
         label={t("partners.search")}

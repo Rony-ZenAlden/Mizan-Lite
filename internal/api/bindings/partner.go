@@ -102,6 +102,10 @@ func partnerPolicies() map[string]policy.Policy {
 		"Supplier":       policy.Requires(partner.PermSupplierView),
 		"Statement":      policy.Requires(partner.PermBalanceView),
 		"VerifyBalances": policy.Requires(partner.PermBalanceView),
+
+		// The write half (10.13), declared beside the reads so one map holds the façade.
+		"CreateCustomer": policy.Requires(partner.PermCustomerManage),
+		"CreateSupplier": policy.Requires(partner.PermSupplierManage),
 	}
 }
 

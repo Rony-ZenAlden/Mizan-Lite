@@ -3,7 +3,7 @@ import { usePreferences, useTranslation } from "@/app/providers/PreferencesProvi
 import { RequirePermission } from "@/app/session/Can";
 import { useSession, hasPermission } from "@/app/session/session";
 import { useSignOut } from "@/app/session/useSignOut";
-import { ROUTES } from "@/app/shell/routes";
+import { NAV_GROUPS, ROUTES } from "@/app/shell/routes";
 import { type ThemePreference } from "@/lib/wails";
 import { Button, Select, Tooltip } from "@/shared/ui";
 import type { Locale } from "@/i18n/messages";
@@ -65,23 +65,51 @@ function Sidebar() {
   );
 
   return (
-    <aside className="hidden w-56 shrink-0 flex-col border-e border-border bg-surface-raised p-4 md:flex">
-      <p className="text-lg font-semibold text-text">{t("app.title")}</p>
-      <p className="mt-1 text-xs text-text-muted">{t("app.tagline")}</p>
-      <nav className="mt-6 flex flex-col gap-1" aria-label={t("shell.nav.label")}>
-        {visible.map((route) => (
-          <NavLink
-            key={route.path}
-            to={route.path}
-            end={route.path === "/"}
-            className={({ isActive }) =>
-              "rounded px-3 py-2 text-sm " +
-              (isActive ? "bg-surface-sunken font-medium text-text" : "text-text-muted")
-            }
-          >
-            {t(route.labelKey)}
-          </NavLink>
-        ))}
+    <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto border-e border-border bg-surface-raised px-3 py-4 md:flex">
+      <p className="px-2 text-lg font-semibold tracking-tight text-text">{t("app.title")}</p>
+      <p className="mt-0.5 px-2 text-xs text-text-muted">{t("app.tagline")}</p>
+
+      {/*
+       * GROUPED, six ways.
+       *
+       * The 10.12 audit counted thirty items in one flat column. That is a list nobody scans —
+       * a person hunting for "supplier payments" reads all thirty every time, and the ones near
+       * the bottom effectively do not exist.
+       *
+       * The grouping comes from the route itself, so there is no second list to keep in step —
+       * the same reason the routes are data rather than JSX.
+       */}
+      <nav className="mt-6 flex flex-col gap-5" aria-label={t("shell.nav.label")}>
+        {NAV_GROUPS.map((group) => {
+          const items = visible.filter((route) => route.group === group);
+          if (items.length === 0) return null;
+          return (
+            <div key={group} className="flex flex-col gap-0.5">
+              {/* The overview group has no heading: three items at the top of a sidebar do not
+                  need to be told what they are. */}
+              {group !== "overview" ? (
+                <h3 className="px-2 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-text-muted">
+                  {t(`nav.group.${group}`)}
+                </h3>
+              ) : null}
+              {items.map((route) => (
+                <NavLink
+                  key={route.path}
+                  to={route.path}
+                  end={route.path === "/"}
+                  className={({ isActive }) =>
+                    "rounded-lg px-3 py-1.5 text-sm transition-colors " +
+                    (isActive
+                      ? "bg-primary-subtle font-medium text-text"
+                      : "text-text-muted hover:bg-surface-sunken hover:text-text")
+                  }
+                >
+                  {t(route.labelKey)}
+                </NavLink>
+              ))}
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

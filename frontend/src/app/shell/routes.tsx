@@ -25,6 +25,7 @@ import { NoticeCentre } from "@/modules/operations/NoticeCentre";
 import { BackupScreen } from "@/modules/operations/BackupScreen";
 import { ImportScreen } from "@/modules/operations/ImportScreen";
 import { ReceiptsScreen } from "@/modules/purchasing/ReceiptsScreen";
+import { ReceiveDeliveryScreen } from "@/modules/purchasing/ReceiveDeliveryScreen";
 import { SupplierReturnsScreen } from "@/modules/purchasing/SupplierReturnsScreen";
 import { SupplierPaymentsScreen } from "@/modules/purchasing/SupplierPaymentsScreen";
 import { HelpScreen } from "@/modules/help/HelpScreen";
@@ -36,8 +37,21 @@ import { HelpScreen } from "@/modules/help/HelpScreen";
  * declaration. Two lists would drift, and the symptom — a menu item that leads to a refusal —
  * is exactly the thing permission-aware navigation exists to prevent.
  */
+/** The six areas the sidebar groups into. A flat list of thirty items is a list nobody scans. */
+export type NavGroup =
+  | "overview"
+  | "sell"
+  | "buy"
+  | "stock"
+  | "money"
+  | "setup";
+
+export const NAV_GROUPS: NavGroup[] = ["overview", "sell", "buy", "stock", "money", "setup"];
+
 export interface AppRoute {
   path: string;
+  /** Which area of the sidebar this belongs under. */
+  group: NavGroup;
   /** A translation key, so the menu is translated like everything else (§22). */
   labelKey: string;
   element: ReactNode;
@@ -61,40 +75,46 @@ export const ROUTES: AppRoute[] = [
   // was written in Phase 1, before any business figures existed. Phase 8 then built a dashboard
   // of revenue, margin and stock value and nothing routed to it, so the screen a shopkeeper
   // lands on showed them the outbox queue depth.
-  { path: "/", labelKey: "nav.overview", element: <DashboardScreen /> },
-  { path: "/needs-attention", labelKey: "nav.notices", element: <NoticeCentre /> },
+  { path: "/", group: "overview", labelKey: "nav.overview", element: <DashboardScreen /> },
+  { path: "/needs-attention", group: "overview", labelKey: "nav.notices", element: <NoticeCentre /> },
   {
     path: "/admin/users",
+    group: "setup",
     labelKey: "nav.users",
     element: <UsersScreen />,
     permission: PERMISSIONS.userView,
   },
   {
     path: "/admin/roles",
+    group: "setup",
     labelKey: "nav.roles",
     element: <RolesScreen />,
     permission: PERMISSIONS.roleView,
   },
   {
     path: "/admin/sessions",
+    group: "setup",
     labelKey: "nav.sessions",
     element: <SessionsScreen />,
     permission: PERMISSIONS.sessionView,
   },
   {
     path: "/admin/audit",
+    group: "setup",
     labelKey: "nav.audit",
     element: <AuditScreen />,
     permission: PERMISSIONS.auditView,
   },
   {
     path: "/catalog",
+    group: "stock",
     labelKey: "nav.catalog",
     element: <CatalogScreen />,
     permission: PERMISSIONS.catalogView,
   },
   {
     path: "/inventory/stock",
+    group: "stock",
     labelKey: "nav.stock",
     element: <StockScreen />,
     permission: PERMISSIONS.stockView,
@@ -104,122 +124,148 @@ export const ROUTES: AppRoute[] = [
   // most-used thing in the application behind the least-used.
   {
     path: "/pos",
+    group: "sell",
     labelKey: "nav.pos",
     element: <POSTerminal />,
     permission: PERMISSIONS.saleDraft,
   },
   {
     path: "/sales/invoices",
+    group: "sell",
     labelKey: "nav.invoices",
     element: <InvoicesScreen />,
     permission: PERMISSIONS.saleView,
   },
   {
     path: "/purchasing/orders",
+    group: "buy",
     labelKey: "nav.purchaseOrders",
     element: <PurchaseOrdersScreen />,
     permission: PERMISSIONS.orderView,
   },
   {
     path: "/purchasing/bills",
+    group: "buy",
     labelKey: "nav.bills",
     element: <BillsScreen />,
     permission: PERMISSIONS.billView,
   },
   {
     path: "/partners/customers",
+    group: "sell",
     labelKey: "nav.customers",
     element: <PartnersScreen role="customer" />,
     permission: PERMISSIONS.customerView,
   },
   {
     path: "/partners/suppliers",
+    group: "buy",
     labelKey: "nav.suppliers",
     element: <PartnersScreen role="supplier" />,
     permission: PERMISSIONS.supplierView,
   },
   {
     path: "/money/expenses",
+    group: "money",
     labelKey: "nav.expenses",
     element: <ExpensesScreen />,
     permission: PERMISSIONS.expenseView,
   },
   {
     path: "/money/debts",
+    group: "money",
     labelKey: "nav.debts",
     element: <DebtsScreen />,
     permission: PERMISSIONS.debtView,
   },
   {
     path: "/accounting/chart",
+    group: "money",
     labelKey: "nav.chart",
     element: <ChartScreen />,
     permission: PERMISSIONS.accountView,
   },
   {
+    path: "/purchasing/receive",
+    group: "buy",
+    labelKey: "nav.receive",
+    element: <ReceiveDeliveryScreen />,
+    permission: PERMISSIONS.receiptRecord,
+  },
+  {
     path: "/purchasing/receipts",
+    group: "buy",
     labelKey: "nav.receipts",
     element: <ReceiptsScreen />,
     permission: PERMISSIONS.orderView,
   },
   {
     path: "/purchasing/returns",
+    group: "buy",
     labelKey: "nav.supplierReturns",
     element: <SupplierReturnsScreen />,
     permission: PERMISSIONS.orderView,
   },
   {
     path: "/purchasing/payments",
+    group: "buy",
     labelKey: "nav.supplierPayments",
     element: <SupplierPaymentsScreen />,
     permission: PERMISSIONS.billView,
   },
   {
     path: "/reports/statements",
+    group: "money",
     labelKey: "nav.statements",
     element: <StatementsScreen />,
     permission: PERMISSIONS.profitAndLossView,
   },
   {
     path: "/reports/analysis",
+    group: "money",
     labelKey: "nav.analysis",
     element: <AnalysisScreen />,
     permission: PERMISSIONS.salesAnalysisView,
   },
   {
     path: "/reports/valuation",
+    group: "stock",
     labelKey: "nav.valuation",
     element: <ValuationScreen />,
     permission: PERMISSIONS.valuationView,
   },
   {
     path: "/operations/backups",
+    group: "setup",
     labelKey: "nav.backups",
     element: <BackupScreen />,
     permission: PERMISSIONS.userManage,
   },
   {
     path: "/operations/import",
+    group: "setup",
     labelKey: "nav.import",
     element: <ImportScreen />,
     permission: PERMISSIONS.catalogManage,
   },
   {
     path: "/operations/system",
+    group: "setup",
     labelKey: "nav.system",
     element: <SystemPanel />,
     permission: PERMISSIONS.sessionView,
   },
   {
     path: "/accounting/trial-balance",
+    group: "money",
     labelKey: "nav.trialBalance",
     element: <TrialBalanceScreen />,
     permission: PERMISSIONS.accountView,
   },
   // No permission: changing your own password is not an administrative act, and the person who
   // most needs it may hold nothing at all (1.11 D3).
-  { path: "/account/password", labelKey: "nav.password", element: <ChangePasswordScreen /> },
+  { path: "/account/password", group: "setup", labelKey: "nav.password", element: <ChangePasswordScreen /> },
   // No permission: the guide is the one screen a user who can do nothing else must still reach,
   // because it is where they learn what they are looking at.
-  { path: "/help", labelKey: "nav.help", element: <HelpScreen /> },
+  { path: "/help", group: "overview", labelKey: "nav.help", element: <HelpScreen /> },
 ];

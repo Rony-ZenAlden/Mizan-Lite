@@ -312,3 +312,71 @@ func TestTheCustomisedBuildAssetsAreTracked(t *testing.T) {
 		}
 	}
 }
+
+// TestTheWindowsInstallerChecksForWebView2
+//
+// # The single most likely first-run failure on a fresh Windows
+//
+// A Wails application IS a WebView2 host. Without the runtime it does not start — it shows nothing
+// and exits, which reads to a user as "the program is broken" rather than "a component is
+// missing".
+//
+// Windows 11 ships WebView2. Windows 10 usually has it through Edge, and "usually" is not a
+// guarantee anybody can act on. So the installer must check and install it, and this asserts the
+// check is still there — a Wails upgrade regenerating `wails_tools.nsh` could silently drop it.
+func TestTheWindowsInstallerChecksForWebView2(t *testing.T) {
+	root := repoRoot(t)
+
+	tools, err := os.ReadFile(filepath.Join(root, "build/windows/installer/wails_tools.nsh"))
+	if err != nil {
+		t.Fatalf("reading the installer tools: %v", err)
+	}
+	body := string(tools)
+
+	// BOTH registry scopes. A per-user install of Mizan on a machine where WebView2 was installed
+	// per-machine — or the reverse — would otherwise reinstall it, or worse, conclude it is
+	// absent and fail.
+	for _, key := range []string{
+		`SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients`, // machine-wide
+		`Software\Microsoft\EdgeUpdate\Clients`,             // per-user
+	} {
+		if !strings.Contains(body, key) {
+			t.Errorf("the installer does not check %s for WebView2", key)
+		}
+	}
+	if !strings.Contains(body, "MicrosoftEdgeWebview2Setup.exe") {
+		t.Error("the installer has no WebView2 installer to fall back on")
+	}
+	if !strings.Contains(body, "/silent /install") {
+		t.Error("the WebView2 install is not silent, so it would interrupt the installer")
+	}
+
+	// And the file is actually there. A reference to a missing file fails the NSIS build, but it
+	// fails it minutes in, naming a path rather than the cause.
+	bootstrapper := filepath.Join(root, "build/windows/installer/tmp/MicrosoftEdgeWebview2Setup.exe")
+	info, err := os.Stat(bootstrapper)
+	if err != nil {
+		t.Fatalf("the WebView2 installer is not bundled: %v", err)
+	}
+
+	// # Which installer is bundled, and why the size is asserted
+	//
+	// Microsoft ships two. The BOOTSTRAPPER is ~1.7MB and downloads the runtime at install time;
+	// the EVERGREEN STANDALONE installer is ~130MB and needs no network.
+	//
+	// This bundles the bootstrapper, so **installing Mizan on a Windows machine that lacks
+	// WebView2 requires an internet connection once** — which sits awkwardly with an
+	// offline-first product, and is documented in docs/RELEASE.md §3 rather than left for a
+	// shopkeeper to discover.
+	//
+	// The size check is what makes a switch to the standalone installer VISIBLE: swapping the
+	// file without updating this test and the documentation would change the offline story
+	// silently.
+	const bootstrapperMax = 8 << 20
+	if info.Size() > bootstrapperMax {
+		t.Errorf("the bundled WebView2 installer is %d bytes — larger than a bootstrapper, so "+
+			"this is probably the offline standalone one. That is a legitimate change and it "+
+			"changes what the product promises about installing without a network: update this "+
+			"test and docs/RELEASE.md §3 together", info.Size())
+	}
+}

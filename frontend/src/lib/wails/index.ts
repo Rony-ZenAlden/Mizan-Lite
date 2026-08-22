@@ -281,6 +281,7 @@ export const PERMISSIONS = {
   auditPayload: "audit.entry.view_payload",
   accountView: "accounting.account.view",
   catalogView: "catalog.view",
+  catalogManage: "catalog.manage",
   customerView: "partner.customer.view",
   supplierView: "partner.supplier.view",
   priceView: "pricing.view",

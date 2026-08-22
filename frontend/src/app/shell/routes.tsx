@@ -17,6 +17,17 @@ import { DebtsScreen } from "@/modules/expenses/DebtsScreen";
 import { InvoicesScreen } from "@/modules/sales/InvoicesScreen";
 import { TrialBalanceScreen } from "@/modules/accounting/TrialBalanceScreen";
 import { SystemPanel } from "@/app/shell/SystemPanel";
+import { DashboardScreen } from "@/modules/insight/DashboardScreen";
+import { StatementsScreen } from "@/modules/insight/StatementsScreen";
+import { AnalysisScreen } from "@/modules/insight/AnalysisScreen";
+import { ValuationScreen } from "@/modules/insight/ValuationScreen";
+import { NoticeCentre } from "@/modules/operations/NoticeCentre";
+import { BackupScreen } from "@/modules/operations/BackupScreen";
+import { ImportScreen } from "@/modules/operations/ImportScreen";
+import { ReceiptsScreen } from "@/modules/purchasing/ReceiptsScreen";
+import { SupplierReturnsScreen } from "@/modules/purchasing/SupplierReturnsScreen";
+import { SupplierPaymentsScreen } from "@/modules/purchasing/SupplierPaymentsScreen";
+import { HelpScreen } from "@/modules/help/HelpScreen";
 
 /**
  * One route.
@@ -44,7 +55,14 @@ export interface AppRoute {
  * list, so a screen cannot be reachable without appearing in navigation or vice versa.
  */
 export const ROUTES: AppRoute[] = [
-  { path: "/", labelKey: "nav.dashboard", element: <SystemPanel /> },
+  // The OVERVIEW is the landing screen, not the system panel.
+  //
+  // Until 10.9 the dashboard route rendered `SystemPanel` — health and job status — because it
+  // was written in Phase 1, before any business figures existed. Phase 8 then built a dashboard
+  // of revenue, margin and stock value and nothing routed to it, so the screen a shopkeeper
+  // lands on showed them the outbox queue depth.
+  { path: "/", labelKey: "nav.overview", element: <DashboardScreen /> },
+  { path: "/needs-attention", labelKey: "nav.notices", element: <NoticeCentre /> },
   {
     path: "/admin/users",
     labelKey: "nav.users",
@@ -139,6 +157,60 @@ export const ROUTES: AppRoute[] = [
     permission: PERMISSIONS.accountView,
   },
   {
+    path: "/purchasing/receipts",
+    labelKey: "nav.receipts",
+    element: <ReceiptsScreen />,
+    permission: PERMISSIONS.orderView,
+  },
+  {
+    path: "/purchasing/returns",
+    labelKey: "nav.supplierReturns",
+    element: <SupplierReturnsScreen />,
+    permission: PERMISSIONS.orderView,
+  },
+  {
+    path: "/purchasing/payments",
+    labelKey: "nav.supplierPayments",
+    element: <SupplierPaymentsScreen />,
+    permission: PERMISSIONS.billView,
+  },
+  {
+    path: "/reports/statements",
+    labelKey: "nav.statements",
+    element: <StatementsScreen />,
+    permission: PERMISSIONS.profitAndLossView,
+  },
+  {
+    path: "/reports/analysis",
+    labelKey: "nav.analysis",
+    element: <AnalysisScreen />,
+    permission: PERMISSIONS.salesAnalysisView,
+  },
+  {
+    path: "/reports/valuation",
+    labelKey: "nav.valuation",
+    element: <ValuationScreen />,
+    permission: PERMISSIONS.valuationView,
+  },
+  {
+    path: "/operations/backups",
+    labelKey: "nav.backups",
+    element: <BackupScreen />,
+    permission: PERMISSIONS.userManage,
+  },
+  {
+    path: "/operations/import",
+    labelKey: "nav.import",
+    element: <ImportScreen />,
+    permission: PERMISSIONS.catalogManage,
+  },
+  {
+    path: "/operations/system",
+    labelKey: "nav.system",
+    element: <SystemPanel />,
+    permission: PERMISSIONS.sessionView,
+  },
+  {
     path: "/accounting/trial-balance",
     labelKey: "nav.trialBalance",
     element: <TrialBalanceScreen />,
@@ -147,4 +219,7 @@ export const ROUTES: AppRoute[] = [
   // No permission: changing your own password is not an administrative act, and the person who
   // most needs it may hold nothing at all (1.11 D3).
   { path: "/account/password", labelKey: "nav.password", element: <ChangePasswordScreen /> },
+  // No permission: the guide is the one screen a user who can do nothing else must still reach,
+  // because it is where they learn what they are looking at.
+  { path: "/help", labelKey: "nav.help", element: <HelpScreen /> },
 ];

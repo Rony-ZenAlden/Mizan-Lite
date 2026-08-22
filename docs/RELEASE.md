@@ -79,8 +79,18 @@ installed.
 - [ ] Run it. **SmartScreen will warn** ("Windows protected your PC") until §4 is done — choose
       *More info → Run anyway*.
 - [ ] Confirm the installer offers a sensible path, creates a Start-menu entry, and completes.
-- [ ] Launch Mizan. Confirm the WebView2 runtime is found or installed — the installer bundles
-      the bootstrapper, and this is the single most likely first-run failure on a fresh Windows.
+- [ ] Launch Mizan. Confirm WebView2 is found or installed. **This is the single most likely
+      first-run failure on a fresh Windows**, and it has a caveat worth knowing:
+
+      The installer checks both the machine-wide and per-user registry keys, and falls back to the
+      bundled `MicrosoftEdgeWebview2Setup.exe`. That file is the **bootstrapper** (~1.7MB), which
+      DOWNLOADS the runtime — so installing on a machine without WebView2 **needs an internet
+      connection once**. Windows 11 ships the runtime; Windows 10 usually has it through Edge.
+
+      For a genuinely offline install, replace that file with Microsoft's **Evergreen Standalone
+      Installer** (~130MB, per-architecture), update `TestTheWindowsInstallerChecksForWebView2`'s
+      size bound, and update this paragraph. The trade is a 130MB installer against never needing
+      a network — a decision for whoever ships to shops with no reliable connection.
 - [ ] Confirm the setup wizard appears and a company can be provisioned.
 - [ ] Confirm `%APPDATA%\Mizan` holds `mizan.db` and a `backups` folder with a manifest.
 - [ ] Uninstall from Add/Remove Programs. Confirm it removes cleanly and **leaves the data

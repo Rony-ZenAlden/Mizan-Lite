@@ -762,3 +762,97 @@ f8a98975…  Mizan ERP 0.1.0-dev.0d9100b.exe
 They are marked `-dev` because no tag exists. That is `scripts/version.sh` working as Step 1.13
 designed: **a binary must never be mistaken for a release it is not**, and tagging is the act that
 makes one.
+
+---
+
+## Step 10.9 — the v1.0.0 release
+
+Three things were asked for. The first uncovered a blocker neither of us had named.
+
+### The blocker: eighteen routes for thirty-nine screens
+
+Before any of this could be called shippable, navigation had **18 routes** against **39 built
+screens**. Everything from Phases 8, 9 and 10.1 was unreachable from the menu:
+
+- the dashboard, financial statements, sales and spend analysis, stock valuation
+- the notice centre, backups and restore, import
+- deliveries, supplier returns, supplier payments
+
+Worse than absent: **the landing route rendered `SystemPanel`** — job status and outbox depth —
+because it was written in Phase 1 before any business figures existed. A shopkeeper opening Mizan
+would have been shown the queue depth of an internal message bus.
+
+This is the same defect class 10.1 found and the same one 7.6 found at its worst: **built, tested,
+and never connected to a caller.** Three phases in a row, in three different layers — bindings,
+screens, and now routing. The pattern is not carelessness in any one place; it is that *the
+connection is a separate act from the construction*, and nothing was checking the connection.
+
+Thirty routes now, and the landing screen is the dashboard.
+
+### The in-app guide
+
+`/help`, reachable by anybody signed in — **no permission**, because the guide is where a user who
+can do nothing else learns what they are looking at.
+
+Four chapters, thirteen sections: getting started and a day in the shop; how the modules work and
+why they cannot see each other; where data goes, one sale traced end to end through six modules;
+and how the build pipeline turns source into an installer.
+
+#### D1 — the prose lives beside the code, not in the translation catalogue
+
+Every other string is a key in `locales/*.json`, and should be: a label belongs with the thousand
+other labels.
+
+A guide is not labels. It is prose — paragraphs referencing each other, ordered steps whose
+numbering is the content, passages where English and Arabic must say the same thing and will not
+say it the same way. Split across a flat key file you get `help.architecture.para3` and no way to
+see whether the section still reads.
+
+Both languages sit in one structure, side by side, where a change to one is visibly a change the
+other needs. `it("says everything in both languages")` walks every block and fails on an empty
+half.
+
+#### D2 — the guide has its own language toggle, and its own direction
+
+The reader is often not the person the application is set up for: an Arabic-speaking shopkeeper
+hands the laptop to a bilingual relative; an English-speaking accountant is shown a screen in
+Arabic. Making them change the application's language to read a paragraph — and change it back —
+is worse than one button.
+
+`dir` is set on the guide's **subtree**, not the document. Reading in Arabic while the application
+runs in English must not flip the menu and the toolbar around the reader.
+
+#### The bug the tests found
+
+Seeding the language from `locale` in a `useState` initialiser looked right and was wrong: the
+initialiser runs at mount, before the provider has loaded preferences, so **an application set to
+Arabic opened the guide in English every time.**
+
+The fix separates "the reader chose" from "the reader has not touched it": until they choose, the
+guide follows the application; once they do, it stops. A deliberate choice overwritten by a
+background load is the more annoying of the two bugs.
+
+### WebView2, and a caveat that matters for this product
+
+The installer checks **both** registry scopes — machine-wide and per-user — and falls back to the
+bundled installer. `TestTheWindowsInstallerChecksForWebView2` asserts all of it, because a Wails
+upgrade regenerating `wails_tools.nsh` could drop it silently, and the symptom is an application
+that starts and shows nothing.
+
+The bundled file is the **bootstrapper** (1.7MB), which downloads the runtime. So **installing on
+a Windows machine that lacks WebView2 needs an internet connection once** — which sits awkwardly
+with an offline-first product for shops with unreliable connections.
+
+The alternative is Microsoft's Evergreen Standalone installer at ~130MB. That is a trade about
+what the product promises, not a bug to fix quietly, so it is documented in `docs/RELEASE.md §3`
+with the steps — and the test asserts the bundled file's SIZE, so swapping it cannot change the
+offline story without the change being visible.
+
+### Version 1.0.0
+
+`VERSION` and `wails.json` both say `1.0.0`; the packaging test asserts they agree. A tag makes
+`scripts/version.sh` stop marking builds `-dev`.
+
+### The drills
+
+D262–D265, four, all failed first time.

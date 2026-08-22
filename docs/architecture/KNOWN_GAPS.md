@@ -134,6 +134,51 @@ Carried from the Phase 10 review, listed here so one document holds them all.
 
 ---
 
+## 3. "Out of stock" is not "low stock"
+
+**Recorded:** Phase 10.16, while building the KPI tiles.
+**Status:** deliberate. The tile counts what can be counted; the tile that was asked for needs a
+schema change.
+
+### What ships
+
+`inventory.out_of_stock` counts stock levels at or below zero — a fact, read straight from
+`stock_levels`. At or below rather than exactly zero, because a negative level means stock went
+out that was never booked in, and a shop with that problem most needs to see it.
+
+### Why not "low stock"
+
+"Low" needs a threshold per product, and no such column exists. Any number invented here is right
+for nothing: five is a week of cement and a year of engine blocks. A single global threshold would
+alarm constantly on fast movers and stay silent on the slow ones that actually run out.
+
+### What would close it
+
+A `reorder_point_micro` on the variant — per warehouse, since a shop and its back store do not
+need the same cover — plus a screen to set it and a column on the stock list to show it.
+
+```sql
+-- Sketch. Not written, not tested.
+ALTER TABLE stock_levels ADD COLUMN reorder_point_micro INTEGER NOT NULL DEFAULT 0;
+```
+
+### What it would cost
+
+- **A number somebody has to maintain.** A reorder point that is never revisited is worse than
+  none: it fires on products the shop stopped selling and stays quiet on the ones it now sells
+  ten times more of. The feature is the screen and the habit, not the column.
+- **A decision about who sets it.** Derived from sales velocity, it becomes a forecast — which is
+  a different feature with different failure modes, and one that needs history before it can say
+  anything.
+
+### Recommendation
+
+**Leave it.** Out-of-stock is the alert a shop acts on today, and it is honest about what it
+counts. Revisit when somebody using Mizan asks for the threshold — at which point they will also
+say what they want it derived from, which is the part that cannot be guessed from here.
+
+---
+
 ## Signing
 
 Unsigned on both platforms, by Phase 0's decision.

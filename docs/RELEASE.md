@@ -104,6 +104,11 @@ installed.
       downloaded one.
 - [ ] Confirm the setup wizard appears and a company can be provisioned.
 - [ ] Confirm `%APPDATA%\Mizan` holds `mizan.db` and a `backups` folder with a manifest.
+- [ ] **Close Mizan and reopen it. Confirm a second snapshot appears, named `on_close-…`.**
+      Since 10.16 the app snapshots on the way out as well as daily, so a day's trading is never
+      left with only the live database as its copy. It skips when a snapshot under an hour old
+      already exists — so if the first launch was minutes ago, trade a little or wait before
+      checking, rather than reading the skip as a fault.
 - [ ] Uninstall from Add/Remove Programs. Confirm it removes cleanly and **leaves the data
       directory alone** — an uninstaller that deletes a shop's books is unrecoverable.
 

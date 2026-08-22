@@ -62,12 +62,12 @@ export function HelpScreen() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h2 className="text-base font-medium text-text">
-            {rtl ? "دليل ميزان" : "The Mizan guide"}
+            {rtl ? "دليل استخدام نظام ميزان" : "How to Use Mizan ERP"}
           </h2>
           <p className="text-sm text-text-muted">
             {rtl
-              ? "كيف يعمل البرنامج، وكيف تنساب البيانات، وماذا تفعل يومياً."
-              : "How it works, where your data goes, and what to do day to day."}
+              ? "شرح خطوة بخطوة لكل شاشة وكل وحدة في النظام."
+              : "A step-by-step walkthrough of every screen and every module."}
           </p>
         </div>
 

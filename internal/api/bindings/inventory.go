@@ -92,6 +92,8 @@ func inventoryPolicies() map[string]policy.Policy {
 		"Movements":   policy.Requires(inventory.PermStockView),
 		"CheckLedger": policy.Requires(inventory.PermStockView),
 		"Adjust":      policy.Requires(inventory.PermStockAdjust),
+		// Counting is adjusting, asked the other way round — so it demands the same permission.
+		"CountStock": policy.Requires(inventory.PermStockAdjust),
 	}
 }
 

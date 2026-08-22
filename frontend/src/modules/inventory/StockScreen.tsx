@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
-import { checkLedger, stockOnHand, type StockRow } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Input, Table } from "@/shared/ui";
+import { checkLedger, PERMISSIONS, stockOnHand, type StockRow } from "@/lib/wails";
+import { Can } from "@/app/session/Can";
+import { CountDialog } from "./CountDialog";
+import { Alert, Badge, Button, EmptyState, Input, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity, isNegativeQuantity, isZeroQuantity } from "./quantity";
@@ -22,6 +24,7 @@ export function StockScreen() {
   const errorText = useErrorText();
 
   const [search, setSearch] = useState("");
+  const [counting, setCounting] = useState<StockRow | null>(null);
   const [selected, setSelected] = useState<StockRow | null>(null);
 
   const stock = useQuery({ queryKey: ["inventory", "stock"], queryFn: () => stockOnHand("") });
@@ -68,6 +71,12 @@ export function StockScreen() {
         onChange={(event) => setSearch(event.target.value)}
       />
 
+      <CountDialog
+        row={counting}
+        warehouseId=""
+        onClose={() => setCounting(null)}
+      />
+
       <Table<StockRow>
         caption={t("stock.title")}
         rowKey={(row) => row.variantId}
@@ -88,6 +97,20 @@ export function StockScreen() {
             ),
           },
           { key: "name", header: t("stock.product"), cell: (row) => row.productName },
+          {
+            key: "count",
+            header: "",
+            // Behind the adjust permission, not the view one: the person who can SEE stock and
+            // the person who can change what the system believes about it are different people
+            // in any business large enough to have both (4.4).
+            cell: (row) => (
+              <Can permission={PERMISSIONS.stockAdjust}>
+                <Button variant="ghost" size="sm" onClick={() => setCounting(row)}>
+                  {t("stock.count")}
+                </Button>
+              </Can>
+            ),
+          },
           {
             key: "onHand",
             header: t("stock.onHand"),

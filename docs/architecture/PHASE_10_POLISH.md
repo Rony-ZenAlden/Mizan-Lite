@@ -856,3 +856,88 @@ offline story without the change being visible.
 ### The drills
 
 D262–D265, four, all failed first time.
+
+---
+
+## Step 10.10 — the workflows that were not there, and the guide
+
+### "Simplify registering products" — there was nothing to simplify
+
+The catalogue screen was READ-ONLY, and so was the whole catalogue façade: `Categories`,
+`Products`, `Product`, `Units`, `Scan`, `Price`. **No `CreateProduct` binding existed.**
+
+`catalog.CreateProduct` has existed since Phase 3 and the CSV importer has used it since 9.4. So
+registering a product was possible — by opening a text editor, writing a CSV, and importing it.
+
+That is the **fourth** appearance of one pattern, in a fourth layer:
+
+| Phase | Built | Missing |
+|-------|-------|---------|
+| 7.6 | thirteen number series | anything that created them |
+| 10.1 | returns, landed costs | bindings and screens |
+| 10.9 | eleven screens | routes |
+| 10.10 | product creation, stock counting | bindings and forms |
+
+The lesson is not carelessness in any one place. **Connecting is a separate act from building, and
+nothing in this project was checking connections** — each was found by somebody going looking, and
+three of the four by a request to do something else.
+
+### D1 — the form asks two questions
+
+The service takes eleven fields. The form asks for a code and a name; three more are behind *More
+options*, already answered.
+
+What is hidden has an answer right for most shops most of the time: goods rather than a service,
+the company's own unit list, no category. **A product that cannot be saved until it is filed is a
+product somebody keys into a notebook instead.**
+
+The form stays open after saving and clears its fields, because somebody adding products is
+usually adding several.
+
+### D2 — the count asks what is THERE, not the difference
+
+`Inventory.Adjust` takes a delta, which is what the ledger stores and the right shape for a
+movement.
+
+It is the wrong question to ask a person holding a shelf. They know there are eleven; making them
+work out that eleven is two fewer than the thirteen on screen is arithmetic the computer should
+do, and **the subtraction a tired person gets wrong at the end of a long day.**
+
+`CountStock` converts. The movement is still a delta, split back into a magnitude and a direction
+flag — because 4.2 put the direction in a flag deliberately, and a signed quantity puts the
+direction inside the number.
+
+A count that AGREES records nothing and returns success. A movement of zero is a ledger row saying
+nothing happened, which 4.3 already refuses — and "the count agreed" is not an error.
+
+### Two defects my own layer introduced, both caught by tests
+
+- **The empty unit was passed straight through** and every creation failed with
+  `catalog.invalid_unit`. The service was right to refuse; the form's job is to not ask, and
+  *answering the question it skipped* is the binding's job. It now resolves the company's own
+  default.
+- **The movement was missing its product.** A shelf row knows a variant — that is what a shelf row
+  is — and the domain refused a movement it could not place. `ProductOfVariant` was exposed for
+  it: the repository had answered that since Phase 3 and nothing had asked from outside.
+
+### The guide, expanded to a walkthrough
+
+`/help` is now **How to Use Mizan ERP** / **دليل استخدام نظام ميزان** — five chapters, eighteen
+sections, and a per-module walkthrough covering products, stock, selling, buying, people,
+spending, reports, operations and settings.
+
+Two tests hold it to that: one requires every module id to be present, and one requires each
+walkthrough section to carry at least one ordered list of **three or more** steps with the **same
+count in both languages** — because a missing step in one language is a reader following
+instructions that skip something.
+
+The module list is written out rather than derived from `ROUTES`. Deriving it would keep it in
+step automatically and would also let a route be added with a section that says nothing, since the
+id would match and the prose would be empty. **Adding a module should mean deciding what the guide
+says about it.**
+
+### The drills
+
+D266–D271, six, all failed once each was a compilable mutation. Two needed re-aiming: deleting a
+field left an unused variable rather than a behaviour change, which is a build error and not a
+drill.

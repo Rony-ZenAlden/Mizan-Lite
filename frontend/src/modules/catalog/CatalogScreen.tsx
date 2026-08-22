@@ -5,6 +5,10 @@ import { productCategories, products, type Category, type ProductRow } from "@/l
 import { Alert, EmptyState, Input, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { ProductDetail } from "./ProductDetail";
+import { NewProductForm } from "./NewProductForm";
+import { Can } from "@/app/session/Can";
+import { Button } from "@/shared/ui";
+import { PERMISSIONS } from "@/lib/wails";
 
 /**
  * The catalog browse screen: the category tree beside the products in it.
@@ -20,6 +24,7 @@ export function CatalogScreen() {
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const categories = useQuery({ queryKey: ["catalog", "categories"], queryFn: productCategories });
   const rows = useQuery({ queryKey: ["catalog", "products"], queryFn: products });
@@ -52,10 +57,21 @@ export function CatalogScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("catalog.title")}</h2>
-        <p className="text-sm text-text-muted">{t("catalog.help")}</p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-base font-medium text-text">{t("catalog.title")}</h2>
+          <p className="text-sm text-text-muted">{t("catalog.help")}</p>
+        </div>
+        {/* Behind the permission that also guards the importer: they add products by two routes,
+            and a separate grant for one would protect nothing. */}
+        <Can permission={PERMISSIONS.catalogManage}>
+          <Button onClick={() => setAdding((v) => !v)}>
+            {adding ? t("catalog.done") : t("catalog.newProduct")}
+          </Button>
+        </Can>
       </header>
+
+      {adding && <NewProductForm onCreated={() => undefined} />}
 
       <div className="flex flex-col gap-4 md:flex-row">
         <nav aria-label={t("catalog.categories")} className="md:w-56 md:shrink-0">

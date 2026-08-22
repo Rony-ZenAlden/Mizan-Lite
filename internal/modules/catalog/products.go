@@ -564,6 +564,18 @@ const (
 	purchaseDirection
 )
 
+// ProductOfVariant answers "which product is this a variant of".
+//
+// Exposed in 10.10 for the stock-count screen, which knows a variant — that is what a shelf row
+// is — and needs the product to record a movement. The repository has answered this since Phase
+// 3; nothing had asked it from outside.
+func (s *Service) ProductOfVariant(
+	ctx context.Context, companyID, variantID id.ID,
+) (domain.Product, error) {
+	_, product, err := s.repos.VariantWithProduct(ctx, companyID, variantID)
+	return product, err
+}
+
 // facts is the shared body. The two exported forms differ only in their default unit and in the
 // flag they check.
 func (s *Service) facts(

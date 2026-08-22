@@ -1692,3 +1692,52 @@ export function addLandedCost(input: NewLandedCost): Promise<LandedCost> {
 export function applyLandedCost(chargeId: string): Promise<boolean> {
   return call<boolean>("Purchasing", "ApplyLandedCost", chargeId);
 }
+
+// ── Catalogue and stock: the write actions (Phase 10.10) ───────────────────────
+//
+// The services have existed since Phases 3 and 4; the bindings and the forms did not, so
+// registering a product was only possible by writing a CSV and importing it.
+
+export interface NewProduct {
+  code: string;
+  name: string;
+  /** A unit code — "PCS", "KG". Empty means the default. */
+  unit: string;
+  /** A category code. Empty is ordinary: filing can happen later. */
+  category: string;
+  /** "goods" or "service". Empty means goods. */
+  type: string;
+}
+
+export interface Unit {
+  code: string;
+  name: string;
+  nameKey: string;
+  symbol: string;
+  categoryId: string;
+  allowsFractional: boolean;
+}
+
+/** The units a product can be stocked in. Bound in 10.10, alongside the form that needs them. */
+export function units(): Promise<Unit[]> {
+  return call<Unit[]>("Catalog", "Units");
+}
+
+export function createProduct(input: NewProduct): Promise<ProductRow> {
+  return call<ProductRow>("Catalog", "CreateProduct", input);
+}
+
+/**
+ * Records what is ACTUALLY on the shelf.
+ *
+ * The movement is still a delta — this converts, so nobody has to work out that eleven is two
+ * fewer than thirteen while holding a clipboard.
+ */
+export function countStock(input: {
+  variantId: string;
+  warehouseId: string;
+  countedMicro: string;
+  reason: string;
+}): Promise<MovementRow> {
+  return call<MovementRow>("Inventory", "CountStock", input);
+}

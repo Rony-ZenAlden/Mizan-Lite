@@ -105,7 +105,7 @@ describe("guide screen", () => {
   it("opens in the application's language and can be switched without changing it", async () => {
     renderApp(<HelpScreen />, { locale: "en" });
 
-    expect(await screen.findByText("The Mizan guide")).toBeInTheDocument();
+    expect(await screen.findByText("How to Use Mizan ERP")).toBeInTheDocument();
 
     const { userEvent } = await import("@testing-library/user-event").then((m) => ({
       userEvent: m.default,
@@ -113,7 +113,7 @@ describe("guide screen", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "العربية" }));
 
-    expect(await screen.findByText("دليل ميزان")).toBeInTheDocument();
+    expect(await screen.findByText("دليل استخدام نظام ميزان")).toBeInTheDocument();
 
     // The APPLICATION is still English. A guide that flipped the menu and the toolbar around the
     // reader would be worse than one in the wrong language — the person reading it is often not
@@ -130,7 +130,7 @@ describe("guide screen", () => {
     });
     renderApp(<HelpScreen />, { locale: "ar" });
 
-    const guide = await screen.findByText("دليل ميزان");
+    const guide = await screen.findByText("دليل استخدام نظام ميزان");
     const section = guide.closest("section");
     expect(section).toHaveAttribute("dir", "rtl");
   });
@@ -169,6 +169,63 @@ describe("guide screen", () => {
     // who can do nothing else learns what they are looking at, so it is the one screen that must
     // not be gated.
     renderApp(<HelpScreen />, { locale: "en" });
-    expect(await screen.findByText("The Mizan guide")).toBeInTheDocument();
+    expect(await screen.findByText("How to Use Mizan ERP")).toBeInTheDocument();
+  });
+});
+
+describe("coverage of the system", () => {
+  it("walks through every module a user can reach", () => {
+    // # Why this list is written out rather than derived
+    //
+    // A guide that covers "most of it" is one somebody stops trusting the first time they look up
+    // the screen they are stuck on and find nothing. Deriving the list from ROUTES would keep it
+    // in step automatically — and would also let a route be added with a guide section that says
+    // nothing, because the id would match and the prose would be empty.
+    //
+    // So the list is deliberate, and adding a module means deciding what the guide says about it.
+    const covered = new Set(READING_ORDER);
+
+    for (const area of [
+      "products",   // catalogue and registering what you sell
+      "stock",      // stock levels, counting, adjustments
+      "selling",    // the till, shifts, payment, returns
+      "buying",     // orders, deliveries, bills, supplier payments
+      "people",     // customers and suppliers
+      "spending",   // expenses and debts
+      "reports",    // statements, analysis, valuation
+      "operations", // backups, restore, import, notices
+      "settings",   // users, roles, sessions, audit
+    ]) {
+      expect(covered).toContain(area);
+    }
+  });
+
+  it("gives each module enough steps to follow, not a sentence", () => {
+    // A "step-by-step walkthrough" whose sections hold one paragraph is a summary. Each of these
+    // sections must carry at least one ordered list, because that is what a person follows with
+    // the screen open beside them.
+    const walkthroughs = CHAPTERS.find((c) => c.id === "using");
+    expect(walkthroughs).toBeDefined();
+
+    for (const section of walkthroughs!.sections) {
+      const steps = section.blocks.filter((b) => b.kind === "steps");
+      expect(
+        steps.length,
+        `${section.id} has no ordered steps to follow`,
+      ).toBeGreaterThanOrEqual(1);
+
+      for (const block of steps) {
+        if (block.kind !== "steps") continue;
+        expect(
+          block.en.length,
+          `${section.id} has a step list too short to walk anybody through`,
+        ).toBeGreaterThanOrEqual(3);
+        // Both languages hold the SAME number of steps. A missing step in one language is a
+        // reader following instructions that skip something.
+        expect(block.ar.length, `${section.id} has a different step count in Arabic`).toBe(
+          block.en.length,
+        );
+      }
+    }
   });
 });

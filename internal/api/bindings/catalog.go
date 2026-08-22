@@ -146,7 +146,11 @@ func catalogPolicies() map[string]policy.Policy {
 		"Product":    policy.Requires(catalog.PermCatalogView),
 		"Units":      policy.Requires(catalog.PermCatalogView),
 		"Scan":       policy.Requires(catalog.PermCatalogView),
-		"Price":      policy.Requires(pricing.PermPriceView),
+		// Creating a product is a CATALOGUE MANAGEMENT act, not a viewing one — the same
+		// permission the CSV importer demands, because they do the same thing by different
+		// routes and a second grant for one of them would protect nothing (10.10).
+		"CreateProduct": policy.Requires(catalog.PermCatalogManage),
+		"Price":         policy.Requires(pricing.PermPriceView),
 	}
 }
 

@@ -179,7 +179,352 @@ export const CHAPTERS: Chapter[] = [
     ],
   },
 
-  // ── 2. How it is built ────────────────────────────────────────────────────────
+  // ── 2. Using each part ────────────────────────────────────────────────────────
+  {
+    id: "using",
+    titleEn: "Using each part",
+    titleAr: "استخدام كل جزء",
+    sections: [
+      {
+        id: "products",
+        titleEn: "Products and the catalogue",
+        titleAr: "الأصناف والدليل",
+        leadEn: "Register what you sell, once.",
+        leadAr: "سجّل ما تبيعه، مرة واحدة.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Open Catalogue from the menu.",
+              "Press New product.",
+              "Type a code — the short reference you use, such as OIL-1L. It must be unique, and Mizan refuses a duplicate rather than creating a second product nobody can tell apart.",
+              "Type the name as a customer would read it on a receipt.",
+              "Choose the unit: pieces, kilograms, litres. If you sell it one at a time, pieces is right.",
+              "Choose a category if you have one. You can leave this empty and file it later.",
+              "Save. The product is ready to sell immediately.",
+            ],
+            ar: [
+              "افتح «الدليل» من القائمة.",
+              "اضغط «صنف جديد».",
+              "اكتب رمزاً — الاختصار الذي تستخدمه، مثل OIL-1L. يجب أن يكون فريداً، ويرفض ميزان المكرر بدل إنشاء صنف ثانٍ لا يمكن تمييزه.",
+              "اكتب الاسم كما يقرؤه العميل على الفاتورة.",
+              "اختر الوحدة: قطعة، كيلوغرام، لتر. إن كنت تبيعه واحداً واحداً فالقطعة هي الصحيحة.",
+              "اختر التصنيف إن كان لديك. يمكنك تركه فارغاً وتصنيفه لاحقاً.",
+              "احفظ. الصنف جاهز للبيع فوراً.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "Adding many products at once? Operations → Import takes a spreadsheet with code and name columns, checks every row before writing anything, and tells you exactly which rows would fail.",
+            ar: "تضيف أصنافاً كثيرة دفعة واحدة؟ «التشغيل ← الاستيراد» يقبل ملفاً فيه عمودا الرمز والاسم، ويفحص كل صف قبل كتابة أي شيء، ويخبرك بالضبط أي الصفوف سيفشل.",
+          },
+          {
+            kind: "note",
+            en: "Every product gets one variant automatically. You never see it unless you sell the same product in several sizes or colours — then each size is a variant with its own stock and its own price.",
+            ar: "كل صنف يحصل على متغيّر واحد تلقائياً. لن تراه أبداً إلا إذا كنت تبيع الصنف نفسه بعدة أحجام أو ألوان — عندها يكون كل حجم متغيّراً له مخزونه وسعره.",
+          },
+        ],
+      },
+      {
+        id: "stock",
+        titleEn: "Stock and counting",
+        titleAr: "المخزون والجرد",
+        leadEn: "What is on the shelf, and correcting it when it is not.",
+        leadAr: "ما هو على الرف، وتصحيحه حين لا يكون كذلك.",
+        blocks: [
+          {
+            kind: "text",
+            en: "Stock changes on its own as you trade: a sale takes it out, a delivery puts it in. You only touch it directly when the shelf and the screen disagree.",
+            ar: "يتغيّر المخزون وحده مع التداول: البيع يُخرجه، والاستلام يُدخله. لا تلمسه مباشرة إلا حين يختلف الرف عن الشاشة.",
+          },
+          {
+            kind: "steps",
+            en: [
+              "Open Stock from the menu. Each row is a product in a warehouse, with what Mizan believes is there.",
+              "Find the product whose count is wrong.",
+              "Press Count and type what is ACTUALLY on the shelf — not the difference.",
+              "Give a short reason: damaged, miscounted, expired. This is what an auditor reads later.",
+              "Save. Mizan works out the difference and records a movement for it.",
+            ],
+            ar: [
+              "افتح «المخزون» من القائمة. كل سطر صنف في مستودع، ومعه ما يعتقد ميزان أنه موجود.",
+              "ابحث عن الصنف الذي عدده خاطئ.",
+              "اضغط «جرد» واكتب ما هو موجود فعلاً على الرف — لا الفرق.",
+              "اذكر سبباً مختصراً: تالف، خطأ في العدّ، منتهي الصلاحية. هذا ما يقرؤه المدقّق لاحقاً.",
+              "احفظ. يحسب ميزان الفرق ويسجّل حركة به.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "You type what is there, not the difference — because working out that eleven is two fewer than thirteen is arithmetic the computer should do, and the subtraction a tired person gets wrong at the end of a long day.",
+            ar: "تكتب ما هو موجود لا الفرق — لأن حساب أن أحد عشر أقل باثنين من ثلاثة عشر عملية يجب أن يقوم بها الحاسوب، وهي الطرح الذي يخطئ فيه المتعب في آخر يوم طويل.",
+          },
+          {
+            kind: "note",
+            en: "A stock adjustment needs its own permission. The person who can see stock and the person who can change what the system believes about it are different people in any business large enough to have both.",
+            ar: "تعديل المخزون يحتاج صلاحية خاصة. من يرى المخزون ومن يغيّر اعتقاد النظام عنه شخصان مختلفان في أي نشاط كبير بما يكفي ليضمّ الاثنين.",
+          },
+        ],
+      },
+      {
+        id: "selling",
+        titleEn: "Selling at the till",
+        titleAr: "البيع على الكاشير",
+        leadEn: "Open a shift, sell, take payment, close.",
+        leadAr: "افتح وردية، بِع، استلم، أغلق.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Open the Till. If no shift is open, open one and enter the cash you are starting with.",
+              "Scan a barcode or search for the product. It goes on the sale with its price already worked out.",
+              "Change the quantity if you need to; the line total follows.",
+              "Add a customer only if they want an invoice in their name. Most sales need none.",
+              "Press Pay. Choose cash, card, or transfer, and enter the amount.",
+              "Post the sale. Stock leaves, the books are written, and the invoice takes its number — all at once.",
+              "Print the receipt, or reprint it later from Invoices.",
+            ],
+            ar: [
+              "افتح «الكاشير». إن لم تكن هناك وردية مفتوحة، افتح واحدة وأدخل النقد الذي تبدأ به.",
+              "امسح الباركود أو ابحث عن الصنف. يُضاف إلى البيع بسعره محسوباً.",
+              "غيّر الكمية إن احتجت؛ يتبعها إجمالي السطر.",
+              "أضف عميلاً فقط إن أراد فاتورة باسمه. معظم المبيعات لا تحتاج ذلك.",
+              "اضغط «دفع». اختر نقداً أو بطاقة أو حوالة، وأدخل المبلغ.",
+              "رحّل البيع. يخرج المخزون وتُكتب الدفاتر وتأخذ الفاتورة رقمها — كل ذلك دفعة واحدة.",
+              "اطبع الفاتورة، أو أعد طباعتها لاحقاً من «الفواتير».",
+            ],
+          },
+          {
+            kind: "steps",
+            en: [
+              "At the end of the day, press Close shift.",
+              "Count the cash drawer and enter what is actually in it.",
+              "Mizan shows the difference against what it expected. A difference is recorded, not hidden — that is what the count is for.",
+            ],
+            ar: [
+              "في نهاية اليوم، اضغط «إغلاق الوردية».",
+              "عُدّ الدرج وأدخل ما فيه فعلاً.",
+              "يعرض ميزان الفرق عمّا توقّعه. الفرق يُسجَّل ولا يُخفى — وهذا هو الغرض من العدّ.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "A customer returning something: open the invoice from Invoices and press Return. Choose what comes back. The goods return to stock at what they originally cost, and the customer is credited what they were charged — two different figures, both correct.",
+            ar: "عميل يُرجع شيئاً: افتح الفاتورة من «الفواتير» واضغط «إرجاع». اختر ما يعود. تعود البضاعة إلى المخزون بتكلفتها الأصلية، ويُمنح العميل ما دُفع — رقمان مختلفان وكلاهما صحيح.",
+          },
+        ],
+      },
+      {
+        id: "buying",
+        titleEn: "Buying from suppliers",
+        titleAr: "الشراء من الموردين",
+        leadEn: "Order, receive, get invoiced, pay.",
+        leadAr: "اطلب، استلم، افوتر، ادفع.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Purchases → Orders → New order. Choose the supplier and add what you want.",
+              "Place the order. Nothing has moved and nothing is owed — an order is an intention.",
+              "When the goods arrive, open Deliveries and record what actually came. It may be less than ordered, and that is normal.",
+              "Stock rises immediately. The amount owed is set aside even though no invoice has arrived.",
+              "When the supplier's invoice comes, open Bills → New bill, pick the deliveries it covers, and enter their invoice number.",
+              "Post the bill. What was set aside clears exactly. If they charged a different price, the difference goes onto the stock still on hand.",
+              "Pay from Supplier payments when you settle up.",
+            ],
+            ar: [
+              "«المشتريات ← الأوامر ← أمر جديد». اختر المورّد وأضف ما تريد.",
+              "أرسل الأمر. لم يتحرّك شيء ولم يُستحق شيء — الأمر نيّة.",
+              "عند وصول البضاعة، افتح «الاستلامات» وسجّل ما وصل فعلاً. قد يكون أقل من المطلوب، وهذا طبيعي.",
+              "يرتفع المخزون فوراً. ويُخصَّص المبلغ المستحق رغم عدم وصول الفاتورة.",
+              "عند وصول فاتورة المورّد، افتح «الفواتير ← فاتورة جديدة»، اختر الاستلامات التي تغطيها، وأدخل رقم فاتورتهم.",
+              "رحّل الفاتورة. يُقفل المخصَّص بالضبط. وإن كان السعر مختلفاً، يذهب الفرق على المخزون المتبقي.",
+              "ادفع من «مدفوعات الموردين» عند التسوية.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "Freight, customs or clearing charges: open the delivery and add them under Charges. Recording a charge and putting it into the cost of the goods are two separate presses, because the second changes what every future sale of those goods is measured against.",
+            ar: "الشحن أو الجمارك أو التخليص: افتح الاستلام وأضفها تحت «الرسوم». تسجيل الرسم وإضافته إلى تكلفة البضاعة ضغطتان منفصلتان، لأن الثانية تغيّر ما تُقاس عليه كل بيعة مستقبلية لتلك البضاعة.",
+          },
+          {
+            kind: "note",
+            en: "Sending goods back: Purchases → Returns to suppliers. The supplier credits what they charged; the stock leaves at what that delivery cost you.",
+            ar: "إرجاع بضاعة: «المشتريات ← المرتجعات للموردين». يمنحك المورّد إشعاراً بما حمّلك، ويخرج المخزون بما كلّفك ذلك الاستلام.",
+          },
+        ],
+      },
+      {
+        id: "people",
+        titleEn: "Customers and suppliers",
+        titleAr: "العملاء والموردون",
+        leadEn: "Only the ones you need a record of.",
+        leadAr: "فقط من تحتاج سجلاً لهم.",
+        blocks: [
+          {
+            kind: "text",
+            en: "A walk-in sale needs no customer at all. Add one when you sell on credit, when they want an invoice in their name, or when you want to know what they buy.",
+            ar: "البيع لعميل عابر لا يحتاج سجلاً أصلاً. أضف عميلاً حين تبيع بالآجل، أو حين يريد فاتورة باسمه، أو حين تريد معرفة ما يشتريه.",
+          },
+          {
+            kind: "steps",
+            en: [
+              "Customers → New. A code and a name are enough.",
+              "Add a phone number if you have one — it is how you will find them again, faster than by name.",
+              "Set a credit limit only if you sell to them on account. Mizan refuses a sale that would take them over it.",
+              "Payment terms decide when their invoices become overdue, which is what the ageing report is built on.",
+            ],
+            ar: [
+              "«العملاء ← جديد». الرمز والاسم يكفيان.",
+              "أضف رقم هاتف إن وُجد — هو ما ستجدهم به لاحقاً، أسرع من الاسم.",
+              "ضع حدّ ائتمان فقط إن كنت تبيع لهم بالآجل. يرفض ميزان بيعة تتجاوزه.",
+              "شروط السداد تحدّد متى تصبح فواتيرهم متأخّرة، وعليها يُبنى تقرير الأعمار.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "One person can be both a customer and a supplier. Mizan keeps the two sides apart: what they owe you and what you owe them are shown separately, because netting them hides which one is at risk.",
+            ar: "قد يكون الشخص عميلاً ومورّداً معاً. يفصل ميزان بين الجانبين: ما لك عليهم وما لهم عليك يُعرضان منفصلين، لأن دمجهما يُخفي أيّهما في خطر.",
+          },
+        ],
+      },
+      {
+        id: "spending",
+        titleEn: "Expenses and debts",
+        titleAr: "المصروفات والديون",
+        leadEn: "Rent, wages, and money that is not a purchase.",
+        leadAr: "الإيجار والأجور والمال الذي ليس شراءً.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Money → Expenses → New. Choose a category — rent, wages, utilities. The category decides which account it lands in, so you never pick an account.",
+              "Enter the amount and who it was paid to.",
+              "Say whether you paid it now or owe it. Paid now takes the money; owed adds it to what you owe and appears on their statement.",
+              "Save. The books are written.",
+            ],
+            ar: [
+              "«المال ← المصروفات ← جديد». اختر تصنيفاً — إيجار، أجور، مرافق. التصنيف يحدّد الحساب الذي يقع فيه، فلا تختار حساباً أبداً.",
+              "أدخل المبلغ ولمن دُفع.",
+              "حدّد إن كنت دفعته الآن أم أنه مستحق. المدفوع الآن يأخذ المال، والمستحق يُضاف إلى ما عليك ويظهر في كشفهم.",
+              "احفظ. تُكتب الدفاتر.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "Debts are different from expenses: a loan taken or repaid, or the owner putting money in or taking it out. They move money without being a cost, so Money → Debts keeps them apart from anything that affects profit.",
+            ar: "الديون تختلف عن المصروفات: قرض أُخذ أو سُدِّد، أو مال أدخله المالك أو أخرجه. تحرّك المال دون أن تكون تكلفة، لذا يفصلها «المال ← الديون» عن كل ما يمسّ الربح.",
+          },
+        ],
+      },
+      {
+        id: "reports",
+        titleEn: "Reports",
+        titleAr: "التقارير",
+        leadEn: "What happened, and where you stand.",
+        leadAr: "ما حدث، وأين تقف.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Reports → Financial statements shows the profit and loss for a period, and the balance sheet at its end. Pick the dates at the top.",
+              "Reports → Sales & spend answers which products and which customers make money. Switch between sales and spend, and group by day, product, or partner.",
+              "Reports → Stock valuation shows what is on the shelf and what it is worth — and whether the accounts agree with it.",
+              "Any report can be exported to a spreadsheet with the button on the screen.",
+            ],
+            ar: [
+              "«التقارير ← القوائم المالية» تعرض الأرباح والخسائر لفترة، والميزانية في نهايتها. اختر التواريخ في الأعلى.",
+              "«التقارير ← المبيعات والمشتريات» يجيب أي الأصناف وأي العملاء يربحون. بدّل بين المبيعات والمشتريات، وجمّع حسب اليوم أو الصنف أو الشريك.",
+              "«التقارير ← تقييم المخزون» يعرض ما على الرف وقيمته — وهل توافقه الحسابات.",
+              "يمكن تصدير أي تقرير إلى ملف من الزر الموجود على الشاشة.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "Gross margin and net profit are different numbers and both are shown. Gross margin is what you made on the goods; net profit is that less rent, wages and everything else. Neither is labelled just 'profit', because reading one as the other is how a shop concludes it is doing well while losing money.",
+            ar: "مجمل الربح وصافي الربح رقمان مختلفان وكلاهما معروض. مجمل الربح ما ربحته من البضاعة؛ وصافي الربح هو ذلك ناقص الإيجار والأجور وكل ما عداها. ولا يُسمّى أيٌّ منهما «ربحاً» فقط، لأن قراءة أحدهما مكان الآخر هي كيف يستنتج متجر أنه بخير وهو يخسر.",
+          },
+        ],
+      },
+      {
+        id: "operations",
+        titleEn: "Backups, import, and looking after it",
+        titleAr: "النسخ الاحتياطية والاستيراد والعناية",
+        leadEn: "The screens you use rarely and need to work.",
+        leadAr: "الشاشات التي تستخدمها نادراً ويجب أن تعمل.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Operations → Backups lists every copy Mizan has taken. One is taken daily, automatically, and checked before it is kept.",
+              "Press Back up now before anything risky — a large import, a big stock count.",
+              "To go back to an earlier copy, press Restore beside it. Mizan copies your current data first, then asks you to close and reopen.",
+              "Copy a backup onto a USB stick once a week. This is the one thing Mizan cannot do for you.",
+            ],
+            ar: [
+              "«التشغيل ← النسخ الاحتياطية» يعرض كل نسخة أخذها ميزان. تُؤخذ واحدة يومياً تلقائياً، ويُتحقّق منها قبل الاحتفاظ بها.",
+              "اضغط «انسخ الآن» قبل أي أمر محفوف — استيراد كبير، جرد كبير.",
+              "للعودة إلى نسخة أقدم، اضغط «استعادة» بجانبها. ينسخ ميزان بياناتك الحالية أولاً، ثم يطلب إغلاق البرنامج وفتحه.",
+              "انسخ نسخة احتياطية على ذاكرة USB مرة كل أسبوع. هذا هو الشيء الوحيد الذي لا يستطيع ميزان فعله عنك.",
+            ],
+          },
+          {
+            kind: "steps",
+            en: [
+              "Operations → Import brings products or customers in from a spreadsheet.",
+              "Choose what you are importing and pick the file.",
+              "Press Check the file. Nothing is written — you see exactly what would go in and what would fail, row by row.",
+              "Only then does the Import button appear.",
+            ],
+            ar: [
+              "«التشغيل ← الاستيراد» يُدخل الأصناف أو العملاء من ملف.",
+              "اختر ما تستورده واختر الملف.",
+              "اضغط «افحص الملف». لا يُكتب شيء — ترى بالضبط ما سيدخل وما سيفشل، صفاً صفاً.",
+              "عندها فقط يظهر زر الاستيراد.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "Needs attention is where Mizan tells you about itself: books that do not balance, stock the accounts disagree with, a failed daily task, or no backup for days. Each disappears on its own when you fix the cause.",
+            ar: "«يحتاج انتباهاً» هو حيث يخبرك ميزان عن نفسه: دفاتر غير متوازنة، مخزون تخالفه الحسابات، مهمة يومية فشلت، أو غياب نسخة احتياطية لأيام. يختفي كل تنبيه وحده حين تعالج سببه.",
+          },
+        ],
+      },
+      {
+        id: "settings",
+        titleEn: "People and settings",
+        titleAr: "المستخدمون والإعدادات",
+        leadEn: "Who can do what.",
+        leadAr: "من يستطيع أن يفعل ماذا.",
+        blocks: [
+          {
+            kind: "steps",
+            en: [
+              "Users lists everybody who can sign in. Add one per person — a shared account tells you nothing about who did what.",
+              "Roles decide what each person can reach. A till operator needs to sell; they do not need to adjust stock or read margins.",
+              "A till operator can be given a PIN, so they sign in quickly at the counter without a password.",
+              "Sessions shows who is signed in now, and lets you end a session on a machine somebody walked away from.",
+              "Audit records every change: who, what, when, and what it was before.",
+            ],
+            ar: [
+              "«المستخدمون» يعرض كل من يمكنه الدخول. أضف واحداً لكل شخص — الحساب المشترك لا يخبرك من فعل ماذا.",
+              "«الأدوار» تحدّد ما يصل إليه كل شخص. عامل الكاشير يحتاج أن يبيع؛ ولا يحتاج تعديل المخزون ولا قراءة الهوامش.",
+              "يمكن إعطاء عامل الكاشير رمزاً سرياً ليدخل بسرعة عند الطاولة دون كلمة مرور.",
+              "«الجلسات» يعرض من هو داخل الآن، ويتيح إنهاء جلسة على جهاز تركه أحدهم.",
+              "«التدقيق» يسجّل كل تغيير: من ومتى وماذا وما كان قبله.",
+            ],
+          },
+          {
+            kind: "note",
+            en: "Change your own password from Account → Password. This needs no permission at all: the person who most needs it may hold nothing else.",
+            ar: "غيّر كلمة مرورك من «الحساب ← كلمة المرور». لا يحتاج ذلك أي صلاحية: من يحتاجه أكثر قد لا يملك شيئاً غيره.",
+          },
+        ],
+      },
+    ],
+  },
+
+  // ── 3. How it is built ────────────────────────────────────────────────────────
   {
     id: "architecture",
     titleEn: "How Mizan is built",
@@ -255,7 +600,7 @@ export const CHAPTERS: Chapter[] = [
     ],
   },
 
-  // ── 3. Where data goes ────────────────────────────────────────────────────────
+  // ── 4. Where data goes ────────────────────────────────────────────────────────
   {
     id: "data",
     titleEn: "Where your data goes",
@@ -353,7 +698,7 @@ export const CHAPTERS: Chapter[] = [
     ],
   },
 
-  // ── 4. Building and shipping ──────────────────────────────────────────────────
+  // ── 5. Building and shipping ──────────────────────────────────────────────────
   {
     id: "build",
     titleEn: "How Mizan is built and shipped",

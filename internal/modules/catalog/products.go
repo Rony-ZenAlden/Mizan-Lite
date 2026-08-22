@@ -16,6 +16,7 @@ import (
 const (
 	ActionCategoryCreated  = "catalog.category.created"
 	ActionProductCreated   = "catalog.product.created"
+	ActionProductUpdated   = "catalog.product.updated"
 	ActionAttributeCreated = "catalog.attribute.created"
 	ActionAttributeLinked  = "catalog.attribute.linked"
 
@@ -628,4 +629,90 @@ func (s *Service) facts(
 	}
 
 	return product, variant, lineUnit, inStock, nil
+}
+
+// EditProductInput is what a screen sends to change a product.
+type EditProductInput struct {
+	CompanyID id.ID
+	// Code identifies WHICH product, and is not itself editable — see domain.EditProduct for why
+	// a code that anything refers to must not be renamed.
+	Code        string
+	Name        string
+	Description string
+	// CategoryCode is a CODE, not an id — the same currency every other input in this module
+	// speaks, so a screen never has to look one up to send it. Empty means "filed nowhere".
+	CategoryCode string
+}
+
+// UpdateProduct changes the attributes a person may change.
+//
+// # Why this refuses far less than CreateProduct
+//
+// Creating a product decides its units, its tracking mode and its type — the facts every later
+// movement and every cost is derived from. Editing one changes its NAME, its description and
+// where it is filed, none of which any document depends on: §9.3 makes every invoice snapshot the
+// name it was sold under, so renaming rewrites nothing.
+//
+// That is why a product with two years of history can still be renamed here while
+// `ChangeStockUnit` refuses on the same product. The rules differ because the risks do.
+func (s *Service) UpdateProduct(ctx context.Context, in EditProductInput) (domain.Product, error) {
+	var updated domain.Product
+
+	err := s.db.Do(ctx, func(txCtx context.Context) error {
+		product, found, err := s.repos.ProductByCode(txCtx, in.CompanyID, in.Code)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errs.NotFound(domain.CodeInvalidProduct, "there is no such product").
+				WithParam("code", in.Code)
+		}
+		before := product
+
+		categoryID := id.ID("")
+		if code := strings.TrimSpace(in.CategoryCode); code != "" {
+			category, catFound, catErr := s.repos.CategoryByCode(txCtx, in.CompanyID, code)
+			if catErr != nil {
+				return catErr
+			}
+			if !catFound {
+				return errs.NotFound(domain.CodeInvalidCategory, "there is no such category").
+					WithParam("code", code)
+			}
+			categoryID = category.ID
+		}
+
+		product, err = product.Edit(domain.EditProduct{
+			Name:        in.Name,
+			Description: in.Description,
+			CategoryID:  categoryID,
+		})
+		if err != nil {
+			return err
+		}
+		if err = s.repos.UpdateProduct(txCtx, product); err != nil {
+			return err
+		}
+
+		// IN-TRANSACTION, like every other state change in this codebase (§15.3). An edit whose
+		// audit entry is written afterwards is an edit that can happen without one.
+		//
+		// Before and after both cross, because "the name changed" is not the useful fact — "it
+		// was called this and is now called that" is, and it is the only record of the old name
+		// once the column is overwritten.
+		if err = s.audit(txCtx, auditc.Auditable{
+			Action:      ActionProductUpdated,
+			EntityType:  EntityProduct,
+			EntityID:    product.ID,
+			EntityLabel: product.Code,
+			Before:      before,
+			After:       product,
+		}); err != nil {
+			return err
+		}
+
+		updated = product
+		return nil
+	})
+	return updated, err
 }

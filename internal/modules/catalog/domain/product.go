@@ -2,7 +2,9 @@ package domain
 
 import (
 	"sort"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
@@ -114,12 +116,15 @@ func AdoptCategory(c Category) Category { return c }
 // because §A.1 says every product has at least one and a constructor that can return a product
 // without one makes that a rule someone must remember rather than a fact of the type.
 type Product struct {
-	ID         id.ID
-	Code       string
-	Name       string
-	NameKey    string
-	CategoryID id.ID
-	Type       ProductType
+	ID      id.ID
+	Code    string
+	Name    string
+	NameKey string
+	// Description is free text a shop writes for itself. The schema has carried it since 0016;
+	// the domain did not read it until 10.15, because nothing edited a product.
+	Description string
+	CategoryID  id.ID
+	Type        ProductType
 
 	// The three units (§B.3). All in one category — checked at construction and again whenever
 	// one changes.
@@ -393,3 +398,65 @@ func (a Attribute) RequireVariantDefinable() error {
 	}
 	return nil
 }
+
+// EditProduct is what a person may change about a product after it exists.
+//
+// # What is mutable, and why each one is safe
+//
+// **Name.** Always, including after a product has traded — and that is not a compromise, it is a
+// consequence of §9.3. Every document snapshots the product name at the time it was written, so
+// an invoice from last year keeps saying what the customer bought. Renaming changes what the
+// product is called TODAY and rewrites nothing. A shop that mistypes a name at eight in the
+// morning must not have to live with it.
+//
+// **Description.** Free text the shop writes for itself. Nothing reads it but a person.
+//
+// **Category.** A filing decision, and filing changes. Reports group by the category a product is
+// in NOW, which is what somebody reorganising their catalogue wants — a report that grouped by
+// the category a product was in at the time would answer a question nobody asks.
+//
+// # What is NOT here, and why
+//
+// **Code** is the stable machine key. Barcodes, imports and integrations match on it, and
+// changing it after anything refers to it is a rename that looks like a deletion and a creation.
+// It is absent rather than guarded: a field this API cannot express cannot be changed by mistake.
+//
+// **Type**, **units** and **tracking** each restate history if changed after stock has moved —
+// `ChangeStockUnit` already refuses on `HasHistory` for exactly that reason, and lumping them
+// into a general edit would hide that rule inside a form.
+//
+// **ID**, **HasHistory** and the account mappings are not a person's to set from a catalogue
+// screen at all.
+type EditProduct struct {
+	Name        string
+	Description string
+	// CategoryID may be zero, which means "filed nowhere" — a legitimate state, and the reason
+	// this is not a pointer: absent and empty mean the same thing for a category.
+	CategoryID id.ID
+}
+
+// Edit applies the changes a person may make, or refuses.
+//
+// Deliberately permissive about HasHistory, unlike `ChangeStockUnit`. Everything here is either
+// snapshotted at the time it mattered or read only by a human, so a product that has traded for
+// two years can still be renamed — which is what a shop actually needs from an edit screen.
+func (p Product) Edit(in EditProduct) (Product, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return p, errs.Validation(CodeInvalidProduct, "a product needs a name").
+			WithField("name", CodeInvalidProduct, "required")
+	}
+	if utf8.RuneCountInString(name) > maxProductName {
+		return p, errs.Validation(CodeInvalidProduct, "that name is too long").
+			WithParam("max", strconv.Itoa(maxProductName))
+	}
+
+	p.Name = name
+	p.Description = strings.TrimSpace(in.Description)
+	p.CategoryID = in.CategoryID
+	return p, nil
+}
+
+// maxProductName matches the column, so a name that cannot be stored is refused here rather than
+// truncated by the database into something nobody chose.
+const maxProductName = 200

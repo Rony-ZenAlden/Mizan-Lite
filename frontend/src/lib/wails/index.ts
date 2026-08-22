@@ -540,6 +540,8 @@ export interface ProductRow {
   code: string;
   name: string;
   nameKey: string;
+  /** Free text the shop writes for itself; seeds the edit form. */
+  description: string;
   categoryCode: string;
   type: string;
   stockUnit: string;
@@ -1833,4 +1835,17 @@ export function paySupplier(input: {
 /** Closes an order that will receive nothing further, so it stops appearing as outstanding. */
 export function closePurchaseOrder(orderId: string): Promise<boolean> {
   return call<boolean>("Purchasing", "CloseOrder", orderId);
+}
+
+/** What a person may change about a product. The code identifies it and is not editable. */
+export interface EditProduct {
+  code: string;
+  name: string;
+  description: string;
+  /** A category code. Empty means filed nowhere. */
+  category: string;
+}
+
+export function updateProduct(input: EditProduct): Promise<ProductRow> {
+  return call<ProductRow>("Catalog", "UpdateProduct", input);
 }

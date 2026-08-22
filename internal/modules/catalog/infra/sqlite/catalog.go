@@ -153,7 +153,7 @@ func (r *Repos) InsertVariant(ctx context.Context, v domain.Variant) error {
 }
 
 const productColumns = `
-	id, code, name, name_key, category_id, product_type,
+	id, code, name, name_key, description, category_id, product_type,
 	stock_uom_id, sales_uom_id, purchase_uom_id, tracking, tax_group_id,
 	income_account_id, expense_account_id, inventory_account_id,
 	has_history, is_active, is_sold, is_purchased`
@@ -203,18 +203,20 @@ func (r *Repos) ProductByCode(
 func scanProduct(s scanner) (domain.Product, error) {
 	var (
 		p                                domain.Product
-		nameKey, categoryID, taxGroup    any
+		nameKey, description             any
+		categoryID, taxGroup             any
 		income, expense, inventory       any
 		productType, tracking            string
 		history, active, sold, purchased int
 	)
-	if err := s.Scan(&p.ID, &p.Code, &p.Name, &nameKey, &categoryID, &productType,
+	if err := s.Scan(&p.ID, &p.Code, &p.Name, &nameKey, &description, &categoryID, &productType,
 		&p.StockUnitID, &p.SalesUnitID, &p.PurchaseUnitID, &tracking, &taxGroup,
 		&income, &expense, &inventory,
 		&history, &active, &sold, &purchased); err != nil {
 		return domain.Product{}, err
 	}
 	p.NameKey = text(nameKey)
+	p.Description = text(description)
 	p.CategoryID = id.ID(text(categoryID))
 	p.Type = domain.ProductType(productType)
 	p.Tracking = domain.Tracking(tracking)
@@ -596,14 +598,15 @@ func (r *Repos) VariantWithProduct(
 		name                            any
 		def, history, active            int
 		p                               domain.Product
-		nameKey, categoryID, taxGroup   any
+		nameKey, description            any
+		categoryID, taxGroup            any
 		income, expense, inventory      any
 		productType, tracking           string
 		pHistory, pActive, sold, bought int
 	)
 	if err := row.Scan(&v.ID, &v.ProductID, &v.SKU, &name, &def, &v.Combination,
 		&history, &active,
-		&p.ID, &p.Code, &p.Name, &nameKey, &categoryID, &productType,
+		&p.ID, &p.Code, &p.Name, &nameKey, &description, &categoryID, &productType,
 		&p.StockUnitID, &p.SalesUnitID, &p.PurchaseUnitID, &tracking, &taxGroup,
 		&income, &expense, &inventory, &pHistory, &pActive, &sold, &bought); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -620,6 +623,7 @@ func (r *Repos) VariantWithProduct(
 	v.IsActive = active == 1
 
 	p.NameKey = text(nameKey)
+	p.Description = text(description)
 	p.CategoryID = id.ID(text(categoryID))
 	p.Type = domain.ProductType(productType)
 	p.Tracking = domain.Tracking(tracking)
@@ -661,4 +665,31 @@ func qualifyProduct() string {
 	}
 	flush()
 	return string(out)
+}
+
+// UpdateProduct writes the fields a person may edit (10.15).
+//
+// Named for what it does rather than "Save": it writes THREE columns, and a method that wrote
+// every column would let a stale read silently revert a unit or a tracking mode somebody else
+// changed. The narrow update is the one that cannot do that.
+//
+// `row_version` advances so the audit trail and any future optimistic check see the change.
+func (r *Repos) UpdateProduct(ctx context.Context, p domain.Product) error {
+	result, err := r.db.Writer(ctx).ExecContext(ctx, `
+		UPDATE products
+		   SET name = ?, description = ?, category_id = ?,
+		       row_version = row_version + 1, updated_at = ?
+		 WHERE id = ?`,
+		p.Name, nullable(p.Description), nullableID(p.CategoryID), r.now(), string(p.ID))
+	if err != nil {
+		return r.wrap(err, "updating a product")
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return r.wrap(err, "updating a product")
+	}
+	if affected == 0 {
+		return errs.NotFound(domain.CodeInvalidProduct, "there is no such product")
+	}
+	return nil
 }

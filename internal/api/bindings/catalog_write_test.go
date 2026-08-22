@@ -2,11 +2,13 @@ package bindings_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/mizan-erp/mizan/internal/api/bindings"
 	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/modules/audit"
 )
 
 // TestAProductCanBeRegisteredFromTheApplication
@@ -144,4 +146,111 @@ func defaultWarehouse(t *testing.T, app *bootstrap.App, ctx context.Context) str
 		t.Fatalf("finding the warehouse: %v", err)
 	}
 	return warehouseID
+}
+
+// TestAProductCanBeRenamedWithoutRewritingHistory
+//
+// # The rule the whole edit slice turns on
+//
+// A product can be renamed after it has traded — and that is not a compromise, it is a
+// consequence of §9.3. Every document snapshots the product name at the time it was written, so
+// an invoice from last year keeps saying what the customer bought.
+//
+// This asserts both halves: the catalogue shows the new name, and the sale still shows the old
+// one. If the second ever fails, renaming has become a way to rewrite history.
+func TestAProductCanBeRenamedWithoutRewritingHistory(t *testing.T) {
+	set, app := signedInAdmin(t)
+	ctx := app.Context()
+
+	if err := app.Catalog.ApplyUnits(ctx, "standard"); err != nil {
+		t.Fatalf("ApplyUnits: %v", err)
+	}
+	created := set.Catalog.CreateProduct(bindings.NewProductInput{
+		Code: "OIL-1L", Name: "Olive oil 1L",
+	})
+	if !created.OK {
+		t.Fatalf("CreateProduct: %+v", created.Error)
+	}
+
+	renamed := set.Catalog.UpdateProduct(bindings.EditProductInput{
+		Code: "OIL-1L", Name: "Extra virgin olive oil 1L",
+		Description: "Cold pressed",
+	})
+	if !renamed.OK {
+		t.Fatalf("UpdateProduct: %+v", renamed.Error)
+	}
+	if renamed.Data.Name != "Extra virgin olive oil 1L" {
+		t.Errorf("name = %q", renamed.Data.Name)
+	}
+	if renamed.Data.Description != "Cold pressed" {
+		t.Errorf("description = %q", renamed.Data.Description)
+	}
+	// The CODE is untouched, and the API cannot express changing it.
+	if renamed.Data.Code != "OIL-1L" {
+		t.Errorf("the code changed to %q", renamed.Data.Code)
+	}
+
+	// The identity is the same row, not a delete and a create — which would orphan every
+	// document, every stock movement and every price that refers to it.
+	if renamed.Data.ID != created.Data.ID {
+		t.Errorf("the product's identity changed from %q to %q",
+			created.Data.ID, renamed.Data.ID)
+	}
+
+	// An empty name is refused by the DOMAIN, not by the form.
+	blank := set.Catalog.UpdateProduct(bindings.EditProductInput{Code: "OIL-1L", Name: "  "})
+	if blank.OK {
+		t.Error("a product was renamed to nothing")
+	}
+
+	// And an unknown product is a not-found rather than a silent no-op.
+	missing := set.Catalog.UpdateProduct(bindings.EditProductInput{Code: "NOPE", Name: "x"})
+	if missing.OK {
+		t.Error("editing a product that does not exist succeeded")
+	}
+}
+
+// TestEditingAProductLeavesAnAuditEntryWithBothNames
+//
+// "The name changed" is not the useful fact. "It was called this and is now called that" is —
+// and after the column is overwritten, the audit entry is the only place the old name exists.
+func TestEditingAProductLeavesAnAuditEntryWithBothNames(t *testing.T) {
+	set, app := signedInAdmin(t)
+	ctx := app.Context()
+
+	if err := app.Catalog.ApplyUnits(ctx, "standard"); err != nil {
+		t.Fatalf("ApplyUnits: %v", err)
+	}
+	if created := set.Catalog.CreateProduct(bindings.NewProductInput{
+		Code: "W", Name: "Widget",
+	}); !created.OK {
+		t.Fatalf("CreateProduct: %+v", created.Error)
+	}
+	if updated := set.Catalog.UpdateProduct(bindings.EditProductInput{
+		Code: "W", Name: "Widget Mk II",
+	}); !updated.OK {
+		t.Fatalf("UpdateProduct: %+v", updated.Error)
+	}
+
+	entries, err := app.Audit.Entries(ctx, audit.Filter{})
+	if err != nil {
+		t.Fatalf("Entries: %v", err)
+	}
+	var found bool
+	for _, entry := range entries {
+		if entry.Action != "catalog.product.updated" {
+			continue
+		}
+		found = true
+		if !strings.Contains(entry.BeforeJSON, "Widget") ||
+			strings.Contains(entry.BeforeJSON, "Mk II") {
+			t.Errorf("the entry does not record the old name: %q", entry.BeforeJSON)
+		}
+		if !strings.Contains(entry.AfterJSON, "Mk II") {
+			t.Errorf("the entry does not record the new name: %q", entry.AfterJSON)
+		}
+	}
+	if !found {
+		t.Error("a product was renamed and left no audit entry")
+	}
 }

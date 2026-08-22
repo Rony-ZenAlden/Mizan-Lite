@@ -33,10 +33,13 @@ type CategoryDTO struct {
 // The UNIT CODE crosses, not the unit id: a list shows "PCS" and an id would force the screen to
 // hold a second lookup table purely to render one column.
 type ProductRowDTO struct {
-	ID           string `json:"id"`
-	Code         string `json:"code"`
-	Name         string `json:"name"`
-	NameKey      string `json:"nameKey"`
+	ID      string `json:"id"`
+	Code    string `json:"code"`
+	Name    string `json:"name"`
+	NameKey string `json:"nameKey"`
+	// Description is free text the shop writes for itself. It crosses so the edit form can be
+	// seeded with what is there — a form that opened empty would look like a field being cleared.
+	Description  string `json:"description"`
 	CategoryCode string `json:"categoryCode"`
 	Type         string `json:"type"`
 	StockUnit    string `json:"stockUnit"`
@@ -150,6 +153,8 @@ func catalogPolicies() map[string]policy.Policy {
 		// permission the CSV importer demands, because they do the same thing by different
 		// routes and a second grant for one of them would protect nothing (10.10).
 		"CreateProduct": policy.Requires(catalog.PermCatalogManage),
+		// Adding a product and renaming it are the same job (10.15).
+		"UpdateProduct": policy.Requires(catalog.PermCatalogManage),
 		"Price":         policy.Requires(pricing.PermPriceView),
 	}
 }
@@ -220,7 +225,7 @@ func (c *Catalog) Products() envelope.Result[[]ProductRowDTO] {
 		}
 		out = append(out, ProductRowDTO{
 			ID: string(product.ID), Code: product.Code, Name: product.Name,
-			NameKey: product.NameKey, CategoryCode: categoryCode[product.CategoryID],
+			NameKey: product.NameKey, Description: product.Description, CategoryCode: categoryCode[product.CategoryID],
 			Type: string(product.Type), StockUnit: unitCode[product.StockUnitID],
 			Tracking: string(product.Tracking), VariantCount: len(variants),
 			Active: product.IsActive,
@@ -297,7 +302,7 @@ func (c *Catalog) Product(code string) envelope.Result[ProductDetailDTO] {
 	return envelope.Ok(ProductDetailDTO{
 		Product: ProductRowDTO{
 			ID: string(product.ID), Code: product.Code, Name: product.Name,
-			NameKey: product.NameKey, CategoryCode: categoryCode[product.CategoryID],
+			NameKey: product.NameKey, Description: product.Description, CategoryCode: categoryCode[product.CategoryID],
 			Type: string(product.Type), StockUnit: unitCode[product.StockUnitID],
 			Tracking: string(product.Tracking), VariantCount: len(variants),
 			Active: product.IsActive,

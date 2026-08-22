@@ -18,12 +18,12 @@ vi.mock("@/lib/wails", async () => {
 });
 
 const CEMENT = {
-  id: "p1", code: "CEMENT", name: "Bag of cement", nameKey: "", categoryCode: "BUILD",
+  id: "p1", code: "CEMENT", name: "Bag of cement", nameKey: "", description: "", categoryCode: "BUILD",
   type: "goods", stockUnit: "PCS", tracking: "quantity", variantCount: 1, isActive: true,
 };
 
 const SHIRT = {
-  id: "p2", code: "SHIRT", name: "Shirt", nameKey: "", categoryCode: "CLOTH",
+  id: "p2", code: "SHIRT", name: "Shirt", nameKey: "", description: "", categoryCode: "CLOTH",
   type: "goods", stockUnit: "PCS", tracking: "quantity", variantCount: 4, isActive: true,
 };
 

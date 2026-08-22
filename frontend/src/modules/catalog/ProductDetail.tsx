@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { product, type ProductAttribute, type Variant } from "@/lib/wails";
 import { Alert, Button, EmptyState, PageHeader, Table } from "@/shared/ui";
+import { Can } from "@/app/session/Can";
+import { PERMISSIONS } from "@/lib/wails";
+import { EditProductForm } from "./EditProductForm";
 import { useErrorText } from "@/modules/admin/useAdminError";
 
 /**
@@ -15,6 +19,7 @@ import { useErrorText } from "@/modules/admin/useAdminError";
  * derived here, so the rule has one home.
  */
 export function ProductDetail({ code, onBack }: { code: string; onBack: () => void }) {
+  const [editing, setEditing] = useState(false);
   const { t } = useTranslation();
   const errorText = useErrorText();
 
@@ -42,8 +47,27 @@ export function ProductDetail({ code, onBack }: { code: string; onBack: () => vo
         <Button variant="ghost" onClick={onBack}>{t("catalog.back")}</Button>
       </div>
 
-      <PageHeader title={name} />
+      <PageHeader
+        title={name}
+        actions={
+          <Can permission={PERMISSIONS.catalogManage}>
+            <Button variant="ghost" onClick={() => setEditing((open) => !open)}>
+              {editing ? t("catalog.done") : t("catalog.edit")}
+            </Button>
+          </Can>
+        }
+      />
       <p className="-mt-4 font-mono text-xs text-text-muted">{row.code}</p>
+
+      {editing ? (
+        <EditProductForm
+          code={row.code}
+          initialName={row.name}
+          initialDescription={row.description ?? ""}
+          initialCategory={row.categoryCode ?? ""}
+          onSaved={() => setEditing(false)}
+        />
+      ) : null}
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
         <Field label={t("catalog.stockUnit")} value={row.stockUnit} />

@@ -204,3 +204,57 @@ func defaultUnitFor(app *bootstrap.App, ctx context.Context) string {
 	}
 	return units[0].Code
 }
+
+// EditProductInput is what the edit form sends.
+//
+// # The code identifies; it does not change
+//
+// It is the field a person recognises a product by, and the one barcodes, imports and
+// integrations match on. Renaming it after anything refers to it is a deletion and a creation
+// wearing one name.
+//
+// It is absent from the editable set rather than guarded there: **a field this API cannot express
+// cannot be changed by mistake**, which is a stronger guarantee than a check somebody can remove.
+type EditProductInput struct {
+	// Code says WHICH product. Not editable.
+	Code string `json:"code"`
+
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Category is a code. Empty means filed nowhere, which is a legitimate state.
+	Category string `json:"category"`
+}
+
+// UpdateProduct changes a product's name, description and filing.
+//
+// Behind the same permission as creating one: adding a product and renaming it are the same job,
+// and a separate grant for one of them would protect nothing.
+func (c *Catalog) UpdateProduct(in EditProductInput) envelope.Result[ProductRowDTO] {
+	ctx, app, err := c.guard("UpdateProduct")
+	if err != nil {
+		return envelope.Fail[ProductRowDTO](err)
+	}
+	companyID, err := app.Org.CurrentCompanyID(ctx)
+	if err != nil {
+		return envelope.Fail[ProductRowDTO](err)
+	}
+
+	updated, err := app.Catalog.UpdateProduct(ctx, catalog.EditProductInput{
+		CompanyID:    companyID,
+		Code:         in.Code,
+		Name:         in.Name,
+		Description:  in.Description,
+		CategoryCode: in.Category,
+	})
+	if err != nil {
+		return envelope.Fail[ProductRowDTO](err)
+	}
+
+	return envelope.Ok(ProductRowDTO{
+		ID: string(updated.ID), Code: updated.Code, Name: updated.Name,
+		NameKey: updated.NameKey, Description: updated.Description,
+		CategoryCode: in.Category,
+		Type:         string(updated.Type), Tracking: string(updated.Tracking),
+		Active: updated.IsActive,
+	})
+}

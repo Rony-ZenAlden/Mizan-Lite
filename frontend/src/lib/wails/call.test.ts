@@ -209,3 +209,47 @@ describe("frontend-produced error codes are translatable", () => {
     });
   }
 });
+
+describe("the development mock never runs in a packaged build", () => {
+  /*
+   * The 10.17 lesson, made permanent.
+   *
+   * A missing bridge used to fall through to the mock unconditionally, and the bridge WAS missing
+   * in the packaged application. The result was not a degraded app — it was a convincing
+   * imitation of a working one, showing a signed-in "Developer" and a catalogue of fixtures.
+   *
+   * A production build that cannot reach its backend must SAY SO. An error is a bug report; fake
+   * data is every number on screen being quietly wrong.
+   */
+  it("throws rather than serving fixtures when there is no bridge", async () => {
+    const original = window.go;
+    // No bridge at all — the state the packaged app was really in.
+    delete (window as { go?: unknown }).go;
+    vi.stubEnv("DEV", false);
+
+    try {
+      await expect(call("Auth", "Me")).rejects.toMatchObject({
+        code: CODE_BRIDGE_UNAVAILABLE,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      if (original) window.go = original;
+    }
+  });
+
+  it("still serves fixtures under npm run dev", async () => {
+    // The mock has a job, and this is it: a plain browser with no Go process behind it. Removing
+    // the fallback entirely would make browser development impossible, which is why it is gated
+    // rather than deleted.
+    const original = window.go;
+    delete (window as { go?: unknown }).go;
+    vi.stubEnv("DEV", true);
+
+    try {
+      await expect(call("Auth", "Me")).resolves.toBeDefined();
+    } finally {
+      vi.unstubAllEnvs();
+      if (original) window.go = original;
+    }
+  });
+});

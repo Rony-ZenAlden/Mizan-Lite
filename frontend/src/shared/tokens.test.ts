@@ -145,3 +145,74 @@ describe("token completeness", () => {
     expect(CSS).not.toMatch(/outline:\s*none/);
   });
 });
+
+/**
+ * The font-stack gate (Step 10.17).
+ *
+ * # The bug this was written after shipping
+ *
+ * `--font-sans` was `"IBM Plex Sans", "IBM Plex Sans Arabic"` — two families, no generic
+ * terminator. IBM Plex is not bundled and ships with no operating system, and `body` sets
+ * `font-family` straight from this token. So on every machine without IBM Plex installed the
+ * webview fell through to its OWN default, which is a serif. The whole application rendered in
+ * Times, and the design system's type scale sat on top of it looking wrong for reasons nobody
+ * could name.
+ *
+ * It is invisible to anyone with the font installed, which is exactly why it needs a test rather
+ * than a reviewer. Same species as the contrast gate above: a completeness property over data,
+ * cheap to assert, otherwise discovered by a customer.
+ */
+describe("font stacks", () => {
+  /** Pulls a font token's value out of the `:root` block. */
+  function fontStack(name: string): string {
+    const match = CSS.match(new RegExp(`--${name}:\\s*([^;]+);`));
+    if (!match?.[1]) throw new Error(`--${name} is not declared in index.css`);
+    return match[1].replace(/\s+/g, " ").trim();
+  }
+
+  const GENERIC = ["sans-serif", "serif", "monospace", "system-ui", "cursive", "fantasy"];
+
+  it.each([
+    ["font-sans", "sans-serif"],
+    ["font-mono", "monospace"],
+  ])("%s ends in a generic family", (token, expected) => {
+    const stack = fontStack(token);
+    const last = stack.split(",").pop()?.trim() ?? "";
+
+    expect(
+      GENERIC,
+      `--${token} ends in "${last}", which is a named font. If it is not installed the browser ` +
+        `falls back to ITS default — a serif — and the whole application renders in it.`,
+    ).toContain(last);
+    expect(last, `--${token} should end in ${expected}`).toBe(expected);
+  });
+
+  it("names no font that is neither bundled nor supplied by an operating system", () => {
+    // The stack may PREFER a font it does not ship — that is what a preference is for. What it
+    // must not do is DEPEND on one, which is what having no fallbacks after it would mean.
+    const stack = fontStack("font-sans");
+    const families = stack.split(",").map((family) => family.trim());
+
+    expect(families.length, "a single-family stack has nowhere to fall back to")
+      .toBeGreaterThan(3);
+
+    // At least one face that every supported platform actually has, before the generic.
+    const systemFaces = ["-apple-system", "BlinkMacSystemFont", "system-ui", "Segoe UI"];
+    expect(
+      families.some((family) => systemFaces.includes(family.replace(/"/g, ""))),
+      `--font-sans lists no system face: ${stack}`,
+    ).toBe(true);
+  });
+
+  it("offers an Arabic face before falling through to the generic", () => {
+    // Arabic reaching `sans-serif` lands on whatever the system considers generic, which is
+    // frequently a poor fit at UI sizes. Mizan's second language should not look like an
+    // afterthought.
+    const families = fontStack("font-sans").split(",").map((f) => f.trim().replace(/"/g, ""));
+    const arabic = ["Noto Sans Arabic", "SF Arabic", "Geeza Pro", "IBM Plex Sans Arabic"];
+    expect(
+      families.some((family) => arabic.includes(family)),
+      `--font-sans names no Arabic face: ${families.join(", ")}`,
+    ).toBe(true);
+  });
+});

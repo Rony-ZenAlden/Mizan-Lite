@@ -27,7 +27,32 @@
    utilities; the rule is "no arbitrary values", not "a second scale". */
 
 :root {
-  --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic";
+  /* ─── Type ──────────────────────────────────────────────────────────────────
+     THE STACK MUST END IN A GENERIC FAMILY. It did not, and the bug that caused
+     was invisible to everyone who had the font installed: `body` sets
+     font-family directly from this variable, IBM Plex is not bundled and ships
+     with no operating system, so the webview fell back to ITS default — Times.
+     A "modern SaaS" interface was rendering in a serif nobody chose.
+
+     Inter and Geist are honoured when a machine has them, because they are what
+     this interface is designed against. Neither is bundled: the application must
+     install and run with no network at all, and ~250KB of webfont per language
+     buys a difference most users cannot name. The system faces below — SF on
+     macOS, Segoe UI Variable on Windows — are modern neutral sans-serifs of the
+     same family of shapes, and they are already on the machine.
+
+     Arabic gets its own faces before the Latin fallbacks: a stack that reaches
+     `sans-serif` for Arabic text lands on whatever the system considers generic,
+     which is frequently a poor fit at UI sizes. */
+  --font-sans:
+    Inter, "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Segoe UI", system-ui, Roboto, "Noto Sans Arabic", "SF Arabic", "Geeza Pro",
+    "IBM Plex Sans Arabic", Tahoma, Arial, sans-serif;
+
+  /* Codes, identifiers and figures that must line up column-wise. */
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
 
   /* Radii */
   --radius-sm: 0.25rem;

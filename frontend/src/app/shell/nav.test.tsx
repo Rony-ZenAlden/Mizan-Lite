@@ -64,3 +64,61 @@ describe("navigation", () => {
     }
   });
 });
+
+/**
+ * The core/advanced split (Step 10.17).
+ *
+ * Thirty-one routes in one column is a list nobody scans, and the 10.13 grouping did not fix it:
+ * six headings over thirty items is still thirty items to read. The sidebar now shows the screens
+ * a shop uses every day and folds the rest into one collapsible section.
+ *
+ * These tests exist because the split degrades silently. Nothing breaks when the core list grows
+ * — it just gets longer, one route at a time, until it is the flat list again.
+ */
+describe("the core navigation", () => {
+  const core = ROUTES.filter((route) => !route.advanced);
+  const advanced = ROUTES.filter((route) => route.advanced);
+
+  it("stays short enough to take in at a glance", () => {
+    // Ten is where a list stops being a set of choices and starts being something to search. A
+    // route added without a decision about its tier lands here and fails THIS test, which is the
+    // point: the omission is loud rather than quiet.
+    expect(
+      core.length,
+      `the daily list has ${core.length} items: ${core.map((r) => r.path).join(", ")}`,
+    ).toBeLessThanOrEqual(10);
+  });
+
+  it("holds the screens a shop actually opens every day", () => {
+    const paths = core.map((route) => route.path);
+    // The till, what was sold, who owes, what is on the shelf. If any of these ever moves into
+    // the fold, somebody has to argue for it here.
+    for (const daily of ["/pos", "/sales/invoices", "/partners/customers", "/catalog", "/inventory/stock"]) {
+      expect(paths, `${daily} belongs in the daily list`).toContain(daily);
+    }
+  });
+
+  it("keeps the guide reachable without opening anything", () => {
+    // The one screen a user who can do nothing else must still find, because it is where they
+    // learn what they are looking at. Burying it inside a fold labelled "Advanced" is precisely
+    // backwards.
+    expect(core.map((route) => route.path)).toContain("/help");
+  });
+
+  it("actually folds most of the application away", () => {
+    // A split that moved three items would be a rename, not a simplification.
+    expect(advanced.length).toBeGreaterThan(core.length);
+  });
+
+  it("gives every advanced route a group to sit under", () => {
+    // The fold is still grouped inside — twenty-one items do need telling apart. A route with a
+    // group the sidebar does not render would simply vanish from the menu.
+    for (const route of advanced) {
+      expect(NAV_GROUPS, `${route.path} has group "${route.group}"`).toContain(route.group);
+    }
+  });
+
+  it("leaves no route in both tiers or neither", () => {
+    expect(core.length + advanced.length).toBe(ROUTES.length);
+  });
+});

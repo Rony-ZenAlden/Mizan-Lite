@@ -57,7 +57,10 @@ export default {
         "2xl": ["var(--text-2xl)", { lineHeight: "var(--text-2xl-lh)" }],
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        // The generic terminator lives in the token itself now, so a component using
+        // `font-sans` and an element inheriting from `body` cannot resolve differently.
+        sans: ["var(--font-sans)"],
+        mono: ["var(--font-mono)"],
       },
     },
   },

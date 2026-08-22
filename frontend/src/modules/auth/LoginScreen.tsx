@@ -24,7 +24,20 @@ export function LoginScreen() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
+  /*
+   * Checked by default (10.17).
+   *
+   * Mizan runs on a shop's own machine, usually with one person at it all day. Unchecked meant
+   * the 60-minute idle timeout applied to somebody who steps away to serve a customer — so the
+   * common case was being signed out mid-shift, and "stay signed in" was a box nobody knew to
+   * tick.
+   *
+   * This changes a DEFAULT, not a capability: the box is still there, and a shared machine
+   * unticks it. What it does not do is put a credential in JavaScript — the session token stays
+   * in the Go process (1.5 D3), and what survives a restart is a row in the local database that
+   * only the Go side can present.
+   */
+  const [remember, setRemember] = useState(true);
 
   const signIn = useMutation<SessionInfo, unknown, void>({
     mutationFn: () => login(username, password, remember),

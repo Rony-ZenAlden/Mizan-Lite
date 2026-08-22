@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { usePreferences, useTranslation } from "@/app/providers/PreferencesProvider";
 import { RequirePermission } from "@/app/session/Can";
 import { useSession, hasPermission } from "@/app/session/session";
@@ -67,11 +67,24 @@ export function AppShell() {
 function Sidebar() {
   const { t } = useTranslation();
   const session = useSession();
+  const location = useLocation();
   const permissions = session?.permissions ?? [];
 
   const visible = ROUTES.filter(
     (route) => !route.permission || hasPermission(permissions, route.permission),
   );
+
+  const core = visible.filter((route) => !route.advanced);
+  const advanced = visible.filter((route) => route.advanced);
+
+  /*
+   * The Advanced section opens itself when you are inside it.
+   *
+   * Without this, following a link to a supplier bill leaves the sidebar showing no trace of
+   * where you are — the highlighted item is inside a section that is shut. A person navigating
+   * by the menu would have no way back except remembering which fold it came from.
+   */
+  const insideAdvanced = advanced.some((route) => route.path === location.pathname);
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto border-e border-border bg-surface-raised px-3 py-4 md:flex">
@@ -79,48 +92,86 @@ function Sidebar() {
       <p className="mt-0.5 px-2 text-xs text-text-muted">{t("app.tagline")}</p>
 
       {/*
-       * GROUPED, six ways.
+       * CORE first, ungrouped and unlabelled.
        *
-       * The 10.12 audit counted thirty items in one flat column. That is a list nobody scans —
-       * a person hunting for "supplier payments" reads all thirty every time, and the ones near
-       * the bottom effectively do not exist.
+       * The 10.13 grouping into six sections was an improvement on thirty items in one column,
+       * and it was not enough: six headings over thirty items is still thirty items to read.
        *
-       * The grouping comes from the route itself, so there is no second list to keep in step —
-       * the same reason the routes are data rather than JSX.
+       * A shop uses four or five screens all day. Those are here, in the order the day runs —
+       * the till, what was sold, who owes, what is on the shelf — with no headings at all,
+       * because nine items do not need to be told what they are.
        */}
-      <nav className="mt-6 flex flex-col gap-5" aria-label={t("shell.nav.label")}>
-        {NAV_GROUPS.map((group) => {
-          const items = visible.filter((route) => route.group === group);
-          if (items.length === 0) return null;
-          return (
-            <div key={group} className="flex flex-col gap-0.5">
-              {/* The overview group has no heading: three items at the top of a sidebar do not
-                  need to be told what they are. */}
-              {group !== "overview" ? (
-                <h3 className="px-2 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-text-muted">
-                  {t(`nav.group.${group}`)}
-                </h3>
-              ) : null}
-              {items.map((route) => (
-                <NavLink
-                  key={route.path}
-                  to={route.path}
-                  end={route.path === "/"}
-                  className={({ isActive }) =>
-                    "rounded-lg px-3 py-1.5 text-sm transition-colors " +
-                    (isActive
-                      ? "bg-primary-subtle font-medium text-text"
-                      : "text-text-muted hover:bg-surface-sunken hover:text-text")
-                  }
-                >
-                  {t(route.labelKey)}
-                </NavLink>
-              ))}
-            </div>
-          );
-        })}
+      {/*
+       * ONE navigation landmark for the whole sidebar, core and fold together.
+       *
+       * Two would make a screen-reader user choose between "navigation 1" and "navigation 2"
+       * with nothing to tell them apart, and it would mean the menu's own contents depended on
+       * whether a section happened to be open.
+       */}
+      <nav className="mt-6 flex flex-col" aria-label={t("shell.nav.label")}>
+        <div className="flex flex-col gap-0.5">
+          {core.map((route) => (
+            <NavItem
+              key={route.path}
+              to={route.path}
+              label={t(route.labelKey)}
+              end={route.path === "/"}
+            />
+          ))}
+        </div>
+
+        {advanced.length > 0 ? (
+        <details
+          className="mt-4"
+          // `key` forces the element to remount when you navigate into or out of the section,
+          // which is what lets `open` follow the route. A controlled <details> would need a
+          // click handler that fights the browser's own toggle.
+          key={insideAdvanced ? "open" : "shut"}
+          open={insideAdvanced}
+        >
+          <summary className="cursor-pointer rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted hover:bg-surface-sunken hover:text-text">
+            {t("nav.advanced")}
+          </summary>
+
+          {/* Still GROUPED inside, because twenty-one items do need telling apart. The grouping
+              is the route's own, so there is no second list to keep in step. */}
+          <div className="mt-1 flex flex-col gap-4">
+            {NAV_GROUPS.map((group) => {
+              const items = advanced.filter((route) => route.group === group);
+              if (items.length === 0) return null;
+              return (
+                <div key={group} className="flex flex-col gap-0.5">
+                  <h3 className="px-3 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-text-muted">
+                    {t(`nav.group.${group}`)}
+                  </h3>
+                  {items.map((route) => (
+                    <NavItem key={route.path} to={route.path} label={t(route.labelKey)} />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+        ) : null}
       </nav>
     </aside>
+  );
+}
+
+function NavItem({ to, label, end }: { to: string; label: string; end?: boolean }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        "rounded-lg px-3 py-1.5 text-sm transition-colors " +
+        (isActive
+          ? "bg-primary-subtle font-medium text-text"
+          : "text-text-muted hover:bg-surface-sunken hover:text-text")
+      }
+    >
+      {label}
+    </NavLink>
   );
 }
 

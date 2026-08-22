@@ -49,6 +49,30 @@ function bindingError(code: string): BindingError {
 }
 
 /**
+ * The browser-dev mock, and ONLY in a development build.
+ *
+ * # Why a production build must fail rather than fall back
+ *
+ * Until 10.17 a missing bridge fell through to the mock unconditionally. The bridge WAS missing
+ * in the packaged application — it was looked up under the wrong namespace — so the shipped app
+ * ran entirely on fixtures: a signed-in "Developer", a catalogue of sample products, a dashboard
+ * of invented figures. Nothing looked broken, because the mock is good at its job.
+ *
+ * That is the worst failure a fallback can have. It did not degrade the application; it REPLACED
+ * it with a convincing imitation, and the only thing that gave it away was an action the mock had
+ * no fixture for.
+ *
+ * So the fallback is now confined to where it belongs. `import.meta.env.DEV` is true under
+ * `npm run dev` and false in every packaged build, so a production binary that cannot find its
+ * backend now says so — which is a bug report, where fake data is a silent corruption of every
+ * number on screen.
+ */
+function devMock(struct: string, method: string) {
+  if (!import.meta.env.DEV) return undefined;
+  return mockInvoke(struct, method);
+}
+
+/**
  * Type guard for the envelope, so a malformed response becomes a typed error rather than an
  * undefined field three components away.
  */
@@ -71,7 +95,7 @@ export async function call<T>(
   method: string,
   ...args: unknown[]
 ): Promise<T> {
-  const invoke = hasBridge() ? bridgeMethod(struct, method) : mockInvoke(struct, method);
+  const invoke = hasBridge() ? bridgeMethod(struct, method) : devMock(struct, method);
   if (!invoke) {
     throw bindingError(CODE_BRIDGE_UNAVAILABLE);
   }

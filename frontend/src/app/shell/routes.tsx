@@ -50,6 +50,21 @@ export const NAV_GROUPS: NavGroup[] = ["overview", "sell", "buy", "stock", "mone
 
 export interface AppRoute {
   path: string;
+  /**
+   * Whether this belongs in the collapsed "Advanced" section.
+   *
+   * # Why the flag marks the RARE case
+   *
+   * Thirty-one routes in one column is a list nobody scans, and grouping alone did not fix it —
+   * six headings with thirty items under them is still thirty items. A shop uses four or five
+   * screens all day and the rest occasionally, so the sidebar shows the daily ones and folds
+   * everything else away.
+   *
+   * Omitting the flag puts a route in CORE, which is the loud failure rather than the quiet one:
+   * `nav.test.tsx` caps the core list, so a route added without a decision fails the build
+   * instead of quietly making the daily list longer.
+   */
+  advanced?: boolean;
   /** Which area of the sidebar this belongs under. */
   group: NavGroup;
   /** A translation key, so the menu is translated like everything else (§22). */
@@ -78,28 +93,28 @@ export const ROUTES: AppRoute[] = [
   { path: "/", group: "overview", labelKey: "nav.overview", element: <DashboardScreen /> },
   { path: "/needs-attention", group: "overview", labelKey: "nav.notices", element: <NoticeCentre /> },
   {
-    path: "/admin/users",
+    path: "/admin/users", advanced: true,
     group: "setup",
     labelKey: "nav.users",
     element: <UsersScreen />,
     permission: PERMISSIONS.userView,
   },
   {
-    path: "/admin/roles",
+    path: "/admin/roles", advanced: true,
     group: "setup",
     labelKey: "nav.roles",
     element: <RolesScreen />,
     permission: PERMISSIONS.roleView,
   },
   {
-    path: "/admin/sessions",
+    path: "/admin/sessions", advanced: true,
     group: "setup",
     labelKey: "nav.sessions",
     element: <SessionsScreen />,
     permission: PERMISSIONS.sessionView,
   },
   {
-    path: "/admin/audit",
+    path: "/admin/audit", advanced: true,
     group: "setup",
     labelKey: "nav.audit",
     element: <AuditScreen />,
@@ -137,14 +152,14 @@ export const ROUTES: AppRoute[] = [
     permission: PERMISSIONS.saleView,
   },
   {
-    path: "/purchasing/orders",
+    path: "/purchasing/orders", advanced: true,
     group: "buy",
     labelKey: "nav.purchaseOrders",
     element: <PurchaseOrdersScreen />,
     permission: PERMISSIONS.orderView,
   },
   {
-    path: "/purchasing/bills",
+    path: "/purchasing/bills", advanced: true,
     group: "buy",
     labelKey: "nav.bills",
     element: <BillsScreen />,
@@ -158,7 +173,7 @@ export const ROUTES: AppRoute[] = [
     permission: PERMISSIONS.customerView,
   },
   {
-    path: "/partners/suppliers",
+    path: "/partners/suppliers", advanced: true,
     group: "buy",
     labelKey: "nav.suppliers",
     element: <PartnersScreen role="supplier" />,
@@ -172,91 +187,91 @@ export const ROUTES: AppRoute[] = [
     permission: PERMISSIONS.expenseView,
   },
   {
-    path: "/money/debts",
+    path: "/money/debts", advanced: true,
     group: "money",
     labelKey: "nav.debts",
     element: <DebtsScreen />,
     permission: PERMISSIONS.debtView,
   },
   {
-    path: "/accounting/chart",
+    path: "/accounting/chart", advanced: true,
     group: "money",
     labelKey: "nav.chart",
     element: <ChartScreen />,
     permission: PERMISSIONS.accountView,
   },
   {
-    path: "/purchasing/receive",
+    path: "/purchasing/receive", advanced: true,
     group: "buy",
     labelKey: "nav.receive",
     element: <ReceiveDeliveryScreen />,
     permission: PERMISSIONS.receiptRecord,
   },
   {
-    path: "/purchasing/receipts",
+    path: "/purchasing/receipts", advanced: true,
     group: "buy",
     labelKey: "nav.receipts",
     element: <ReceiptsScreen />,
     permission: PERMISSIONS.orderView,
   },
   {
-    path: "/purchasing/returns",
+    path: "/purchasing/returns", advanced: true,
     group: "buy",
     labelKey: "nav.supplierReturns",
     element: <SupplierReturnsScreen />,
     permission: PERMISSIONS.orderView,
   },
   {
-    path: "/purchasing/payments",
+    path: "/purchasing/payments", advanced: true,
     group: "buy",
     labelKey: "nav.supplierPayments",
     element: <SupplierPaymentsScreen />,
     permission: PERMISSIONS.billView,
   },
   {
-    path: "/reports/statements",
+    path: "/reports/statements", advanced: true,
     group: "money",
     labelKey: "nav.statements",
     element: <StatementsScreen />,
     permission: PERMISSIONS.profitAndLossView,
   },
   {
-    path: "/reports/analysis",
+    path: "/reports/analysis", advanced: true,
     group: "money",
     labelKey: "nav.analysis",
     element: <AnalysisScreen />,
     permission: PERMISSIONS.salesAnalysisView,
   },
   {
-    path: "/reports/valuation",
+    path: "/reports/valuation", advanced: true,
     group: "stock",
     labelKey: "nav.valuation",
     element: <ValuationScreen />,
     permission: PERMISSIONS.valuationView,
   },
   {
-    path: "/operations/backups",
+    path: "/operations/backups", advanced: true,
     group: "setup",
     labelKey: "nav.backups",
     element: <BackupScreen />,
     permission: PERMISSIONS.userManage,
   },
   {
-    path: "/operations/import",
+    path: "/operations/import", advanced: true,
     group: "setup",
     labelKey: "nav.import",
     element: <ImportScreen />,
     permission: PERMISSIONS.catalogManage,
   },
   {
-    path: "/operations/system",
+    path: "/operations/system", advanced: true,
     group: "setup",
     labelKey: "nav.system",
     element: <SystemPanel />,
     permission: PERMISSIONS.sessionView,
   },
   {
-    path: "/accounting/trial-balance",
+    path: "/accounting/trial-balance", advanced: true,
     group: "money",
     labelKey: "nav.trialBalance",
     element: <TrialBalanceScreen />,
@@ -264,7 +279,7 @@ export const ROUTES: AppRoute[] = [
   },
   // No permission: changing your own password is not an administrative act, and the person who
   // most needs it may hold nothing at all (1.11 D3).
-  { path: "/account/password", group: "setup", labelKey: "nav.password", element: <ChangePasswordScreen /> },
+  { path: "/account/password", advanced: true, group: "setup", labelKey: "nav.password", element: <ChangePasswordScreen /> },
   // No permission: the guide is the one screen a user who can do nothing else must still reach,
   // because it is where they learn what they are looking at.
   { path: "/help", group: "overview", labelKey: "nav.help", element: <HelpScreen /> },

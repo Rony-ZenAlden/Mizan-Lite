@@ -64,3 +64,51 @@ describe("layout", () => {
     expect(screen.getByRole("button", { name: "Export" })).toBeInTheDocument();
   });
 });
+
+describe("the layout layer is actually used", () => {
+  it("leaves no screen hand-rolling a page header", async () => {
+    // # Why a source scan and not a review
+    //
+    // The 10.12 audit found the same four lines — a flex column, an h2 at text-base, a p at
+    // text-sm — repeated across 21 files. Nothing was wrong with any one of them; together they
+    // were the reason the product read as a database viewer, because a change to the type scale
+    // meant twenty-one edits and therefore never happened.
+    //
+    // `PageHeader` is now that shape with a name. This stops the next screen reintroducing the
+    // old one, which is how the count got to 21 in the first place.
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { join, relative, resolve } = await import("node:path");
+
+    const root = resolve(process.cwd(), "src/modules");
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const path = join(dir, entry);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx$/.test(entry) && !/\.test\./.test(entry)) files.push(path);
+      }
+    };
+    walk(root);
+    expect(files.length).toBeGreaterThan(20);
+
+    // The exact heading style PageHeader replaced. A screen that wants a different heading is
+    // free to write one; what it may not do is re-create this one.
+    const handRolled = /<h2 className="text-base font-medium text-text">/;
+
+    // Two files keep their own heading, for reasons that are about what they ARE:
+    //
+    //   help/HelpScreen — the guide renders its own title in whichever language the READER
+    //     chose, which may differ from the application's. A PageHeader would translate it with
+    //     the app's locale and undo that.
+    //   sales/ShiftBar — a strip above the till, not a page. A page header inside another
+    //     screen's layout is a heading claiming to be a screen.
+    const exempt = new Set(["help/HelpScreen.tsx", "sales/ShiftBar.tsx"]);
+
+    const offenders = files
+      .filter((file) => handRolled.test(readFileSync(file, "utf8")))
+      .map((file) => relative(root, file))
+      .filter((file) => !exempt.has(file.replace(/\\/g, "/")));
+
+    expect(offenders).toEqual([]);
+  });
+});

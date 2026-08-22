@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { goodsReceipts, purchaseBills, type GoodsReceipt, type PurchaseBill } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
 
@@ -43,10 +43,7 @@ export function BillsScreen() {
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-4">
-        <header className="flex flex-col gap-1">
-          <h2 className="text-base font-medium text-text">{t("purchasing.bills")}</h2>
-          <p className="text-sm text-text-muted">{t("purchasing.billsHelp")}</p>
-        </header>
+        <PageHeader title={t("purchasing.bills")} description={t("purchasing.billsHelp")} />
 
         <Table<PurchaseBill>
           caption={t("purchasing.bills")}
@@ -111,10 +108,7 @@ export function BillsScreen() {
 
       {/* ── goods received not invoiced ─────────────────────────────────────── */}
       <div className="flex flex-col gap-4">
-        <header className="flex flex-col gap-1">
-          <h2 className="text-base font-medium text-text">{t("purchasing.grni")}</h2>
-          <p className="text-sm text-text-muted">{t("purchasing.grniHelp")}</p>
-        </header>
+        <PageHeader title={t("purchasing.grni")} description={t("purchasing.grniHelp")} />
 
         <Table<GoodsReceipt>
           caption={t("purchasing.grni")}

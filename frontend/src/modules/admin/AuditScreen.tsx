@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { auditEntries, payloadHidden, type AuditEntry } from "@/lib/wails";
-import { Alert, EmptyState, Input, Table } from "@/shared/ui";
+import { Alert, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "./useAdminError";
 
 /**
@@ -36,16 +36,20 @@ export function AuditScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-base font-medium text-text">{t("admin.audit.title")}</h2>
-        <Input
+      <PageHeader
+        title={t("admin.audit.title")}
+        actions={
+          <>
+            <Input
           label={t("admin.audit.filterEntity")}
           value={entityType}
           onChange={(event) => setEntityType(event.target.value)}
           hint={t("admin.audit.filterEntity.hint")}
           className="w-56"
         />
-      </header>
+          </>
+        }
+      />
 
       <Table<AuditEntry>
         caption={t("admin.audit.title")}

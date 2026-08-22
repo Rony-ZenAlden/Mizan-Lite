@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { Can } from "@/app/session/Can";
 import { PERMISSIONS, adminSessions, revokeSession, type AdminSession } from "@/lib/wails";
-import { Alert, Button, EmptyState, Table } from "@/shared/ui";
+import { Alert, Button, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "./useAdminError";
 
 const SESSIONS_KEY = ["identity", "sessions"] as const;
@@ -38,7 +38,7 @@ export function SessionsScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="text-base font-medium text-text">{t("admin.sessions.title")}</h2>
+      <PageHeader title={t("admin.sessions.title")} />
       {revoke.isError ? (
         <Alert tone="danger" title={t("admin.sessions.revokeFailed")}>{errorText(revoke.error)}</Alert>
       ) : null}

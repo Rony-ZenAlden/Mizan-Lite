@@ -40,7 +40,7 @@ export function PartnerDetail(props: {
       </div>
 
       <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{partner.name}</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-text">{partner.name}</h2>
         <p className="font-mono text-xs text-text-muted">{partner.code}</p>
         <span className="flex gap-1 pt-1">
           {partner.isCustomer && <Badge tone="info">{t("partners.customer")}</Badge>}

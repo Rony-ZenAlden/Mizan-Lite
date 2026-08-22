@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { balanceSheet, profitAndLoss, type StatementNode } from "@/lib/wails";
-import { Alert, EmptyState, Input } from "@/shared/ui";
+import { Alert, EmptyState, Input, PageHeader } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 
@@ -32,10 +32,7 @@ export function StatementsScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("statements.title")}</h2>
-        <p className="text-sm text-text-muted">{t("statements.help")}</p>
-      </header>
+      <PageHeader title={t("statements.title")} description={t("statements.help")} />
 
       <div className="flex flex-wrap gap-3">
         <Input

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { salesDocuments, type SalesDocument } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Input, Select, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
 import { InvoiceDetail } from "./InvoiceDetail";
@@ -56,10 +56,7 @@ export function InvoicesScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("sales.title")}</h2>
-        <p className="text-sm text-text-muted">{t("sales.help")}</p>
-      </header>
+      <PageHeader title={t("sales.title")} description={t("sales.help")} />
 
       <div className="flex flex-wrap items-end gap-3">
         <Input

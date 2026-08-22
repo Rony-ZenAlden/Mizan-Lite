@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { stockMovements, type MovementRow, type StockRow } from "@/lib/wails";
-import { Alert, Badge, Button, EmptyState, Table } from "@/shared/ui";
+import { Alert, Badge, Button, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity } from "./quantity";
@@ -28,10 +28,8 @@ export function MovementHistory({ row, onBack }: { row: StockRow; onBack: () => 
         <Button variant="ghost" onClick={onBack}>{t("stock.back")}</Button>
       </div>
 
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{row.productName}</h2>
-        <p className="font-mono text-xs text-text-muted">{row.sku}</p>
-      </header>
+      <PageHeader title={row.productName} />
+      <p className="-mt-4 font-mono text-xs text-text-muted">{row.sku}</p>
 
       {movements.isPending && <p className="text-sm text-text-muted">{t("gate.checking")}</p>}
       {movements.isError && (

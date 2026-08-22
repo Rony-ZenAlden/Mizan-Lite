@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { dashboard, type Tile } from "@/lib/wails";
-import { Alert, Badge, EmptyState } from "@/shared/ui";
+import { Alert, Badge, EmptyState, PageHeader } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 
@@ -36,12 +36,10 @@ export function DashboardScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("dashboard.title")}</h2>
-        <p className="text-sm text-text-muted">
-          {t("dashboard.range", { from: board.data.from, to: board.data.to })}
-        </p>
-      </header>
+      <PageHeader
+        title={t("dashboard.title")}
+        description={t("dashboard.range", { from: board.data.from, to: board.data.to })}
+      />
 
       {board.data.tiles.length === 0 ? (
         <EmptyState title={t("dashboard.none")} />

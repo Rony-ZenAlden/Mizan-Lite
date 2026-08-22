@@ -11,7 +11,7 @@ import {
   type NewUser,
   type User,
 } from "@/lib/wails";
-import { Alert, Button, Dialog, EmptyState, Input, Select, Table } from "@/shared/ui";
+import { Alert, Button, Dialog, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "./useAdminError";
 
 const USERS_KEY = ["identity", "users"] as const;
@@ -44,7 +44,7 @@ export function UsersScreen() {
   return (
     <section className="flex flex-col gap-4">
       <header className="flex items-center justify-between gap-4">
-        <h2 className="text-base font-medium text-text">{t("admin.users.title")}</h2>
+        <PageHeader title={t("admin.users.title")} />
         <Can permission={PERMISSIONS.userManage}>
           <Button onClick={() => setCreating(true)}>{t("admin.users.add")}</Button>
         </Can>

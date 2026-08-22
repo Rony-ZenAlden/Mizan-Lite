@@ -9,7 +9,7 @@ import {
   takeBackup,
   type BackupFile,
 } from "@/lib/wails";
-import { Alert, Badge, Button, Dialog, EmptyState, Table } from "@/shared/ui";
+import { Alert, Badge, Button, Dialog, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 
 /**
@@ -53,15 +53,17 @@ export function BackupScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-medium text-text">{t("backups.title")}</h2>
-          <p className="text-sm text-text-muted">{t("backups.help")}</p>
-        </div>
-        <Button onClick={() => take.mutate()} disabled={take.isPending}>
+      <PageHeader
+        title={t("backups.title")}
+        description={t("backups.help")}
+        actions={
+          <>
+            <Button onClick={() => take.mutate()} disabled={take.isPending}>
           {t("backups.takeNow")}
         </Button>
-      </header>
+          </>
+        }
+      />
 
       {take.isError && (
         <Alert tone="danger" title={t("backups.takeFailed")}>{errorText(take.error)}</Alert>

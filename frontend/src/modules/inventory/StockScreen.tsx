@@ -4,7 +4,7 @@ import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { checkLedger, PERMISSIONS, stockOnHand, type StockRow } from "@/lib/wails";
 import { Can } from "@/app/session/Can";
 import { CountDialog } from "./CountDialog";
-import { Alert, Badge, Button, EmptyState, Input, Table } from "@/shared/ui";
+import { Alert, Badge, Button, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity, isNegativeQuantity, isZeroQuantity } from "./quantity";
@@ -54,10 +54,7 @@ export function StockScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("stock.title")}</h2>
-        <p className="text-sm text-text-muted">{t("stock.help")}</p>
-      </header>
+      <PageHeader title={t("stock.title")} description={t("stock.help")} />
 
       {check.data && !check.data.healthy && (
         <Alert tone="warning" title={t("stock.driftFound")}>

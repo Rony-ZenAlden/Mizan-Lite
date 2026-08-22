@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { partnerStatement, type OpenItem } from "@/lib/wails";
-import { Alert, Badge, Button, EmptyState, Input, Table } from "@/shared/ui";
+import { Alert, Badge, Button, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
 
@@ -61,10 +61,7 @@ export function PartnerStatement({
         />
       </div>
 
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{balance.partnerName}</h2>
-        <p className="text-sm text-text-muted">{t("statement.help")}</p>
-      </header>
+      <PageHeader title={balance.partnerName} description={t("statement.help")} />
 
       {/* ── where they stand ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

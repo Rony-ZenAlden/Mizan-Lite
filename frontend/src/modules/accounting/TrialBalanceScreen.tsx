@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { fiscalPeriods, trialBalance, type TrialBalanceRow } from "@/lib/wails";
-import { Alert, EmptyState, Select, Table } from "@/shared/ui";
+import { Alert, EmptyState, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "./money";
 
@@ -35,12 +35,12 @@ export function TrialBalanceScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-medium text-text">{t("accounting.trial.title")}</h2>
-          <p className="text-sm text-text-muted">{t("accounting.trial.help")}</p>
-        </div>
-        <div className="flex flex-col gap-1">
+      <PageHeader
+        title={t("accounting.trial.title")}
+        description={t("accounting.trial.help")}
+        actions={
+          <>
+            <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-text">{t("accounting.trial.period")}</span>
           <Select
             value={selected}
@@ -52,7 +52,9 @@ export function TrialBalanceScreen() {
             }))}
           />
         </div>
-      </header>
+          </>
+        }
+      />
 
       {balance.isError ? (
         <Alert tone="danger" title={t("accounting.trial.failed")}>{errorText(balance.error)}</Alert>

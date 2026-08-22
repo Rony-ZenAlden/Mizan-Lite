@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { importPartners, importProducts, type ImportReport, type ImportRow } from "@/lib/wails";
-import { Alert, Button, EmptyState, Select, Table } from "@/shared/ui";
+import { Alert, Button, EmptyState, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 
 type Kind = "products" | "partners";
@@ -49,10 +49,7 @@ export function ImportScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("imports.title")}</h2>
-        <p className="text-sm text-text-muted">{t("imports.help")}</p>
-      </header>
+      <PageHeader title={t("imports.title")} description={t("imports.help")} />
 
       <div className="flex flex-wrap items-end gap-3">
         <Select

@@ -11,7 +11,7 @@ import {
   roles as loadRoles,
   type Role,
 } from "@/lib/wails";
-import { Alert, Checkbox, EmptyState, Table } from "@/shared/ui";
+import { Alert, Checkbox, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "./useAdminError";
 
 /**
@@ -36,7 +36,7 @@ export function RolesScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h2 className="text-base font-medium text-text">{t("admin.roles.title")}</h2>
+      <PageHeader title={t("admin.roles.title")} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Table<Role>

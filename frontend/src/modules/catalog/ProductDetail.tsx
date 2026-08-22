@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { product, type ProductAttribute, type Variant } from "@/lib/wails";
-import { Alert, Button, EmptyState, Table } from "@/shared/ui";
+import { Alert, Button, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 
 /**
@@ -42,10 +42,8 @@ export function ProductDetail({ code, onBack }: { code: string; onBack: () => vo
         <Button variant="ghost" onClick={onBack}>{t("catalog.back")}</Button>
       </div>
 
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{name}</h2>
-        <p className="font-mono text-xs text-text-muted">{row.code}</p>
-      </header>
+      <PageHeader title={name} />
+      <p className="-mt-4 font-mono text-xs text-text-muted">{row.code}</p>
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
         <Field label={t("catalog.stockUnit")} value={row.stockUnit} />

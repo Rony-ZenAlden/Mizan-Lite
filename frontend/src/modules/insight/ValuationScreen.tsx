@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { stockValuation, type ValuedLine } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity } from "@/modules/inventory/quantity";
@@ -36,10 +36,7 @@ export function ValuationScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("valuation.title")}</h2>
-        <p className="text-sm text-text-muted">{t("valuation.help")}</p>
-      </header>
+      <PageHeader title={t("valuation.title")} description={t("valuation.help")} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure label={t("valuation.onTheShelf")} value={formatMinor(valuation.data.totalMinor)} />

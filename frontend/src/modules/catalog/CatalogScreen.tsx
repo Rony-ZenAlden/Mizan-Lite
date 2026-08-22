@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { productCategories, products, type Category, type ProductRow } from "@/lib/wails";
-import { Alert, EmptyState, Input, Table } from "@/shared/ui";
+import { Alert, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { ProductDetail } from "./ProductDetail";
 import { NewProductForm } from "./NewProductForm";
@@ -57,19 +57,21 @@ export function CatalogScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-medium text-text">{t("catalog.title")}</h2>
-          <p className="text-sm text-text-muted">{t("catalog.help")}</p>
-        </div>
-        {/* Behind the permission that also guards the importer: they add products by two routes,
+      <PageHeader
+        title={t("catalog.title")}
+        description={t("catalog.help")}
+        actions={
+          <>
+            {/* Behind the permission that also guards the importer: they add products by two routes,
             and a separate grant for one would protect nothing. */}
         <Can permission={PERMISSIONS.catalogManage}>
           <Button onClick={() => setAdding((v) => !v)}>
             {adding ? t("catalog.done") : t("catalog.newProduct")}
           </Button>
         </Can>
-      </header>
+          </>
+        }
+      />
 
       {adding && <NewProductForm onCreated={() => undefined} />}
 

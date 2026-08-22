@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { chartOfAccounts, type Account } from "@/lib/wails";
-import { Alert, EmptyState, Table } from "@/shared/ui";
+import { Alert, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 
 /**
@@ -24,10 +24,7 @@ export function ChartScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("accounting.chart.title")}</h2>
-        <p className="text-sm text-text-muted">{t("accounting.chart.help")}</p>
-      </header>
+      <PageHeader title={t("accounting.chart.title")} description={t("accounting.chart.help")} />
 
       <Table<Account>
         caption={t("accounting.chart.title")}

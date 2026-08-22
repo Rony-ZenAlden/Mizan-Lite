@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { dismissNotice, notices, type Notice } from "@/lib/wails";
-import { Alert, Badge, Button, EmptyState } from "@/shared/ui";
+import { Alert, Badge, Button, EmptyState, PageHeader } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 
 /**
@@ -37,14 +37,18 @@ export function NoticeCentre() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-medium text-text">{t("notices.title")}</h2>
-        {centre.data.dismissed > 0 && (
+      <PageHeader
+        title={t("notices.title")}
+        actions={
+          <>
+            {centre.data.dismissed > 0 && (
           <span className="text-xs text-text-muted">
             {t("notices.hidden", { count: String(centre.data.dismissed) })}
           </span>
         )}
-      </header>
+          </>
+        }
+      />
 
       {/*
        * A rule that could not run is SHOWN, because silence reads as "nothing is wrong". A user

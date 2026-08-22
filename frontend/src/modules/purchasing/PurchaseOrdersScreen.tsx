@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { purchaseOrders, type PurchaseOrder } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Input, Select, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { PurchaseOrderDetail } from "./PurchaseOrderDetail";
@@ -58,10 +58,7 @@ export function PurchaseOrdersScreen() {
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("purchasing.orders")}</h2>
-        <p className="text-sm text-text-muted">{t("purchasing.ordersHelp")}</p>
-      </header>
+      <PageHeader title={t("purchasing.orders")} description={t("purchasing.ordersHelp")} />
 
       <div className="flex flex-wrap items-end gap-3">
         <Input

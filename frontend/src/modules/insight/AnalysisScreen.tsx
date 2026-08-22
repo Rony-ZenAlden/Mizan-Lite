@@ -11,7 +11,7 @@ import {
   type Analysis,
   type AnalysisRow,
 } from "@/lib/wails";
-import { Alert, EmptyState, Input, Select, Table } from "@/shared/ui";
+import { Alert, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 
@@ -46,10 +46,7 @@ export function AnalysisScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("analysis.title")}</h2>
-        <p className="text-sm text-text-muted">{t("analysis.help")}</p>
-      </header>
+      <PageHeader title={t("analysis.title")} description={t("analysis.help")} />
 
       <div className="flex flex-wrap items-end gap-3">
         <Select

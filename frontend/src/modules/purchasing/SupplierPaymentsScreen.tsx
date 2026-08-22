@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { supplierPayments, type SupplierPayment } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 
@@ -39,10 +39,7 @@ export function SupplierPaymentsScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("supplierPayments.title")}</h2>
-        <p className="text-sm text-text-muted">{t("supplierPayments.help")}</p>
-      </header>
+      <PageHeader title={t("supplierPayments.title")} description={t("supplierPayments.help")} />
 
       <Table<SupplierPayment>
         caption={t("supplierPayments.title")}

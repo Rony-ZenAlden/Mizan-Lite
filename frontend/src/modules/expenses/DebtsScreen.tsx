@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { debtPositions, debts, type Debt, type DebtPosition } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 
@@ -33,10 +33,7 @@ export function DebtsScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-medium text-text">{t("debts.title")}</h2>
-        <p className="text-sm text-text-muted">{t("debts.help")}</p>
-      </header>
+      <PageHeader title={t("debts.title")} description={t("debts.help")} />
 
       {/* ── where we stand ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

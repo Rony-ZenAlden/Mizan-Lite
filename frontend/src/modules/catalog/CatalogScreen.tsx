@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { productCategories, products, type Category, type ProductRow } from "@/lib/wails";
-import { Alert, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
+import { Alert, EmptyState, Input, PageHeader, Sheet, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { ProductDetail } from "./ProductDetail";
 import { NewProductForm } from "./NewProductForm";
@@ -51,12 +51,33 @@ export function CatalogScreen() {
     );
   });
 
-  if (selected) {
-    return <ProductDetail code={selected} onBack={() => setSelected("")} />;
-  }
+  /*
+   * A DRAWER, not a replacement.
+   *
+   * Until 10.16 picking a product returned `<ProductDetail>` in place of this whole screen, so
+   * the filter, the search term and the scroll position were all gone — and came back empty on
+   * the way out. A shopkeeper checking six products against a delivery note re-typed the search
+   * six times.
+   *
+   * The title comes from the ROW rather than from the detail query, so the drawer is captioned
+   * the instant it opens instead of a beat later.
+   */
+  const openProduct = visible.find((row) => row.code === selected);
 
   return (
     <section className="flex flex-col gap-4">
+      <Sheet
+        open={selected !== ""}
+        onOpenChange={(open) => {
+          if (!open) setSelected("");
+        }}
+        title={openProduct ? (openProduct.nameKey ? t(openProduct.nameKey) : openProduct.name) : ""}
+      >
+        {selected ? (
+          <ProductDetail code={selected} onBack={() => setSelected("")} embedded />
+        ) : null}
+      </Sheet>
+
       <PageHeader
         title={t("catalog.title")}
         description={t("catalog.help")}

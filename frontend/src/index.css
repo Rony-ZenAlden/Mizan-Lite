@@ -10,6 +10,13 @@
    Colours are RGB channels so Tailwind can apply alpha (`bg-primary/10`).
    Theme switching swaps the variables; nothing re-renders on a class change.
 
+   THE PALETTE: Slate neutrals, an Indigo accent, an Emerald success. Slate
+   rather than pure grey because a neutral with a trace of blue reads as
+   deliberate next to a saturated accent, where pure grey reads as unstyled.
+   Indigo rather than the blue this shipped with because the accent and the
+   `info` status were both blue, so "this is a link" and "this is a notice"
+   were the same colour — a hierarchy problem no contrast check can see.
+
    Every foreground/background pair below is asserted to meet WCAG AA in BOTH
    themes by tokens.test.ts. Dark-theme contrast is where hand-picked palettes
    fail, and no reviewer catches it by eye — so it is a test, not a convention.
@@ -66,17 +73,17 @@
 
   /* Accent + status. Each has a solid fill, a foreground for text ON that fill,
      and a subtle tint for banner backgrounds. */
-  --color-primary: 37 99 235;
+  --color-primary: 79 70 229;
   --color-primary-fg: 255 255 255;
-  --color-primary-subtle: 239 246 255;
+  --color-primary-subtle: 238 242 255;
 
-  --color-danger: 185 28 28;
+  --color-danger: 190 18 60;
   --color-danger-fg: 255 255 255;
-  --color-danger-subtle: 254 242 242;
+  --color-danger-subtle: 255 241 242;
 
-  --color-success: 21 128 61;
+  --color-success: 4 120 87;
   --color-success-fg: 255 255 255;
-  --color-success-subtle: 240 253 244;
+  --color-success-subtle: 236 253 245;
 
   --color-warning: 180 83 9;
   --color-warning-fg: 255 255 255;
@@ -86,7 +93,7 @@
   --color-info-fg: 255 255 255;
   --color-info-subtle: 240 249 255;
 
-  --color-ring: 37 99 235;
+  --color-ring: 79 70 229;
 }
 
 :root[data-theme="dark"] {
@@ -107,27 +114,27 @@
   /* On dark, the accent fills are LIGHTER and carry dark text. A saturated
      mid-blue with white text sits at ~3.7:1 — below AA for body text — which is
      exactly the trap the contrast gate exists to catch. */
-  --color-primary: 96 165 250;
+  --color-primary: 129 140 248;
   --color-primary-fg: 15 23 42;
-  --color-primary-subtle: 30 41 59;
+  --color-primary-subtle: 35 38 74;
 
-  --color-danger: 248 113 113;
+  --color-danger: 251 113 133;
   --color-danger-fg: 15 23 42;
-  --color-danger-subtle: 42 24 28;
+  --color-danger-subtle: 52 22 30;
 
-  --color-success: 74 222 128;
+  --color-success: 52 211 153;
   --color-success-fg: 15 23 42;
-  --color-success-subtle: 16 42 28;
+  --color-success-subtle: 8 45 35;
 
   --color-warning: 251 191 36;
   --color-warning-fg: 15 23 42;
-  --color-warning-subtle: 45 34 12;
+  --color-warning-subtle: 50 36 10;
 
   --color-info: 56 189 248;
   --color-info-fg: 15 23 42;
-  --color-info-subtle: 12 36 52;
+  --color-info-subtle: 10 38 56;
 
-  --color-ring: 96 165 250;
+  --color-ring: 129 140 248;
 }
 
 html,
@@ -142,6 +149,32 @@ body {
   color: rgb(var(--color-text));
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Theme transitions ───────────────────────────────────────────────────────
+   A theme swap that repaints instantly reads as a glitch; one that eases across
+   reads as deliberate. Only the four properties a theme actually changes are
+   animated — never `transform` or `opacity`, which belong to Radix's enter and
+   exit animations and would be dragged out of time with them.
+
+   GATED ON AN ATTRIBUTE, not applied always. The provider adds it once
+   preferences have loaded, for two reasons:
+
+     - The first paint resolves the OS theme. Transitioning that would fade the
+       whole application in from the wrong colours on every single launch.
+     - A stored preference that disagrees with the OS arrives a moment later.
+       That correction is startup finishing, not a choice the user made, and it
+       should land instantly.
+
+   So the animation only ever runs for a theme change a PERSON asked for. */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-transitions] *,
+  :root[data-theme-transitions] *::before,
+  :root[data-theme-transitions] *::after {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 180ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
 }
 
 /* Arabic needs slightly more vertical breathing room at the same size. */

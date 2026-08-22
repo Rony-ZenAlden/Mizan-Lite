@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"strings"
 
 	"github.com/mizan-erp/mizan/internal/api/appctx"
 	"github.com/mizan-erp/mizan/internal/api/envelope"
@@ -572,8 +573,13 @@ func (s *Sales) Print(documentID, template, paper string) envelope.Result[Printe
 		// Address and telephone are not on the company record yet, and nothing here invents
 		// them: the template drops the lines when they are blank, which is exactly what
 		// omitWhenEmpty is for.
+		//
+		// The heading is the RECEIPT HEADER setting, falling back to the company's name. A shop
+		// whose registered name differs from the one over its door sets it once; one that never
+		// touches it prints exactly what it printed before. The fallback is here, at the only
+		// place a letterhead is built, so "what goes at the top" has one answer.
 		Letterhead: sales.Letterhead{
-			Company: company.Name, TaxNumber: company.TaxNumber,
+			Company: receiptHeading(ctx, company.Name), TaxNumber: company.TaxNumber,
 		},
 		Decimals: int(functional.Decimals()),
 	})
@@ -592,4 +598,15 @@ func (s *Sales) Print(documentID, template, paper string) envelope.Result[Printe
 		}),
 		Number: document.Number,
 	})
+}
+
+// receiptHeading is the configured receipt header, or the company's name when none is set.
+//
+// Whitespace counts as unset. A header of three spaces would otherwise print an empty line where
+// the shop's name belongs, and the person who typed it would have no way to see why.
+func receiptHeading(ctx context.Context, companyName string) string {
+	if header := strings.TrimSpace(sales.ReceiptHeader.Get(ctx)); header != "" {
+		return header
+	}
+	return companyName
 }

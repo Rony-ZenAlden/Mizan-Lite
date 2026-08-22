@@ -5,6 +5,7 @@ import { Can } from "@/app/session/Can";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { PERMISSIONS, expenses, unsettledExpenses, type Expense } from "@/lib/wails";
 import { Alert, Badge, Button, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
+import { KpiStrip } from "@/modules/insight/KpiStrip";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
 
@@ -54,6 +55,10 @@ export function ExpensesScreen() {
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-4">
+        {/* Money in and money out, side by side. What customers owe is the figure a shop checks
+            before deciding whether it can pay a bill, and it lived only on the home screen. */}
+        <KpiStrip source="sales" only={["sales.receivables"]} />
+
         <PageHeader
         title={t("expenses.title")}
         description={t("expenses.help")}

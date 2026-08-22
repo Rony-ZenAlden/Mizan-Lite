@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PreferencesProvider, usePreferences } from "./PreferencesProvider";
 import { installBridge } from "@/lib/wails/testing";
 import { renderIn } from "@/test/render";
@@ -24,6 +24,12 @@ function ok(data: unknown) {
 }
 
 describe("PreferencesProvider", () => {
+  // <html> survives between tests in a file, so an attribute set by one test is still there for
+  // the next. Without this the transition gate reads as already-open before it is opened.
+  beforeEach(() => {
+    delete document.documentElement.dataset.themeTransitions;
+  });
+
   it("reads locale and theme from the backend, not from component state", async () => {
     installBridge({
       Config: {
@@ -148,5 +154,60 @@ describe("PreferencesProvider", () => {
     // whatever the OS happened to be on the day it was set.
     expect(screen.getByTestId("theme")).toHaveTextContent("system");
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  /*
+   * The theme TRANSITION, which is a different guarantee from the theme.
+   *
+   * Startup applies the theme twice — the OS preference at first paint, then the stored one a
+   * moment later. Animating either fades the whole application in from the wrong colours on
+   * every launch, which looks like a bug and happens every single time.
+   *
+   * So the drill is on the gate, not on the animation: the attribute the CSS keys off must be
+   * absent while preferences are in flight, and present once they have landed.
+   */
+  it("does not animate the theme until the stored preference has arrived", async () => {
+    let release: (value: unknown) => void = () => {};
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    installBridge({
+      Config: {
+        Preferences: () => pending as Promise<{ ok: true; data: unknown }>,
+      },
+    });
+
+    renderIn(
+      <PreferencesProvider>
+        <Probe />
+      </PreferencesProvider>,
+    );
+
+    // In flight: the theme is already applied from the OS, and must not be animated.
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBeTruthy());
+    expect(document.documentElement.dataset.themeTransitions).toBeUndefined();
+
+    release({ ok: true, data: { locale: "en", theme: "dark", availableLocales: ["en"] } });
+
+    await waitFor(() =>
+      expect(document.documentElement.dataset.themeTransitions).toBeDefined(),
+    );
+  });
+
+  it("settles the transition gate even when preferences cannot be read", async () => {
+    // Otherwise a shop whose preferences fail to load never gets an animated theme change
+    // again — a permanent degradation from a transient failure.
+    installBridge({ Config: { Preferences: () => Promise.reject(new Error("disk")) } });
+
+    renderIn(
+      <PreferencesProvider>
+        <Probe />
+      </PreferencesProvider>,
+    );
+
+    await waitFor(() =>
+      expect(document.documentElement.dataset.themeTransitions).toBeDefined(),
+    );
   });
 });

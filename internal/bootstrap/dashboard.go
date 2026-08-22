@@ -121,6 +121,20 @@ func (a *App) Dashboard(
 				AmountMinor: analysis.Total.NetMinor})
 	}
 
+	// What customers still owe, AS AT NOW.
+	//
+	// The figure a shopkeeper means by "what am I owed", and the one the sales screens are read
+	// for. Sales answers it from its own allocations, so this stays an assembly rather than
+	// becoming a calculation — the rule this file is held to.
+	if owed, err := sources.sales.OutstandingTotal(ctx, companyID); err != nil {
+		board.Tiles = append(board.Tiles,
+			Tile{Key: "sales.receivables", Source: "sales", Kind: "money", Failed: true})
+	} else {
+		board.Tiles = append(board.Tiles,
+			Tile{Key: "sales.receivables", Source: "sales", Kind: "money",
+				AmountMinor: owed.TotalMinor})
+	}
+
 	// Stock value AS AT NOW, not over the range — which is why `Periodic` exists.
 	if valuation, err := sources.inventory.Valuation(ctx, companyID); err != nil {
 		board.Tiles = append(board.Tiles,
@@ -131,6 +145,22 @@ func (a *App) Dashboard(
 				AmountMinor: valuation.TotalMinor},
 			Tile{Key: "inventory.lines_held", Source: "inventory", Kind: "count",
 				Count: len(valuation.Lines)})
+	}
+
+	// What has run out, AS AT NOW.
+	//
+	// A separate ask rather than a count over the valuation's lines, because the valuation
+	// EXCLUDES levels at zero — and "has run out" is exactly those. Deriving it from the
+	// valuation would have counted only negative levels, so the tile would have read zero on a
+	// shop with empty shelves.
+	if alerts, err := sources.inventory.Alerts(ctx, companyID); err != nil {
+		board.Tiles = append(board.Tiles,
+			Tile{Key: "inventory.out_of_stock", Source: "inventory", Kind: "count",
+				Failed: true})
+	} else {
+		board.Tiles = append(board.Tiles,
+			Tile{Key: "inventory.out_of_stock", Source: "inventory", Kind: "count",
+				Count: alerts.OutOfStockLines})
 	}
 
 	return board, nil

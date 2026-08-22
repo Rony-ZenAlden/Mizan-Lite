@@ -39,7 +39,10 @@ func (f fakeDB) WriterPool() *sql.DB     { return f.pool }
 func (f fakeDB) Dialect() backup.Dialect { return f.dialect }
 
 // fixture builds a real SQLite database with a migration history, and a service over it.
-func fixture(t *testing.T) (*backup.Service, string, *sql.DB) {
+//
+// The clock comes back so a test about AGE can move time rather than sleep. A test that slept
+// would be slow and, worse, flaky on a loaded machine — the two properties a drill must not have.
+func fixture(t *testing.T) (*backup.Service, string, *sql.DB, *clock.Fixed) {
 	t.Helper()
 	root := t.TempDir()
 	livePath := filepath.Join(root, "live.db")
@@ -59,6 +62,7 @@ func fixture(t *testing.T) (*backup.Service, string, *sql.DB) {
 		t.Fatalf("seeding: %v", err)
 	}
 
+	clk := clock.NewFixed(time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC))
 	service := backup.New(fakeDB{
 		pool: pool,
 		dialect: fakeDialect{
@@ -75,10 +79,10 @@ func fixture(t *testing.T) (*backup.Service, string, *sql.DB) {
 		Dir: filepath.Join(root, "backups"),
 		// A fixed clock, so filenames are predictable and two snapshots taken in one test do not
 		// collide by landing in the same second.
-		Clock:      clock.NewFixed(time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)),
+		Clock:      clk,
 		AppVersion: "test",
 	})
-	return service, root, pool
+	return service, root, pool, clk
 }
 
 // ── what a backup is ────────────────────────────────────────────────────────────
@@ -92,7 +96,7 @@ func fixture(t *testing.T) (*backup.Service, string, *sql.DB) {
 // Every field is read from the DATABASE. A manifest recording the version the caller believed it
 // was backing up would be right until the one time it mattered.
 func TestASnapshotIsVerifiedAndCarriesWhatItIsABackupOf(t *testing.T) {
-	service, _, _ := fixture(t)
+	service, _, _, _ := fixture(t)
 
 	taken, err := service.Take(context.Background(), backup.OnDemand)
 	if err != nil {
@@ -143,7 +147,7 @@ func TestASnapshotIsVerifiedAndCarriesWhatItIsABackupOf(t *testing.T) {
 // The snapshot here is written as an empty file, which is what a truncated copy or a full disk
 // produces: it exists, it has a plausible name, and it is not a database.
 func TestAnUnverifiableSnapshotIsRemovedRatherThanListed(t *testing.T) {
-	service, root, pool := fixture(t)
+	service, root, pool, _ := fixture(t)
 
 	// The FAKE writes the unusable file, which is what a truncated copy or a full disk produces:
 	// the destination exists, has a plausible name, and is not a database.
@@ -196,7 +200,7 @@ func TestAnUnverifiableSnapshotIsRemovedRatherThanListed(t *testing.T) {
 // Proceeding would mean taking no backup while reporting that one exists — which is worse than
 // failing, because the caller stops looking.
 func TestAnEngineThatCannotSnapshotIsRefusedRatherThanFaked(t *testing.T) {
-	_, root, pool := fixture(t)
+	_, root, pool, _ := fixture(t)
 
 	service := backup.New(fakeDB{
 		pool:    pool,
@@ -269,7 +273,7 @@ func TestVerifyRefusesAFileThatIsNotAMizanDatabase(t *testing.T) {
 // Offering to restore from it would be offering a file this package cannot describe — and the
 // version check a restore depends on has nothing to read.
 func TestAFileWithNoManifestIsNotABackup(t *testing.T) {
-	service, root, _ := fixture(t)
+	service, root, _, _ := fixture(t)
 
 	if _, err := service.Take(context.Background(), backup.OnDemand); err != nil {
 		t.Fatalf("Take: %v", err)
@@ -294,7 +298,7 @@ func TestAFileWithNoManifestIsNotABackup(t *testing.T) {
 // /etc/passwd" is a question this package should never be asked, and the way to never be asked it
 // is to be incapable of answering.
 func TestABackupIsFoundByNameAndOnlyByName(t *testing.T) {
-	service, _, _ := fixture(t)
+	service, _, _, _ := fixture(t)
 
 	taken, err := service.Take(context.Background(), backup.OnDemand)
 	if err != nil {
@@ -362,7 +366,7 @@ func mustBackups(t *testing.T, service *backup.Service) []backup.Backup {
 // And a `keep` of zero must not delete everything: a configuration mistake that leaves a shop
 // with no backup at all is exactly the failure backups exist to prevent.
 func TestPruningKeepsTheNewestOfEachReasonAndNeverEmptiesTheDirectory(t *testing.T) {
-	_, root, pool := fixture(t)
+	_, root, pool, _ := fixture(t)
 
 	// A moving clock, so each snapshot gets its own filename and a comparable timestamp.
 	moment := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
@@ -430,7 +434,7 @@ func TestPruningKeepsTheNewestOfEachReasonAndNeverEmptiesTheDirectory(t *testing
 
 // TestKeepingZeroStillKeepsOne
 func TestKeepingZeroStillKeepsOne(t *testing.T) {
-	_, root, pool := fixture(t)
+	_, root, pool, _ := fixture(t)
 	moving := &steppingClock{now: time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)}
 
 	// Keep: -1 is the misconfiguration. `New` normalises it to the default, which is where the
@@ -473,7 +477,7 @@ func TestKeepingZeroStillKeepsOne(t *testing.T) {
 //
 // An ordinary state on a fresh install, not a failure.
 func TestListingWhenNothingHasEverBeenBackedUp(t *testing.T) {
-	_, root, pool := fixture(t)
+	_, root, pool, _ := fixture(t)
 	service := backup.New(fakeDB{pool: pool}, backup.Options{
 		Dir: filepath.Join(root, "never"),
 	})
@@ -552,5 +556,174 @@ func TestThereIsOnlyOneBackupImplementation(t *testing.T) {
 	if len(callers) < 2 {
 		t.Fatalf("only %d packages mention OnlineBackupStatement (%v); the dialect defines it "+
 			"and this package uses it, so there should be at least two", len(callers), callers)
+	}
+}
+
+// ── the snapshot nobody has to ask for ──────────────────────────────────────────
+
+// TestARecentSnapshotMeansTheCloseTimeOneIsSkipped
+//
+// The whole point of TakeIfDue. A shop that opens and closes the window six times in an hour must
+// not get six snapshots — they would be near-identical, and since retention keeps seven per
+// reason they would push the useful ones out within the hour.
+//
+// Note WHICH snapshot suppresses it: a `scheduled` one. The question TakeIfDue answers is "is this
+// data already safe", and a copy from two minutes ago answers it regardless of why it was taken.
+func TestARecentSnapshotMeansTheCloseTimeOneIsSkipped(t *testing.T) {
+	service, _, _, clk := fixture(t)
+	ctx := context.Background()
+
+	if _, err := service.Take(ctx, backup.Scheduled); err != nil {
+		t.Fatalf("the first snapshot: %v", err)
+	}
+
+	clk.Advance(20 * time.Minute)
+	taken, took, err := service.TakeIfDue(ctx, backup.OnClose, time.Hour)
+	if err != nil {
+		t.Fatalf("TakeIfDue: %v", err)
+	}
+	if took {
+		t.Errorf("a second snapshot was taken 20 minutes after the first: %q", taken.Name)
+	}
+
+	found, err := service.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(found) != 1 {
+		t.Errorf("the directory holds %d snapshots, want 1", len(found))
+	}
+}
+
+// TestOnceTheWindowHasPassedTheCloseTimeSnapshotIsTaken
+//
+// The other half, and the one that matters: this is the drill that fails if the close-time backup
+// silently stops happening. A test that only proved the SKIP would pass just as happily against a
+// TakeIfDue that never took anything at all.
+func TestOnceTheWindowHasPassedTheCloseTimeSnapshotIsTaken(t *testing.T) {
+	service, _, _, clk := fixture(t)
+	ctx := context.Background()
+
+	if _, err := service.Take(ctx, backup.Scheduled); err != nil {
+		t.Fatalf("the morning snapshot: %v", err)
+	}
+
+	// A trading day.
+	clk.Advance(9 * time.Hour)
+	taken, took, err := service.TakeIfDue(ctx, backup.OnClose, time.Hour)
+	if err != nil {
+		t.Fatalf("TakeIfDue: %v", err)
+	}
+	if !took {
+		t.Fatal("nine hours of trading closed without a snapshot")
+	}
+	if taken.Manifest.Reason != backup.OnClose {
+		t.Errorf("reason = %q, want %q", taken.Manifest.Reason, backup.OnClose)
+	}
+	// Filed in its own bucket, which is what stops it evicting the daily ones.
+	if !strings.HasPrefix(taken.Name, string(backup.OnClose)) {
+		t.Errorf("name = %q, want it to start with %q", taken.Name, backup.OnClose)
+	}
+	// And it is a REAL backup, verified and restorable — not a marker file.
+	if taken.Manifest.SchemaVersion != 36 {
+		t.Errorf("schema version = %d, want 36", taken.Manifest.SchemaVersion)
+	}
+}
+
+// TestTheFirstEverCloseTakesASnapshotRatherThanFindingNothingAndSkipping
+//
+// An empty directory is the state of every fresh install, and the boundary an "is there a recent
+// one" check is most likely to get backwards. Skipping here would mean the very first shop to
+// install Mizan, trade for a day and close gets no backup at all.
+func TestTheFirstEverCloseTakesASnapshotRatherThanFindingNothingAndSkipping(t *testing.T) {
+	service, _, _, _ := fixture(t)
+
+	_, took, err := service.TakeIfDue(context.Background(), backup.OnClose, time.Hour)
+	if err != nil {
+		t.Fatalf("TakeIfDue: %v", err)
+	}
+	if !took {
+		t.Error("the first close on a fresh install took no snapshot")
+	}
+}
+
+// TestASnapshotStampedInTheFutureDoesNotSuppressBackups
+//
+// A clock corrected backwards — a machine that booted with a bad RTC and then reached an NTP
+// server — leaves a snapshot dated ahead of `now`. A naive `now.Sub(takenAt) < minAge` reads that
+// as "taken recently" and skips, and it keeps skipping until the file ages out of retention.
+//
+// That is a backup system silently switched off by a wrong clock. When the two readings disagree
+// the safe direction is the extra snapshot.
+func TestASnapshotStampedInTheFutureDoesNotSuppressBackups(t *testing.T) {
+	service, _, _, clk := fixture(t)
+	ctx := context.Background()
+
+	// Taken "tomorrow", then the clock is corrected back to today.
+	clk.Advance(24 * time.Hour)
+	if _, err := service.Take(ctx, backup.Scheduled); err != nil {
+		t.Fatalf("the future snapshot: %v", err)
+	}
+	clk.Advance(-24 * time.Hour)
+
+	_, took, err := service.TakeIfDue(ctx, backup.OnClose, time.Hour)
+	if err != nil {
+		t.Fatalf("TakeIfDue: %v", err)
+	}
+	if !took {
+		t.Error("a snapshot dated in the future suppressed the close-time backup")
+	}
+}
+
+// TestAFailedSnapshotLeavesNothingBehindToFillTheDisk
+//
+// # The leak this closes
+//
+// A half-written file has no manifest. List skips anything whose manifest will not read, so the
+// file is invisible to the backup screen AND to Prune — which only removes what List returns. It
+// therefore accumulates, once per failure, until it fills the disk.
+//
+// That is the worst shape a bug can have: silent, unbounded, and it surfaces as "backups are
+// failing for want of space" long after the cause. A close-time backup is what made it reachable
+// in practice, because that one CAN be cancelled — the shutdown budget expires mid-copy on a
+// large database.
+func TestAFailedSnapshotLeavesNothingBehindToFillTheDisk(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "backups")
+
+	pool, err := sql.Open("sqlite", "file:"+filepath.Join(root, "live.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+	if _, err = pool.Exec(
+		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT);
+		 INSERT INTO schema_migrations VALUES (1, 'platform');`); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	// A statement that writes the destination and THEN fails, which is what a cancelled or
+	// out-of-space VACUUM INTO leaves behind: a file on disk and an error returned.
+	service := backup.New(fakeDB{pool: pool, dialect: fakeDialect{
+		name:      "sqlite",
+		integrity: "PRAGMA integrity_check",
+		online: func(dest string) string {
+			if dest == "" {
+				return "VACUUM INTO ''"
+			}
+			return "VACUUM INTO '" + dest + "'; SELECT this_is_not_a_function();"
+		},
+	}}, backup.Options{Dir: dir, AppVersion: "test"})
+
+	if _, err = service.Take(context.Background(), backup.OnClose); err == nil {
+		t.Fatal("a snapshot that could not be written reported success")
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("reading the backup directory: %v", err)
+	}
+	for _, entry := range entries {
+		t.Errorf("a failed snapshot left %q behind; nothing will ever remove it", entry.Name())
 	}
 }

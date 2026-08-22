@@ -1,22 +1,31 @@
 import type { SetupCountry, SetupInput, SetupOptions } from "@/lib/wails";
 
 /**
- * The wizard's seven steps (Addendum §C.2, collapsed).
+ * The wizard's three steps.
  *
- * §C.2 lists ten. Three of them are single fields that belong with their neighbours, one
- * (starting data) is Phase 9, and one (tax) is omitted rather than shown disabled — no country
- * profile ships a tax profile to enable (§C.3), so the question has no answer to offer yet.
- * Showing a control that cannot do anything teaches users to distrust controls.
+ * # Seven became three, and nothing was dropped
+ *
+ * §C.2 lists ten; a first pass collapsed them to seven. Seven screens to open a shop is still
+ * six too many, and the count was never the real problem — the SHAPE was. Five of the seven
+ * asked for a code, a name, and two more codes, which is a data-entry form wearing a wizard's
+ * clothes.
+ *
+ * So the questions are now grouped by what a shopkeeper actually knows:
+ *
+ *   shop     Where are you, and what is the shop called?
+ *   trade    What do you sell, and in what money?
+ *   account  Who are you, and what goes on the receipt?
+ *
+ * Everything the backend still requires — company code, branch, warehouse, fiscal year — is
+ * DERIVED from those answers and shown on the step that derives it, under a disclosure. That
+ * matters: §C.1's rule is that a default the user never sees is indistinguishable from a rule
+ * they cannot change. Derived is not hidden.
+ *
+ * Tax is still absent rather than disabled. No country profile ships a tax profile to enable
+ * (§C.3), so the question has no answer to offer, and a control that cannot do anything teaches
+ * users to distrust controls.
  */
-export const STEPS = [
-  "language",
-  "country",
-  "company",
-  "currency",
-  "business",
-  "locations",
-  "administrator",
-] as const;
+export const STEPS = ["shop", "trade", "account"] as const;
 
 export type Step = (typeof STEPS)[number];
 
@@ -37,9 +46,29 @@ export interface WizardState extends SetupInput {
   adminPasswordConfirm: string;
 }
 
+/**
+ * A company code derived from the shop's name.
+ *
+ * The code is an internal identifier that appears in exports and imports; a shopkeeper has no
+ * opinion about it and asking for one is a question with no right answer. Letters and digits
+ * only, upper-cased, capped — matching what the backend accepts, so the derived value is never
+ * the reason a submission is refused.
+ *
+ * Falls back to "MAIN" rather than to an empty string: a blank code fails validation on the last
+ * step, which is the worst possible moment to discover it.
+ */
+export function codeFromName(name: string): string {
+  const cleaned = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 12);
+  return cleaned || "MAIN";
+}
+
 export function initialState(defaultLocale: string): WizardState {
   return {
     locale: defaultLocale,
+    receiptHeader: "",
     countryCode: "",
     companyCode: "",
     companyName: "",
@@ -107,6 +136,7 @@ export function toInput(state: WizardState): SetupInput {
     adminUsername: state.adminUsername,
     adminDisplayName: state.adminDisplayName,
     adminPassword: state.adminPassword,
+    receiptHeader: state.receiptHeader,
   };
 }
 
@@ -120,27 +150,29 @@ export function toInput(state: WizardState): SetupInput {
  */
 export function canAdvance(step: Step, state: WizardState, options?: SetupOptions): boolean {
   switch (step) {
-    case "language":
-      return state.locale !== "";
-    case "country":
-      return state.countryCode !== "" && Boolean(options?.countries.some((c) => c.code === state.countryCode));
-    case "company":
-      return state.companyCode.trim() !== "" && state.companyName.trim() !== "";
-    case "currency":
-      return state.functionalCurrency !== "" && state.pricingCurrency !== "";
-    case "business":
-      // Optional: a shop that fits none of the shipped trades is a real case, and forcing a
-      // choice would make the first one they see the answer for everybody.
-      return true;
-    case "locations":
+    case "shop":
       return (
+        state.countryCode !== "" &&
+        Boolean(options?.countries.some((c) => c.code === state.countryCode)) &&
+        state.companyName.trim() !== "" &&
+        // Derived from the name, but still checked. If the derivation ever produced nothing the
+        // failure would surface here, on the step that owns it, rather than as a rejection on
+        // the last screen with no indication of which answer caused it.
+        state.companyCode.trim() !== "" &&
         state.branchCode.trim() !== "" &&
         state.branchName.trim() !== "" &&
         state.warehouseCode.trim() !== "" &&
         state.warehouseName.trim() !== "" &&
         state.fiscalYearStartYear > 0
       );
-    case "administrator":
+    case "trade":
+      // The business profile itself is OPTIONAL: a shop that fits none of the shipped trades is
+      // a real case, and forcing a choice would make the first one on the list the answer for
+      // everybody. The currencies are not optional — nothing can be priced without them.
+      return state.functionalCurrency !== "" && state.pricingCurrency !== "";
+    case "account":
+      // The receipt header is deliberately absent from this check. Blank means "use the shop's
+      // name", which is the right answer for most shops and must not be a thing to fill in.
       return (
         state.adminUsername.trim() !== "" &&
         state.adminPassword !== "" &&

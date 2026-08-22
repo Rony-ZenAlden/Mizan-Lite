@@ -62,6 +62,16 @@ const (
 	OnDemand Reason = "on_demand"
 	// Scheduled is the job.
 	Scheduled Reason = "scheduled"
+	// OnClose is the snapshot taken as the app shuts down.
+	//
+	// It exists because the scheduled job protects the state at the START of a trading day and
+	// nothing protects the state at the END of one. A shop that opens at nine and closes at six
+	// has nine hours of takings whose only copy is the live database until tomorrow's run.
+	//
+	// Its own reason rather than reusing Scheduled, because retention is PER REASON: a shop that
+	// opens and closes the app many times a day would otherwise evict every daily snapshot
+	// within a day, and the retention window would silently collapse from a week to an hour.
+	OnClose Reason = "on_close"
 )
 
 // Manifest is what a backup is a backup OF.
@@ -191,6 +201,15 @@ func (s *Service) Take(ctx context.Context, reason Reason) (Backup, error) {
 	if _, err := s.db.WriterPool().ExecContext(
 		ctx, s.db.Dialect().OnlineBackupStatement(destination),
 	); err != nil {
+		// The half-written file is REMOVED, for the same reason an unverifiable one is below —
+		// and for one more that only appeared once a caller could cancel this.
+		//
+		// A partial file has no manifest, and List skips anything whose manifest will not read.
+		// So it is invisible to the backup screen, invisible to Prune, and never cleaned up: it
+		// accumulates, once per failure, until it fills the disk. That is a leak nobody would
+		// see until backups started failing for want of space — which is the worst possible
+		// moment to discover the backup directory is the thing that filled it.
+		_ = os.Remove(destination)
 		return Backup{}, errs.Wrap(err, errs.CategoryInternal, CodeBackupFailed,
 			"writing the snapshot")
 	}
@@ -212,6 +231,64 @@ func (s *Service) Take(ctx context.Context, reason Reason) (Backup, error) {
 		return Backup{}, err
 	}
 	return Backup{Path: destination, Manifest: manifest, Name: name}, nil
+}
+
+// TakeIfDue takes a snapshot only when the data is not already covered by a recent one.
+//
+// It reports whether it took one, so a caller can tell "protected already" from "did nothing".
+//
+// # Why the question is asked of ALL snapshots and answered into one bucket
+//
+// `minAge` is compared against the newest snapshot of ANY reason, because the question a caller
+// is really asking is "is this data already safe?" — and a scheduled snapshot from two minutes
+// ago answers it just as well as an on-close one. Asking only about `reason` would take a
+// redundant copy every close, minutes after the daily job had already run.
+//
+// The snapshot it writes is still filed under `reason`, so PRUNING stays separated. The
+// asymmetry is deliberate: the decision is about the data, the retention bucket is about the
+// kind.
+//
+// # Why time, and not "did anything change"
+//
+// A change check would be better if it were reliable, and it is not cheaply reliable here. In
+// WAL mode SQLite's header change counter only moves on checkpoint, so the obvious marker reads
+// as "unchanged" after a busy day; a per-connection counter does not survive a restart; and a
+// row count over an application table is knowledge this package deliberately does not have.
+//
+// So `minAge` is the honest bound: AT MOST `minAge` of work is unprotected when the app closes,
+// and the cost of the imprecision is an occasional identical snapshot — one file, in a bucket
+// that keeps seven.
+func (s *Service) TakeIfDue(ctx context.Context, reason Reason, minAge time.Duration) (Backup, bool, error) {
+	if minAge > 0 {
+		found, err := s.List()
+		if err != nil {
+			return Backup{}, false, err
+		}
+		now := s.clk.Now().UTC()
+		for _, candidate := range found {
+			takenAt, parseErr := time.Parse(time.RFC3339, candidate.Manifest.TakenAt)
+			if parseErr != nil {
+				// Unreadable timestamp: this one cannot answer the question, so ask the next.
+				continue
+			}
+			// List is newest-first, so the first one that parses is the newest.
+			//
+			// A NEGATIVE age — a snapshot stamped in the future, by a clock that has since been
+			// corrected — is deliberately not treated as recent. Treating it as recent would
+			// suppress every close backup until that file aged out, and when the two readings
+			// disagree the safe direction is the extra snapshot, never the missing one.
+			if age := now.Sub(takenAt); age >= 0 && age < minAge {
+				return Backup{}, false, nil
+			}
+			break
+		}
+	}
+
+	taken, err := s.Take(ctx, reason)
+	if err != nil {
+		return Backup{}, false, err
+	}
+	return taken, true, nil
 }
 
 // Verify opens a database file independently and reports what it contains.

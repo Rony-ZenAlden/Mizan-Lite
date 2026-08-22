@@ -17,7 +17,7 @@ import (
 // restoreFixture builds a live database, a service, and a backup to restore from.
 func restoreFixture(t *testing.T) (*backup.Service, string, backup.Backup) {
 	t.Helper()
-	service, root, pool := fixture(t)
+	service, root, pool, _ := fixture(t)
 
 	taken, err := service.Take(context.Background(), backup.OnDemand)
 	if err != nil {

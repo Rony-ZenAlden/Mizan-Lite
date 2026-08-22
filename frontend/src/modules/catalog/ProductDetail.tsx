@@ -18,7 +18,22 @@ import { useErrorText } from "@/modules/admin/useAdminError";
  * should never encounter the word "variant". `isSimple` comes from the backend rather than being
  * derived here, so the rule has one home.
  */
-export function ProductDetail({ code, onBack }: { code: string; onBack: () => void }) {
+export function ProductDetail({
+  code,
+  onBack,
+  embedded = false,
+}: {
+  code: string;
+  onBack: () => void;
+  /**
+   * Rendered inside a drawer, which supplies the title and the way out.
+   *
+   * The flag suppresses this component's OWN chrome rather than the drawer hiding it, because a
+   * back button and a close button side by side are two controls that do the same thing — and a
+   * user who tries the wrong one learns the screen is unpredictable.
+   */
+  embedded?: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const { t } = useTranslation();
   const errorText = useErrorText();
@@ -32,7 +47,9 @@ export function ProductDetail({ code, onBack }: { code: string; onBack: () => vo
   if (detail.isError) {
     return (
       <section className="flex flex-col gap-4">
-        <Button variant="ghost" onClick={onBack}>{t("catalog.back")}</Button>
+        {embedded ? null : (
+          <Button variant="ghost" onClick={onBack}>{t("catalog.back")}</Button>
+        )}
         <Alert tone="danger" title={t("catalog.failed")}>{errorText(detail.error)}</Alert>
       </section>
     );
@@ -43,21 +60,34 @@ export function ProductDetail({ code, onBack }: { code: string; onBack: () => vo
 
   return (
     <section className="flex flex-col gap-4">
-      <div>
-        <Button variant="ghost" onClick={onBack}>{t("catalog.back")}</Button>
-      </div>
-
-      <PageHeader
-        title={name}
-        actions={
+      {embedded ? (
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-mono text-xs text-text-muted">{row.code}</p>
           <Can permission={PERMISSIONS.catalogManage}>
             <Button variant="ghost" onClick={() => setEditing((open) => !open)}>
               {editing ? t("catalog.done") : t("catalog.edit")}
             </Button>
           </Can>
-        }
-      />
-      <p className="-mt-4 font-mono text-xs text-text-muted">{row.code}</p>
+        </div>
+      ) : (
+        <>
+          <div>
+            <Button variant="ghost" onClick={onBack}>{t("catalog.back")}</Button>
+          </div>
+
+          <PageHeader
+            title={name}
+            actions={
+              <Can permission={PERMISSIONS.catalogManage}>
+                <Button variant="ghost" onClick={() => setEditing((open) => !open)}>
+                  {editing ? t("catalog.done") : t("catalog.edit")}
+                </Button>
+              </Can>
+            }
+          />
+          <p className="-mt-4 font-mono text-xs text-text-muted">{row.code}</p>
+        </>
+      )}
 
       {editing ? (
         <EditProductForm

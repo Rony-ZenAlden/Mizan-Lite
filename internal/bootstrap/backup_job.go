@@ -89,6 +89,66 @@ func (a *App) registerBackupJob(every time.Duration) error {
 	})
 }
 
+// closeBackupMinAge is how recent a snapshot must be for the close-time one to be skipped.
+//
+// It IS the data-loss window at close: at most an hour of trading is unprotected when the app
+// shuts down. Shorter would snapshot on every close during a busy hour of opening and closing the
+// window; longer would let an afternoon's takings go uncopied.
+const closeBackupMinAge = time.Hour
+
+// backupOnClose snapshots the day's work as the app shuts down.
+//
+// # What this covers that the daily job does not
+//
+// The scheduled job protects the state at the START of a trading day. A shop that opens at nine
+// and closes at six has nine hours of takings whose only copy is the live database until
+// tomorrow's run. This copies the state that actually matters — the end of the day.
+//
+// # Why it is safe to do while closing, measured rather than assumed
+//
+// `Take` is VACUUM INTO plus an integrity check, and both are linear in the database's size.
+// Measured on this machine: 117MB copies in 212ms and checks in 119ms — about 3ms per megabyte
+// end to end. The 10-second budget every shutdown step gets therefore covers a database of
+// roughly three gigabytes, which is far past where a shop on SQLite would be.
+//
+// Past that the context expires mid-copy, `Take` deletes its partial file and returns an error,
+// and this logs and returns nil. That degradation is the right one: an ERP that will not close is
+// a worse bug than a missed snapshot, and the daily job still covers the shop.
+//
+// # Why it runs where it does
+//
+// After the scheduler has stopped, so a scheduled backup cannot be running concurrently. After
+// the outbox's final pass, so the snapshot includes it. Before the database closes, because it
+// needs the writer pool.
+func (a *App) backupOnClose(ctx context.Context) error {
+	if a.Backups == nil {
+		return nil // a shutdown after a start that failed before the backup service existed
+	}
+
+	taken, took, err := a.Backups.TakeIfDue(ctx, backup.OnClose, closeBackupMinAge)
+	if err != nil {
+		// NOT returned. Shutdown reports a step's error to the user, and "the backup failed"
+		// on the way out of an app they have already closed is a message they cannot act on.
+		a.log.WarnContext(ctx, "the close-time backup was not taken",
+			slog.String("error", err.Error()))
+		return nil
+	}
+	if !took {
+		a.log.DebugContext(ctx, "close-time backup skipped; a recent snapshot already covers this")
+		return nil
+	}
+
+	pruned, err := a.Backups.Prune(ctx)
+	if err != nil {
+		a.log.WarnContext(ctx, "the close-time backup was taken but old ones were not pruned",
+			slog.String("error", err.Error()))
+	}
+	a.log.InfoContext(ctx, "close-time backup taken",
+		slog.String("name", taken.Name), slog.Int64("bytes", taken.Manifest.SizeBytes),
+		slog.Int("pruned", pruned))
+	return nil
+}
+
 // backupDatabase is the narrow surface the backup package asked for.
 type backupDatabase struct{ app *App }
 

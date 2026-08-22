@@ -333,3 +333,76 @@ func localeDirs(t *testing.T) []string {
 	}
 	return out
 }
+
+// TestEveryBackupReasonHasALabelInEveryLocale
+//
+// # The defect this catches, which nothing else could
+//
+// The backup screen renders a reason with `t("backups.reason." + row.reason)`, so the key is
+// BUILT AT RUNTIME from a Go constant. That defeats every check that looks for literal keys: a
+// new `Reason` compiles, ships, and renders as the raw string `backups.reason.on_close` in the
+// user's table. Nothing fails; it just looks broken.
+//
+// Adding the on-close reason is what made this reachable — it is the first new reason since the
+// screen was written, and the first chance anyone had to find out the gap existed.
+//
+// It reads the constants from the SOURCE rather than from a hand-kept list. A list would be a
+// second place to remember, and the person who forgets the label is exactly the person who
+// forgets the list.
+func TestEveryBackupReasonHasALabelInEveryLocale(t *testing.T) {
+	path := filepath.Join(repoRoot(t), "internal", "platform", "backup", "backup.go")
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+
+	var reasons []string
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		spec, ok := n.(*ast.ValueSpec)
+		if !ok {
+			return true
+		}
+		ident, ok := spec.Type.(*ast.Ident)
+		if !ok || ident.Name != "Reason" {
+			return true
+		}
+		for _, value := range spec.Values {
+			lit, isLit := value.(*ast.BasicLit)
+			if !isLit || lit.Kind != token.STRING {
+				continue
+			}
+			unquoted, unquoteErr := strconv.Unquote(lit.Value)
+			if unquoteErr != nil {
+				continue
+			}
+			reasons = append(reasons, unquoted)
+		}
+		return true
+	})
+
+	// A parse that found nothing would pass while checking nothing — the failure mode this
+	// whole file exists to prevent.
+	if len(reasons) < 4 {
+		t.Fatalf("only %d backup reasons were found in %s; the constants are declared there",
+			len(reasons), path)
+	}
+
+	for _, dir := range localeDirs(t) {
+		raw, readErr := os.ReadFile(filepath.Join(dir, "common.json"))
+		if readErr != nil {
+			t.Fatalf("reading %s: %v", dir, readErr)
+		}
+		var messages map[string]string
+		if err = json.Unmarshal(raw, &messages); err != nil {
+			t.Fatalf("parsing %s: %v", dir, err)
+		}
+		for _, reason := range reasons {
+			key := "backups.reason." + reason
+			if strings.TrimSpace(messages[key]) == "" {
+				t.Errorf("%s has no %q; the backup screen would show a shopkeeper the raw key",
+					dir, key)
+			}
+		}
+	}
+}

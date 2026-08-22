@@ -37,9 +37,17 @@ describe("i18n key coverage", () => {
     // explicitly rather than pattern-matched, so a new exception has to be argued for.
     const ENDONYMS = ["locale.name.en", "locale.name.ar"];
 
+    // Keystrokes are the second legitimate exception, and a different argument from endonyms.
+    // A key cap is a physical object: the key marked "Ctrl" is marked "Ctrl" on an Arabic
+    // keyboard too, and translating the label would name a key the user cannot find. Kept in its
+    // own list precisely so it has to be argued on its own terms rather than waved through as
+    // "like the language names".
+    const KEYSTROKES = ["command.shortcut"];
+
     const identical = reference.filter(
       (key) =>
         !ENDONYMS.includes(key) &&
+        !KEYSTROKES.includes(key) &&
         MESSAGES.ar[key] === MESSAGES.en[key] &&
         MESSAGES.en[key]!.length > 3,
     );

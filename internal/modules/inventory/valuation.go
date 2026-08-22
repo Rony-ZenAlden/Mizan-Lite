@@ -144,3 +144,27 @@ func (s *Service) VerifyValuation(ctx context.Context, companyID id.ID) (int64, 
 // builds accounting and inventory in an order, and whichever is second cannot be a constructor
 // argument to the first without a cycle.
 func (s *Service) AttachControlLedger(control ControlLedger) { s.control = control }
+
+// StockAlerts is what needs attention on the shelves, as at now.
+//
+// A named answer rather than a bare int, like this module's other reports — and because the
+// dashboard's arithmetic guard requires a tile's figure to be READ from a module's answer rather
+// than held in a local variable that could contain anything.
+type StockAlerts struct {
+	// OutOfStockLines is how many product/warehouse levels are at or below zero.
+	OutOfStockLines int
+}
+
+// Alerts reports what has run out.
+//
+// Deliberately NOT "low stock". "Low" needs a reorder point per product, and no such column
+// exists — inventing a threshold here would mean picking a number that is right for nothing,
+// since five is a week of cement and a year of engine blocks. This counts what can be counted
+// without inventing anything.
+func (s *Service) Alerts(ctx context.Context, companyID id.ID) (StockAlerts, error) {
+	count, err := s.repos.OutOfStockLines(ctx, companyID)
+	if err != nil {
+		return StockAlerts{}, err
+	}
+	return StockAlerts{OutOfStockLines: count}, nil
+}

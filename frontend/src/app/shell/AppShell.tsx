@@ -1,8 +1,10 @@
+import { useCallback, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { usePreferences, useTranslation } from "@/app/providers/PreferencesProvider";
 import { RequirePermission } from "@/app/session/Can";
 import { useSession, hasPermission } from "@/app/session/session";
 import { useSignOut } from "@/app/session/useSignOut";
+import { CommandPalette, useCommandPaletteShortcut } from "@/app/shell/CommandPalette";
 import { NAV_GROUPS, ROUTES } from "@/app/shell/routes";
 import { type ThemePreference } from "@/lib/wails";
 import { Button, Select, Tooltip } from "@/shared/ui";
@@ -17,11 +19,18 @@ import type { Locale } from "@/i18n/messages";
  * exists.
  */
 export function AppShell() {
+  // The palette's open state lives here, not in the Header, because the shortcut is global: it
+  // must work while focus is in a table, a form, or nothing at all.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const open = useCallback(() => setPaletteOpen(true), []);
+  useCommandPaletteShortcut(open);
+
   return (
     <div className="flex h-full">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header />
+        <Header onOpenPalette={open} />
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
         <main className="flex-1 overflow-y-auto p-6">
           <Routes>
             {ROUTES.map((route) => (
@@ -115,7 +124,7 @@ function Sidebar() {
   );
 }
 
-function Header() {
+function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
   const { t, locale, availableLocales, setLocale, theme, setTheme } = usePreferences();
   const session = useSession();
   const signOut = useSignOut();
@@ -123,6 +132,30 @@ function Header() {
   return (
     <header className="flex items-center justify-between gap-4 border-b border-border px-6 py-3">
       <h1 className="truncate text-base font-medium text-text">{t("shell.title")}</h1>
+
+      {/*
+       * A search-shaped button, not a search box.
+       *
+       * It looks like a field because that is what people click when they want to find
+       * something, and it opens the palette because a field in the header could only ever
+       * search RECORDS — leaving screens and actions findable only by reading the sidebar.
+       * The shortcut is printed on it so the keyboard route is discoverable without a manual.
+       */}
+      <button
+        type="button"
+        onClick={onOpenPalette}
+        className={
+          "hidden min-w-0 flex-1 items-center justify-between gap-3 rounded-lg border " +
+          "border-border bg-surface-raised px-3 py-1.5 text-sm text-text-muted " +
+          "hover:border-border-strong sm:flex sm:max-w-md"
+        }
+      >
+        <span className="truncate">{t("command.placeholder")}</span>
+        <kbd className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs">
+          {t("command.shortcut")}
+        </kbd>
+      </button>
+
       <div className="flex items-center gap-2">
         {session ? (
           <>

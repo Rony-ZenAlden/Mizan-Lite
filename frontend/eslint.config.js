@@ -42,6 +42,10 @@ export default [
         HTMLButtonElement: "readonly",
         HTMLInputElement: "readonly",
         HTMLIFrameElement: "readonly",
+        // For the command palette: a ref to its scrolling list, and the global key listener
+        // that opens it.
+        HTMLDivElement: "readonly",
+        KeyboardEvent: "readonly",
         Window: "readonly",
         URL: "readonly",
         setTimeout: "readonly",

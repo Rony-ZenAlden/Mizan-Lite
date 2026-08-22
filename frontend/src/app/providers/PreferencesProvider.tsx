@@ -65,6 +65,8 @@ const FALLBACK: Preferences = { locale: "en", theme: "system", availableLocales:
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<Preferences>(FALLBACK);
   const [osTheme, setOsTheme] = useState<"light" | "dark">(systemTheme);
+  // Whether the stored preference has arrived. It gates the theme TRANSITION, not the theme.
+  const [settled, setSettled] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -72,7 +74,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       .then(setPrefs)
       // A preferences read that fails leaves the defaults in place rather than blocking the
       // shell: an unreadable language preference must never stop a shop from opening.
-      .catch(() => setPrefs(FALLBACK));
+      .catch(() => setPrefs(FALLBACK))
+      // Either way startup is over. A failed read still settles, or a shop whose preferences
+      // will not load would never get an animated theme change again.
+      .finally(() => setSettled(true));
   }, []);
 
   // Track the OS theme so "system" stays live rather than being sampled once at startup.
@@ -98,6 +103,21 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme;
   }, [resolvedTheme]);
+
+  /*
+   * Transitions are enabled only once the stored preference has arrived.
+   *
+   * Before that there are two theme applications that are STARTUP rather than choice: the first
+   * paint resolving the OS preference, and the stored preference correcting it a moment later.
+   * Animating either fades the whole application in from the wrong colours on every launch.
+   *
+   * So the CSS gates on this attribute, and it goes on exactly once — after which every change
+   * is one a person asked for, and worth easing.
+   */
+  useEffect(() => {
+    if (!settled) return;
+    document.documentElement.dataset.themeTransitions = "";
+  }, [settled]);
 
   const t = useCallback(
     (key: string, params?: Record<string, string>) => translate(locale, key, params),

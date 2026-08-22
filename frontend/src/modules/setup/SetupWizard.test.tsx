@@ -1,7 +1,13 @@
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SetupWizard } from "@/modules/setup/SetupWizard";
-import { canAdvance, initialState, toInput, withCountryDefaults } from "@/modules/setup/wizardState";
+import {
+  canAdvance,
+  codeFromName,
+  initialState,
+  toInput,
+  withCountryDefaults,
+} from "@/modules/setup/wizardState";
 import { renderApp, SIGNED_IN } from "@/test/appRender";
 import * as wails from "@/lib/wails";
 
@@ -56,44 +62,29 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
-/** Fills every step and presses Finish. */
+/**
+ * Fills every step and presses Finish.
+ *
+ * THREE steps, and the shop's name is the only thing typed on the first — the company code, the
+ * branch and the store are all derived from it. That the wizard still submits every field the
+ * backend needs is the assertion below.
+ */
 async function completeWizard(user: ReturnType<typeof renderApp>["user"]) {
   const next = () => user.click(screen.getByRole("button", { name: /^next$/i }));
 
-  await next(); // language: the default is already valid
-
-  await selectOption(user, /country/i, "SY");
+  // 1. Your shop. A country and a name.
+  await user.click(screen.getByRole("radio", { name: /syria/i }));
+  await user.type(screen.getByLabelText(/what is the shop called/i), "Demo Trading");
   await next();
 
-  await user.type(screen.getByLabelText(/company name/i), "Demo Trading");
-  await user.type(screen.getByLabelText(/short code/i), "main");
+  // 2. What you sell. Both currencies came from the country.
   await next();
 
-  await next(); // currency: pre-filled from the country
-
-  await next(); // business type: optional
-
-  await user.type(screen.getByLabelText(/branch name/i), "Head Office");
-  await user.type(screen.getByLabelText(/store name/i), "Main Store");
-  await next();
-
+  // 3. Your account.
   await user.type(screen.getByLabelText(/^username$/i), "nadia");
   await user.type(screen.getByLabelText(/^password$/i), "a sufficiently long passphrase");
   await user.type(screen.getByLabelText(/repeat password/i), "a sufficiently long passphrase");
   await user.click(screen.getByRole("button", { name: /finish setup/i }));
-}
-
-async function selectOption(
-  user: ReturnType<typeof renderApp>["user"],
-  name: RegExp,
-  value: string,
-) {
-  await user.click(screen.getByRole("combobox", { name }));
-  await user.click(await screen.findByRole("option", { name: new RegExp(labelFor(value), "i") }));
-}
-
-function labelFor(value: string): string {
-  return value === "SY" ? "syria" : value;
 }
 
 describe("SetupWizard", () => {
@@ -114,12 +105,19 @@ describe("SetupWizard", () => {
       expect.objectContaining({
         countryCode: "SY",
         companyName: "Demo Trading",
-        companyCode: "MAIN",
+        // DERIVED, every one of them, from the two answers above. Nobody typed these — and the
+        // backend still receives a complete company, branch and warehouse.
+        companyCode: "DEMOTRADING",
+        branchName: "Demo Trading",
+        warehouseName: "Demo Trading",
+        branchCode: "HQ",
+        warehouseCode: "WH1",
         functionalCurrency: "SYP",
         pricingCurrency: "USD",
-        branchName: "Head Office",
-        warehouseName: "Main Store",
         adminUsername: "nadia",
+        // Blank, and sent blank: it MEANS "use the shop's name", so filling it in here would
+        // freeze today's name into a setting.
+        receiptHeader: "",
       }),
     );
     await waitFor(() => expect(wails.login).toHaveBeenCalledTimes(1));
@@ -143,7 +141,8 @@ describe("SetupWizard", () => {
     expect(screen.getByLabelText(/^username$/i)).toHaveValue("nadia");
 
     await user.click(screen.getByRole("button", { name: /back/i }));
-    expect(screen.getByLabelText(/branch name/i)).toHaveValue("Head Office");
+    await user.click(screen.getByRole("button", { name: /back/i }));
+    expect(screen.getByLabelText(/what is the shop called/i)).toHaveValue("Demo Trading");
   });
 
   it("never sends the password confirmation", async () => {
@@ -170,7 +169,7 @@ describe("country defaults", () => {
     expect(filled.locale).toBe("ar");
 
     const edited = { ...filled, functionalCurrency: "USD" };
-    expect(canAdvance("currency", edited, OPTIONS)).toBe(true);
+    expect(canAdvance("trade", edited, OPTIONS)).toBe(true);
   });
 
   it("falls back to the functional currency when a country prices in one currency", () => {
@@ -180,9 +179,31 @@ describe("country defaults", () => {
 });
 
 describe("step validation", () => {
+  /** A shop step filled in the way the UI fills it: the name derives the rest. */
+  function namedShop() {
+    const named = withCountryDefaults(initialState("en"), SYRIA);
+    return {
+      ...named,
+      countryCode: "SY",
+      companyName: "Al-Noor Market",
+      companyCode: codeFromName("Al-Noor Market"),
+      branchName: "Al-Noor Market",
+      warehouseName: "Al-Noor Market",
+    };
+  }
+
   it("will not advance past a country that is not on offer", () => {
-    const state = { ...initialState("en"), countryCode: "ZZ" };
-    expect(canAdvance("country", state, OPTIONS)).toBe(false);
+    expect(canAdvance("shop", { ...namedShop(), countryCode: "ZZ" }, OPTIONS)).toBe(false);
+  });
+
+  it("will not advance without a shop name", () => {
+    expect(canAdvance("shop", { ...namedShop(), companyName: "   " }, OPTIONS)).toBe(false);
+  });
+
+  it("advances once the country and the name are answered", () => {
+    // The point of collapsing seven steps into three: two answers, and everything the backend
+    // needs for a company, a branch and a warehouse is present.
+    expect(canAdvance("shop", namedShop(), OPTIONS)).toBe(true);
   });
 
   it("will not finish while the two passwords differ", () => {
@@ -192,12 +213,49 @@ describe("step validation", () => {
       adminPassword: "one passphrase entirely",
       adminPasswordConfirm: "another passphrase entirely",
     };
-    expect(canAdvance("administrator", state, OPTIONS)).toBe(false);
+    expect(canAdvance("account", state, OPTIONS)).toBe(false);
   });
 
   it("treats the business profile as optional", () => {
     // A shop that fits none of the shipped trades is a real case, and forcing a choice would
     // make whichever appears first the answer for everybody.
-    expect(canAdvance("business", initialState("en"), OPTIONS)).toBe(true);
+    const priced = { ...initialState("en"), functionalCurrency: "SYP", pricingCurrency: "SYP" };
+    expect(canAdvance("trade", priced, OPTIONS)).toBe(true);
+  });
+
+  it("treats the receipt header as optional", () => {
+    // Blank MEANS "use the shop's name", all the way down to the print path. Requiring it would
+    // be a step that exists to be skipped.
+    const state = {
+      ...initialState("en"),
+      adminUsername: "nadia",
+      adminPassword: "a sufficiently long passphrase",
+      adminPasswordConfirm: "a sufficiently long passphrase",
+      receiptHeader: "",
+    };
+    expect(canAdvance("account", state, OPTIONS)).toBe(true);
+  });
+});
+
+describe("derived identifiers", () => {
+  /*
+   * A shopkeeper knows what their shop is called and has no opinion about a company code. The
+   * old wizard asked for one, and the answer was always the shop's name typed again.
+   */
+  it("makes a usable code out of a shop name", () => {
+    expect(codeFromName("Al-Noor Market")).toBe("ALNOORMARKET");
+    expect(codeFromName("  corner shop  ")).toBe("CORNERSHOP");
+  });
+
+  it("never derives an empty code, whatever it is given", () => {
+    // A blank code fails validation on the LAST step — the worst possible moment to find out,
+    // and about a field the user never filled in.
+    expect(codeFromName("")).toBe("MAIN");
+    expect(codeFromName("متجر النور")).toBe("MAIN");
+    expect(codeFromName("!!! ???")).toBe("MAIN");
+  });
+
+  it("keeps the code short enough for the backend to accept", () => {
+    expect(codeFromName("A".repeat(60)).length).toBeLessThanOrEqual(12);
   });
 });

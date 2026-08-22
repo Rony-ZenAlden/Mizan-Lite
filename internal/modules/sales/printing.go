@@ -53,6 +53,27 @@ var PrintDigits = config.DeclareEnum(config.Def{
 	Description: "settings.print.digits",
 })
 
+// ReceiptHeader is the name printed at the top of a receipt.
+//
+// # Why this is a setting and not just the company's name
+//
+// A shop's registered name and its TRADING name are routinely different: "Al-Noor General
+// Trading Est." on the tax registration, "Al-Noor Market" over the door and on every receipt a
+// customer takes home. Printing the legal name is correct and looks wrong.
+//
+// Empty means "use the company name", which is what makes this safe to ship with no migration
+// and no wizard step being mandatory: an installation that never sets it behaves exactly as it
+// did before. The fallback lives at the one call site that builds the letterhead, so there is a
+// single answer to "what goes at the top".
+//
+// Company scope, not user: a receipt is the shop's, not the cashier's.
+var ReceiptHeader = config.DeclareString(config.Def{
+	Key:         "print.receipt_header",
+	Default:     "",
+	Scopes:      []config.Scope{config.ScopeSystem, config.ScopeCompany},
+	Description: "settings.print.receipt_header",
+})
+
 // Translator is the narrow slice of i18n this module needs.
 //
 // A port rather than the catalog itself, for the reason every port here exists: the module

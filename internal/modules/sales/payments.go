@@ -270,3 +270,32 @@ func (s *Service) Outstanding(ctx context.Context, documentID id.ID) (int64, err
 	}
 	return domain.Outstanding(document.TotalMinor, settled), nil
 }
+
+// Receivables is what customers still owe, as at now.
+//
+// A named answer rather than a bare int64, like this module's other reports. Two reasons, and the
+// second is the one that made it necessary:
+//
+//   - It is what `Analysis` and `Valuation` already do, so every module answers in the same
+//     shape and a caller does not have to remember which ones do not.
+//   - `TestTheDashboardDoesNoCrossModuleArithmetic` requires a tile's figure to be READ from a
+//     module's answer rather than computed — a field access or a call, never a local variable
+//     that could be holding anything. A bare int64 forces the variable, and loosening the guard
+//     to accept it would let `x := a.Foo + b.Bar` through, which is the exact thing it exists to
+//     stop.
+type Receivables struct {
+	// TotalMinor is the sum of what every posted invoice still owes.
+	TotalMinor int64
+}
+
+// OutstandingTotal reports what all posted invoices still owe, across the company.
+//
+// The figure a shopkeeper means by "what am I owed". Derived from the same allocations
+// `Outstanding` uses, so a single invoice's figure and the company total can never disagree.
+func (s *Service) OutstandingTotal(ctx context.Context, companyID id.ID) (Receivables, error) {
+	total, err := s.repos.OutstandingTotal(ctx, companyID)
+	if err != nil {
+		return Receivables{}, err
+	}
+	return Receivables{TotalMinor: total}, nil
+}

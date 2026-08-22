@@ -142,6 +142,8 @@ export interface SetupInput {
   adminUsername: string;
   adminDisplayName: string;
   adminPassword: string;
+  /** What prints at the top of a receipt. Blank means the shop's name. */
+  receiptHeader: string;
 }
 
 export interface SetupResult {

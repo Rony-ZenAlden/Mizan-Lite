@@ -18,6 +18,7 @@ package setup
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
@@ -32,6 +33,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/identity"
 	"github.com/mizan-erp/mizan/internal/modules/org"
 	"github.com/mizan-erp/mizan/internal/modules/profile"
+	"github.com/mizan-erp/mizan/internal/modules/sales"
 	"github.com/mizan-erp/mizan/internal/platform/config"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/i18n"
@@ -253,6 +255,12 @@ type Input struct {
 	AdminUsername    string
 	AdminDisplayName string
 	AdminPassword    string
+
+	// ReceiptHeader is what prints at the top of a receipt. Blank means the company's name.
+	//
+	// Optional, and it must stay optional: a shop whose trading name IS its registered name has
+	// nothing to say here, and making them retype it would be a step that exists to be skipped.
+	ReceiptHeader string
 }
 
 // Result reports what was created.
@@ -455,6 +463,10 @@ func (s *Service) applySettings(ctx context.Context, companyID id.ID, in Input) 
 		{i18n.LocaleSettingKey, in.Locale},
 		{currency.Functional.Key(), in.FunctionalCurrency},
 		{currency.Pricing.Key(), in.PricingCurrency},
+		// Written even when blank, which is deliberate: blank is the value that MEANS "use the
+		// company name", and writing it makes the row exist for the Settings screen to edit
+		// rather than leaving a setting that only appears once somebody has already set it.
+		{sales.ReceiptHeader.Key(), strings.TrimSpace(in.ReceiptHeader)},
 	}
 	for _, v := range values {
 		if err := s.settings.Set(ctx, config.ScopeCompany, companyID, v.key, v.value); err != nil {

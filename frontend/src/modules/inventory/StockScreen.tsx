@@ -5,6 +5,7 @@ import { checkLedger, PERMISSIONS, stockOnHand, type StockRow } from "@/lib/wail
 import { Can } from "@/app/session/Can";
 import { CountDialog } from "./CountDialog";
 import { Alert, Badge, Button, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
+import { KpiStrip } from "@/modules/insight/KpiStrip";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity, isNegativeQuantity, isZeroQuantity } from "./quantity";
@@ -55,6 +56,10 @@ export function StockScreen() {
   return (
     <section className="flex flex-col gap-4">
       <PageHeader title={t("stock.title")} description={t("stock.help")} />
+
+      {/* What the stock is worth, and how many lines have run out — the second being the reason
+          somebody opens this screen without a specific product in mind. */}
+      <KpiStrip source="inventory" />
 
       {check.data && !check.data.healthy && (
         <Alert tone="warning" title={t("stock.driftFound")}>

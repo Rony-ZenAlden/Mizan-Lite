@@ -7,7 +7,7 @@ import {
   customer, customers, supplier, suppliers,
   type PartnerDetail as PartnerDetailData, type PartnerRow,
 } from "@/lib/wails";
-import { Alert, Badge, Button, EmptyState, Input, PageHeader, Table } from "@/shared/ui";
+import { Alert, Badge, Button, EmptyState, Input, PageHeader, Sheet, Table } from "@/shared/ui";
 import { Can } from "@/app/session/Can";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { PartnerDetail } from "./PartnerDetail";
@@ -35,23 +35,39 @@ export function PartnersScreen({ role }: { role: "customer" | "supplier" }) {
     queryFn: () => (role === "customer" ? customers(search) : suppliers(search)),
   });
 
-  if (selected) {
-    return (
-      <PartnerDetail
-        code={selected}
-        role={role}
-        load={(code: string): Promise<PartnerDetailData> =>
-          role === "customer" ? customer(code) : supplier(code)
-        }
-        onBack={() => setSelected("")}
-      />
-    );
-  }
-
   const title = role === "customer" ? t("partners.customers") : t("partners.suppliers");
+
+  /*
+   * A DRAWER, not a replacement.
+   *
+   * Until 10.16 picking a partner returned the detail view in place of this whole screen, so the
+   * search term was discarded and came back empty on the way out. Someone reconciling a list of
+   * suppliers re-typed the search once per supplier.
+   */
+  const openPartner = rows.data?.find((row) => row.code === selected);
 
   return (
     <section className="flex flex-col gap-4">
+      <Sheet
+        open={selected !== ""}
+        onOpenChange={(open) => {
+          if (!open) setSelected("");
+        }}
+        title={openPartner ? openPartner.name : ""}
+      >
+        {selected ? (
+          <PartnerDetail
+            code={selected}
+            role={role}
+            load={(code: string): Promise<PartnerDetailData> =>
+              role === "customer" ? customer(code) : supplier(code)
+            }
+            onBack={() => setSelected("")}
+            embedded
+          />
+        ) : null}
+      </Sheet>
+
       <PageHeader
         title={title}
         description={t(`partners.${role}.help`)}

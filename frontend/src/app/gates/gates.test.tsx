@@ -73,7 +73,9 @@ describe("SetupGate", () => {
       </SetupGate>,
     );
 
-    expect(await screen.findByRole("heading", { name: /language/i })).toBeInTheDocument();
+    // The wizard's FIRST step, whatever it is called. Since 10.16 that is "Your shop" — the
+    // seven steps collapsed to three, and language moved into the country's defaults.
+    expect(await screen.findByRole("heading", { name: /your shop/i })).toBeInTheDocument();
     expect(screen.queryByText("the application")).not.toBeInTheDocument();
   });
 

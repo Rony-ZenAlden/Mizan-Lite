@@ -12,6 +12,13 @@ export function PartnerDetail(props: {
   role: "customer" | "supplier";
   load: (code: string) => Promise<Detail>;
   onBack: () => void;
+  /**
+   * Rendered inside a drawer, which supplies the title and the way out.
+   *
+   * A back button and a close button side by side are two controls that do the same thing, and a
+   * user who tries the wrong one learns the screen is unpredictable.
+   */
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const errorText = useErrorText();
@@ -25,7 +32,9 @@ export function PartnerDetail(props: {
   if (detail.isError) {
     return (
       <section className="flex flex-col gap-4">
-        <Button variant="ghost" onClick={props.onBack}>{t("partners.back")}</Button>
+        {props.embedded ? null : (
+          <Button variant="ghost" onClick={props.onBack}>{t("partners.back")}</Button>
+        )}
         <Alert tone="danger" title={t("partners.failed")}>{errorText(detail.error)}</Alert>
       </section>
     );
@@ -35,12 +44,18 @@ export function PartnerDetail(props: {
 
   return (
     <section className="flex flex-col gap-4">
-      <div>
-        <Button variant="ghost" onClick={props.onBack}>{t("partners.back")}</Button>
-      </div>
+      {props.embedded ? null : (
+        <div>
+          <Button variant="ghost" onClick={props.onBack}>{t("partners.back")}</Button>
+        </div>
+      )}
 
       <header className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold tracking-tight text-text">{partner.name}</h2>
+        {/* The drawer already names it. Repeating the heading inside would give the panel two
+            titles, one of which scrolls away. */}
+        {props.embedded ? null : (
+          <h2 className="text-lg font-semibold tracking-tight text-text">{partner.name}</h2>
+        )}
         <p className="font-mono text-xs text-text-muted">{partner.code}</p>
         <span className="flex gap-1 pt-1">
           {partner.isCustomer && <Badge tone="info">{t("partners.customer")}</Badge>}

@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { salesDocuments, type SalesDocument } from "@/lib/wails";
-import { Alert, Badge, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, Input, PageHeader, Select, Sheet, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
 import { InvoiceDetail } from "./InvoiceDetail";
+import { KpiStrip } from "@/modules/insight/KpiStrip";
 
 /** The statuses a document can be filtered to. Empty is "any". */
 const STATUSES = ["", "draft", "posted", "cancelled"] as const;
@@ -33,10 +34,6 @@ export function InvoicesScreen() {
     queryFn: () => salesDocuments("", status),
   });
 
-  if (selected) {
-    return <InvoiceDetail documentId={selected} onBack={() => setSelected(null)} />;
-  }
-
   if (documents.isPending) {
     return <p className="p-4 text-sm text-text-muted">{t("gate.checking")}</p>;
   }
@@ -54,9 +51,36 @@ export function InvoicesScreen() {
       row.partnerName.toLowerCase().includes(term),
   );
 
+  /*
+   * A DRAWER, not a replacement.
+   *
+   * Until 10.16 picking a row returned the detail view in place of this whole screen, so the
+   * filter, the search term and the scroll position were all discarded — and came back empty on
+   * the way out. Checking six records against a delivery note meant re-typing the search six
+   * times.
+   */
+  const openInvoice = visible.find((row) => row.id === selected);
+
   return (
     <section className="flex flex-col gap-4">
+      <Sheet
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+        title={openInvoice ? openInvoice.number : ""}
+        description={openInvoice ? openInvoice.partnerName : undefined}
+      >
+        {selected ? (
+          <InvoiceDetail documentId={selected} onBack={() => setSelected(null)} embedded />
+        ) : null}
+      </Sheet>
+
       <PageHeader title={t("sales.title")} description={t("sales.help")} />
+
+      {/* The figures somebody opens this screen to check, above the list they would otherwise
+          have to add up by eye. Same source as the home screen, so the two cannot disagree. */}
+      <KpiStrip source="sales" />
 
       <div className="flex flex-wrap items-end gap-3">
         <Input

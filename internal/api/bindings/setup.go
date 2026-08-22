@@ -91,6 +91,9 @@ type SetupInputDTO struct {
 	AdminUsername    string `json:"adminUsername"`
 	AdminDisplayName string `json:"adminDisplayName"`
 	AdminPassword    string `json:"adminPassword"`
+
+	// ReceiptHeader is what prints at the top of a receipt. Blank means the company's name.
+	ReceiptHeader string `json:"receiptHeader"`
 }
 
 // SetupResultDTO reports what was created.
@@ -210,6 +213,8 @@ func (s *Setup) Apply(in SetupInputDTO) envelope.Result[SetupResultDTO] {
 		AdminUsername:    in.AdminUsername,
 		AdminDisplayName: in.AdminDisplayName,
 		AdminPassword:    in.AdminPassword,
+
+		ReceiptHeader: in.ReceiptHeader,
 	})
 	if err != nil {
 		return envelope.Fail[SetupResultDTO](err)

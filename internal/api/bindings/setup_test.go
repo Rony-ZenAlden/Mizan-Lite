@@ -1,6 +1,7 @@
 package bindings_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -8,8 +9,11 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/setup"
 	"github.com/mizan-erp/mizan/internal/bootstrap"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/modules/audit"
 	identitydomain "github.com/mizan-erp/mizan/internal/modules/identity/domain"
+	"github.com/mizan-erp/mizan/internal/modules/inventory"
+	"github.com/mizan-erp/mizan/internal/modules/pricing"
 )
 
 const wizardPassword = "a sufficiently long passphrase"
@@ -511,4 +515,154 @@ func TestAFinishedSetupLeavesTheApplicationReadyToTrade(t *testing.T) {
 	if n := count("SELECT COUNT(*) FROM warehouses"); n == 0 {
 		t.Error("no warehouse after setup, so stock has nowhere to be")
 	}
+}
+
+// ── the receipt heading ─────────────────────────────────────────────────────────
+
+// TestTheReceiptHeadingIsWhatTheWizardWasToldToPrint
+//
+// # Why this is asserted on a PRINTED receipt and not on the setting
+//
+// Reading the setting back would prove the wizard wrote a row. It would not prove anything a
+// shopkeeper cares about, and this repository has found the same defect six times: built,
+// tested, never connected. A setting nobody reads is that defect wearing a different hat.
+//
+// So the drill runs the whole path — wizard, setting, letterhead, template — and looks for the
+// words on the receipt.
+func TestTheReceiptHeadingIsWhatTheWizardWasToldToPrint(t *testing.T) {
+	set, app := freshApp(t)
+
+	in := validInput()
+	in.CompanyName = "Al-Noor General Trading Est."
+	in.ReceiptHeader = "Al-Noor Market"
+	result := set.Setup.Apply(in)
+	if !result.OK {
+		t.Fatalf("Apply: %+v", result.Error)
+	}
+
+	html := printedReceipt(t, set, app, result.Data.WarehouseID)
+	if !strings.Contains(html, "Al-Noor Market") {
+		t.Errorf("the receipt does not carry the heading the wizard was given:\n%s", html)
+	}
+	// The registered name is what belongs on a tax return, not over the counter. A shop sets
+	// this precisely so the legal name STOPS appearing on every customer's receipt.
+	if strings.Contains(html, "Al-Noor General Trading Est.") {
+		t.Error("the receipt still prints the registered name the heading was set to replace")
+	}
+}
+
+// TestAReceiptWithNoHeadingSetStillNamesTheShop
+//
+// Blank means "use the company name", and that is what makes the wizard step optional and the
+// whole feature safe to add with no migration: an installation that never sets it prints exactly
+// what it printed before.
+//
+// The boundary that matters is WHITESPACE. A heading of three spaces is not a heading, and
+// treating it as one would print an empty line where the shop's name belongs — with nothing on
+// screen to explain why.
+func TestAReceiptWithNoHeadingSetStillNamesTheShop(t *testing.T) {
+	for _, header := range []string{"", "   "} {
+		t.Run("header="+strconv.Quote(header), func(t *testing.T) {
+			set, app := freshApp(t)
+
+			in := validInput()
+			in.CompanyName = "Corner Shop"
+			in.ReceiptHeader = header
+			result := set.Setup.Apply(in)
+			if !result.OK {
+				t.Fatalf("Apply: %+v", result.Error)
+			}
+
+			html := printedReceipt(t, set, app, result.Data.WarehouseID)
+			if !strings.Contains(html, "Corner Shop") {
+				t.Errorf("a receipt with no heading set does not name the shop:\n%s", html)
+			}
+		})
+	}
+}
+
+// printedReceipt signs in, sells one thing, and returns the rendered receipt.
+func printedReceipt(
+	t *testing.T, set *bindings.Set, app *bootstrap.App, warehouseID string,
+) string {
+	t.Helper()
+
+	if login := set.Auth.Login("nadia", wizardPassword, false); !login.OK {
+		t.Fatalf("Login: %+v", login.Error)
+	}
+	ctx := app.Context()
+	if err := app.Catalog.ApplyUnits(ctx, "standard"); err != nil {
+		t.Fatalf("ApplyUnits: %v", err)
+	}
+
+	if created := set.Catalog.CreateProduct(bindings.NewProductInput{
+		Code: "TEA", Name: "Tea",
+	}); !created.OK {
+		t.Fatalf("CreateProduct: %+v", created.Error)
+	}
+
+	// The default variant, read back rather than assumed: a sale line is written against
+	// identities, not codes.
+	detail := set.Catalog.Product("TEA")
+	if !detail.OK {
+		t.Fatalf("Product: %+v", detail.Error)
+	}
+	if len(detail.Data.Variants) == 0 {
+		t.Fatal("a product was created with no variant, which §A.1 forbids")
+	}
+
+	// A default sale price list, because posting resolves prices rather than trusting the
+	// caller — a till operator who can type a price is a discount nobody approved.
+	companyID, err := app.Org.CurrentCompanyID(ctx)
+	if err != nil {
+		t.Fatalf("CurrentCompanyID: %v", err)
+	}
+	if _, err = app.Pricing.CreateList(ctx, pricing.NewListInput{
+		CompanyID: companyID, Code: "RETAIL", Name: "Retail",
+		CurrencyCode: "SYP", Direction: "sale", IsDefault: true,
+	}); err != nil {
+		t.Fatalf("CreateList: %v", err)
+	}
+	if _, err = app.Pricing.SetPrice(ctx, pricing.SetPriceInput{
+		CompanyID: companyID, ListCode: "RETAIL",
+		VariantID: id.ID(detail.Data.Variants[0].ID), PriceMinor: 1500,
+	}); err != nil {
+		t.Fatalf("SetPrice: %v", err)
+	}
+
+	// And something on the shelf. Posting a sale issues stock, and there is none on a fresh
+	// install — which is correct, and which this fixture has to satisfy rather than bypass.
+	if _, err = app.Inventory.Move(ctx, inventory.MoveInput{
+		CompanyID: companyID, WarehouseID: id.ID(warehouseID),
+		ProductID: id.ID(detail.Data.Product.ID), VariantID: id.ID(detail.Data.Variants[0].ID),
+		Type: "receipt", QuantityMicro: 10_000_000, UnitCostMicro: 1_000_000,
+	}); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	// The warehouse and the date are both named: stock comes out of somewhere, and the date must
+	// fall inside a fiscal period the wizard opened.
+	draft := set.Sales.Draft(bindings.DraftInput{
+		WarehouseID: warehouseID, Date: "2026-06-01", Currency: "SYP",
+	})
+	if !draft.OK {
+		t.Fatalf("Draft: %+v", draft.Error)
+	}
+	line := set.Sales.AddLine(bindings.AddLineToSaleInput{
+		DocumentID: draft.Data.ID, VariantID: detail.Data.Variants[0].ID,
+		// No unit named: the service falls back to the product's own sales unit, which is
+		// exactly what the till does when nobody picks one.
+		QuantityMicro: "1000000",
+	})
+	if !line.OK {
+		t.Fatalf("AddLine: %+v", line.Error)
+	}
+	if posted := set.Sales.Post(draft.Data.ID); !posted.OK {
+		t.Fatalf("Post: %+v", posted.Error)
+	}
+
+	printed := set.Sales.Print(draft.Data.ID, "receipt", "thermal80")
+	if !printed.OK {
+		t.Fatalf("Print: %+v", printed.Error)
+	}
+	return printed.Data.HTML
 }

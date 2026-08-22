@@ -24,9 +24,17 @@ import { formatQuantity } from "@/modules/inventory/quantity";
 export function InvoiceDetail({
   documentId,
   onBack,
+  embedded = false,
 }: {
   documentId: string;
   onBack: () => void;
+  /**
+   * Rendered inside a drawer, which supplies the title and the way out.
+   *
+   * A back button and a close button side by side are two controls that do the same thing, and a
+   * user who tries the wrong one learns the screen is unpredictable.
+   */
+  embedded?: boolean;
 }) {
   const { t } = useTranslation();
   const errorText = useErrorText();
@@ -63,9 +71,13 @@ export function InvoiceDetail({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={onBack}>
-          {t("common.back")}
-        </Button>
+        {embedded ? (
+          <span />
+        ) : (
+          <Button variant="ghost" onClick={onBack}>
+            {t("common.back")}
+          </Button>
+        )}
         {/* Printing is gated separately from viewing: a printed invoice leaves the building.
             A draft offers nothing to print, because a draft is not a document yet. */}
         {detail.data?.document.status === "posted" && (

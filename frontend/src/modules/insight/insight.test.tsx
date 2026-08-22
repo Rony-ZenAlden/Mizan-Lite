@@ -5,6 +5,7 @@ import { DashboardScreen } from "@/modules/insight/DashboardScreen";
 import { StatementsScreen } from "@/modules/insight/StatementsScreen";
 import { ValuationScreen } from "@/modules/insight/ValuationScreen";
 import { SearchBox } from "@/modules/insight/SearchBox";
+import { KpiStrip } from "@/modules/insight/KpiStrip";
 import { renderApp, SIGNED_IN } from "@/test/appRender";
 import * as wails from "@/lib/wails";
 
@@ -208,5 +209,88 @@ describe("search", () => {
     fireEvent.change(box, { target: { value: "a" } });
 
     expect(wails.globalSearch).not.toHaveBeenCalled();
+  });
+});
+
+// ── the KPI strip ───────────────────────────────────────────────────────────────
+
+describe("KpiStrip", () => {
+  const TILES = [
+    { key: "sales.revenue", source: "sales", kind: "money", amountMinor: "450000",
+      count: 0, periodic: true, failed: false },
+    { key: "sales.receivables", source: "sales", kind: "money", amountMinor: "120000",
+      count: 0, periodic: false, failed: false },
+    { key: "inventory.out_of_stock", source: "inventory", kind: "count", amountMinor: "0",
+      count: 3, periodic: false, failed: false },
+  ];
+
+  it("shows only the tiles belonging to its domain", async () => {
+    vi.mocked(wails.dashboard).mockResolvedValue({
+      from: "2026-08-01", to: "2026-08-22", tiles: TILES,
+    });
+
+    renderApp(<KpiStrip source="sales" />);
+
+    expect(await screen.findByText("4,500.00")).toBeInTheDocument();
+    expect(screen.getByText("1,200.00")).toBeInTheDocument();
+    // Inventory's tile belongs on the stock screen, not here.
+    expect(screen.queryByText("3")).not.toBeInTheDocument();
+  });
+
+  it("narrows further when asked for specific tiles", async () => {
+    // The money screen wants what customers owe and nothing else: revenue there would be a
+    // figure with no bearing on the decision the screen is open for.
+    vi.mocked(wails.dashboard).mockResolvedValue({
+      from: "2026-08-01", to: "2026-08-22", tiles: TILES,
+    });
+
+    renderApp(<KpiStrip source="sales" only={["sales.receivables"]} />);
+
+    expect(await screen.findByText("1,200.00")).toBeInTheDocument();
+    expect(screen.queryByText("4,500.00")).not.toBeInTheDocument();
+  });
+
+  it("says a figure could not be calculated rather than showing zero", async () => {
+    /*
+     * Zero is a REAL answer — a shop that sold nothing today has revenue of zero — so a failure
+     * rendered as zero is a lie the reader has no way to detect. The same choice the dashboard
+     * makes, for the same reason.
+     */
+    vi.mocked(wails.dashboard).mockResolvedValue({
+      from: "2026-08-01", to: "2026-08-22",
+      tiles: [{ key: "sales.revenue", source: "sales", kind: "money", amountMinor: "0",
+                count: 0, periodic: true, failed: true }],
+    });
+
+    renderApp(<KpiStrip source="sales" />);
+
+    expect(await screen.findByText(/could not be calculated/i)).toBeInTheDocument();
+    expect(screen.queryByText("0.00")).not.toBeInTheDocument();
+  });
+
+  it("labels each figure with the range it covers", async () => {
+    // A periodic figure and a position look identical otherwise, which is how "stock value
+    // 40,000" gets read as this month's purchases.
+    vi.mocked(wails.dashboard).mockResolvedValue({
+      from: "2026-08-01", to: "2026-08-22", tiles: TILES,
+    });
+
+    renderApp(<KpiStrip source="sales" />);
+
+    await screen.findByText("4,500.00");
+    expect(screen.getAllByText(/this period|as at now/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders nothing at all while the figures are still loading", () => {
+    // It is a HEADER on somebody else's screen. A spinner or an error banner here pushes the
+    // actual work down the page and reads as the screen below having failed.
+    vi.mocked(wails.dashboard).mockReturnValue(new Promise(() => {}));
+
+    renderApp(<KpiStrip source="sales" />);
+
+    // Not `container` to be empty — the shared providers render their own live regions into it.
+    // The claim is narrower and truer: this component contributed nothing.
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(screen.queryByText(/could not be calculated/i)).not.toBeInTheDocument();
   });
 });

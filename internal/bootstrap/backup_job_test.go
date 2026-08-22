@@ -1,6 +1,7 @@
 package bootstrap_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/mizan-erp/mizan/internal/bootstrap"
@@ -119,5 +120,92 @@ func TestABackupManifestRecordsTheBuildThatTookIt(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].Manifest.AppVersion != "1.2.3-test" {
 		t.Errorf("the listed backup records %+v", listed)
+	}
+}
+
+// TestClosingTheAppLeavesASnapshotNobodyHadToAskFor
+//
+// # The guarantee, stated as a shopkeeper would
+//
+// Nobody presses "Export Backup". They open Mizan in the morning, serve customers all day, and
+// close the window. This asserts that closing the window is enough.
+//
+// It is a bootstrap test rather than a platform one because everything that could be wrong is in
+// the WIRING: whether the step is registered, whether it runs before the database closes, and
+// whether it runs against the real SQLite dialect and the real backup directory. TakeIfDue's own
+// behaviour is drilled in platform/backup.
+func TestClosingTheAppLeavesASnapshotNobodyHadToAskFor(t *testing.T) {
+	dir := t.TempDir()
+	app := bootIn(t, dir)
+
+	before, err := app.Backups.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	if err = app.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+
+	after, err := app.Backups.List()
+	if err != nil {
+		t.Fatalf("List after shutdown: %v", err)
+	}
+	if len(after) <= len(before) {
+		t.Fatalf("closing the app took no snapshot (%d before, %d after)", len(before), len(after))
+	}
+
+	var closed *backup.Backup
+	for i := range after {
+		if after[i].Manifest.Reason == backup.OnClose {
+			closed = &after[i]
+			break
+		}
+	}
+	if closed == nil {
+		t.Fatal("a snapshot was written but not as an on-close one")
+	}
+
+	// It must be a RESTORABLE database, not a file of the right size. A backup nobody has opened
+	// is a file somebody will discover is unreadable on the day they need it.
+	manifest, err := backup.Verify(context.Background(), closed.Path, "PRAGMA integrity_check")
+	if err != nil {
+		t.Fatalf("the close-time snapshot does not verify: %v", err)
+	}
+	if manifest.SchemaVersion != app.SchemaVersion() {
+		t.Errorf("snapshot schema version = %d, live database is at %d",
+			manifest.SchemaVersion, app.SchemaVersion())
+	}
+}
+
+// TestTheSnapshotIsTakenWhileTheDatabaseIsStillOpen
+//
+// Ordering, which is the one thing a "did a file appear" test cannot see. `Take` runs VACUUM INTO
+// on the writer pool; if the step were registered after the database closes, it would fail every
+// time — and it would fail QUIETLY, because backupOnClose deliberately logs rather than returns.
+//
+// So the drill is on the ORDER, read from the registered steps, not on the outcome.
+func TestTheSnapshotIsTakenWhileTheDatabaseIsStillOpen(t *testing.T) {
+	order := bootstrap.ShutdownStepNamesForTest(bootIn(t, t.TempDir()))
+
+	position := map[string]int{}
+	for i, name := range order {
+		position[name] = i
+	}
+	for _, name := range []string{"scheduler", "outbox", "backup", "database"} {
+		if _, ok := position[name]; !ok {
+			t.Fatalf("no %q step in the shutdown sequence: %v", name, order)
+		}
+	}
+	if position["backup"] > position["database"] {
+		t.Errorf("the backup runs after the database closes, so it can never succeed: %v", order)
+	}
+	if position["backup"] < position["scheduler"] {
+		t.Errorf("the backup runs before the scheduler stops, so a scheduled backup can be "+
+			"running at the same time: %v", order)
+	}
+	if position["backup"] < position["outbox"] {
+		t.Errorf("the backup runs before the outbox's final pass, so the snapshot misses it: %v",
+			order)
 	}
 }

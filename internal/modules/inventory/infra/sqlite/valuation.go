@@ -64,3 +64,28 @@ func (r *Repos) ValuedLevels(ctx context.Context, companyID id.ID) ([]ValuedLeve
 	}
 	return out, nil
 }
+
+// OutOfStockLines counts the levels a company holds that have run out.
+//
+// # Why this cannot be derived from the valuation
+//
+// `ValuedLevels` excludes rows at zero, and rightly: a shop that has ever stocked a thousand
+// products has a level row for each, and a valuation listing nine hundred lines worth nothing
+// buries the ninety that matter.
+//
+// But "has run out" is EXACTLY the zero rows. Counting them from the valuation would have counted
+// only the negative ones — the products a shop most needs to reorder would have been the ones the
+// alert could not see, and the tile would have read zero on a shop with empty shelves.
+//
+// At or below zero, not exactly zero: a negative level means stock went out that was never booked
+// in, and a shop with that problem most needs to see it.
+func (r *Repos) OutOfStockLines(ctx context.Context, companyID id.ID) (int, error) {
+	var count int
+	err := r.db.Reader(ctx).QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM stock_levels
+		 WHERE company_id = ? AND qty_on_hand_micro <= 0`, string(companyID)).Scan(&count)
+	if err != nil {
+		return 0, r.wrap(err, "counting the stock lines that have run out")
+	}
+	return count, nil
+}

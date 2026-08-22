@@ -9,6 +9,7 @@ export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from ".
 export { Input, type InputProps } from "./Input";
 export { Select, type SelectOption, type SelectProps } from "./Select";
 export { Checkbox, Switch, type CheckboxProps, type SwitchProps } from "./Toggles";
+export { ChoiceGroup, type Choice } from "./Choice";
 export { Dialog, Sheet, DialogClose } from "./Dialog";
 export { Tabs, type TabItem } from "./Tabs";
 export { Table, type Column, type TableProps } from "./Table";

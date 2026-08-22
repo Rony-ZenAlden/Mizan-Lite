@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionStore } from "@/app/session/session";
@@ -110,6 +110,58 @@ describe("CatalogScreen", () => {
 
     expect(await screen.findByRole("heading", { name: "Bag of cement" })).toBeInTheDocument();
     expect(wails.product).toHaveBeenCalledWith("CEMENT");
+  });
+
+  /*
+   * The whole reason the detail is a DRAWER rather than a replacement (10.16).
+   *
+   * The old version returned <ProductDetail> in place of the entire screen. Everything the user
+   * had set up to find the row — the search term, the category filter, the scroll position — was
+   * thrown away, and came back empty when they closed it. Somebody checking six products against
+   * a delivery note re-typed the search six times.
+   *
+   * A test that only asserted "the detail appears" passes just as happily against the old
+   * behaviour. This one asserts what actually changed: the list is STILL THERE underneath, still
+   * filtered, when the drawer closes.
+   */
+  it("keeps the list and its filter behind the drawer", async () => {
+    const user = userEvent.setup();
+    vi.mocked(wails.product).mockResolvedValue({
+      product: CEMENT, salesUnit: "PCS", purchaseUnit: "PCS", stockUnitLocked: false,
+      variants: [{
+        id: "v1", sku: "CEMENT", name: "", combination: "",
+        isDefault: true, hasHistory: false, isActive: true,
+      }],
+      attributes: [], isSimple: true,
+    });
+
+    renderApp(<CatalogScreen />);
+    const search = await screen.findByLabelText(/search/i);
+    await user.type(search, "cement");
+
+    const table = await screen.findByRole("table", { name: /products/i });
+    await waitFor(() => expect(within(table).queryByText("SHIRT")).not.toBeInTheDocument());
+
+    await user.click(within(table).getByRole("button", { name: "CEMENT" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    /*
+     * Underneath, not replaced — checked against the DOM rather than the accessibility tree.
+     *
+     * Radix marks everything outside an open modal `aria-hidden`, which is correct: a screen
+     * reader should not wander out of a dialog into the page behind it. It also means a role
+     * query cannot see the table while the drawer is open, so the only way to tell "covered" from
+     * "unmounted" here is to ask the document directly. That distinction IS the change.
+     */
+    expect(document.querySelector("table")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // And the work the user did to find that row survived the visit.
+    expect(screen.getByLabelText(/search/i)).toHaveValue("cement");
+    expect(within(screen.getByRole("table", { name: /products/i })).queryByText("SHIRT"))
+      .not.toBeInTheDocument();
   });
 });
 

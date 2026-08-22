@@ -749,6 +749,9 @@ func (a *App) registerShutdown() {
 			_, err := a.Dispatch.DispatchOnce(ctx)
 			return err
 		}},
+		// Between the outbox and the close: the snapshot then contains everything the session
+		// did, including that final dispatch, and the writer pool it needs is still open.
+		{name: "backup", fn: a.backupOnClose},
 		{name: "database", fn: func(context.Context) error {
 			//nolint:contextcheck // Close checkpoints the WAL; it must not be cancellable
 			return a.DB.Close()

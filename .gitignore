@@ -71,3 +71,13 @@ frontend/dist/*
 # pgregory.net/rapid writes a reproduction file when a property test fails.
 # It is a local debugging artifact for one machine's failing seed, not a fixture.
 testdata/rapid/
+
+# The WebView2 Evergreen Standalone Installer (~200MB), fetched by scripts/fetch-webview2.sh.
+#
+# Embedded in the Windows installer so it needs no network on the machine it installs onto. NOT
+# committed: a binary that size makes the repository unclonable on a slow connection, and it is
+# reproducible from one Microsoft link with a size and format check.
+#
+# `scripts/package-windows.sh` refuses to build without it, so its absence is loud rather than a
+# quietly network-dependent installer.
+/build/windows/webview2/

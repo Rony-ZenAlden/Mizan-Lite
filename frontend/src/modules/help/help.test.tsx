@@ -105,7 +105,7 @@ describe("guide screen", () => {
   it("opens in the application's language and can be switched without changing it", async () => {
     renderApp(<HelpScreen />, { locale: "en" });
 
-    expect(await screen.findByText("How to Use Mizan ERP")).toBeInTheDocument();
+    expect(await screen.findByText("How to Use Mizan")).toBeInTheDocument();
 
     const { userEvent } = await import("@testing-library/user-event").then((m) => ({
       userEvent: m.default,
@@ -169,7 +169,7 @@ describe("guide screen", () => {
     // who can do nothing else learns what they are looking at, so it is the one screen that must
     // not be gated.
     renderApp(<HelpScreen />, { locale: "en" });
-    expect(await screen.findByText("How to Use Mizan ERP")).toBeInTheDocument();
+    expect(await screen.findByText("How to Use Mizan")).toBeInTheDocument();
   });
 });
 

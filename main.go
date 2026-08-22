@@ -1,4 +1,4 @@
-// Command mizan is the Wails desktop entrypoint for Mizan ERP.
+// Command mizan is the Wails desktop entrypoint for Mizan.
 //
 // It lives at the module root because Wails embeds the built frontend via go:embed, which
 // cannot reference parent directories. It contains no logic: the object graph is built by
@@ -45,7 +45,7 @@ func main() {
 	shell := NewShell(set, resolved)
 
 	if err := wails.Run(&options.App{
-		Title:     "Mizan ERP",
+		Title:     "Mizan",
 		Width:     1280,
 		Height:    800,
 		MinWidth:  1024,

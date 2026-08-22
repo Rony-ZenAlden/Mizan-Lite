@@ -1,4 +1,4 @@
-# Mizan ERP
+# Mizan
 
 > *Mizan… Where Precision Meets Simplicity.*
 
@@ -35,9 +35,9 @@ Both are built and validated. `dist/` holds:
 
 | Artefact | What it is |
 |----------|------------|
-| `Mizan ERP <version>.dmg` | macOS disk image, drag-to-Applications, **Universal** (`x86_64` + `arm64`) |
-| `Mizan ERP <version> Setup.exe` | Windows NSIS installer, cross-built from macOS |
-| `Mizan ERP <version>.exe` | the bare Windows binary, for a portable install |
+| `Mizan <version>.dmg` | macOS disk image, drag-to-Applications, **Universal** (`x86_64` + `arm64`) |
+| `Mizan <version> Setup.exe` | Windows NSIS installer, cross-built from macOS |
+| `Mizan <version>.exe` | the bare Windows binary, for a portable install |
 
 ```bash
 make package-macos            # .app → .dmg
@@ -156,7 +156,7 @@ make vendor      # vendor Go deps for fully offline, self-contained builds
 
 ## Local & offline by design
 
-Mizan ERP builds, tests, and runs **entirely on your machine**. There is no dependency on
+Mizan builds, tests, and runs **entirely on your machine**. There is no dependency on
 GitHub, remote CI, or any cloud service.
 
 - **CI is local:** `scripts/check.sh` (`make ci`) runs every check offline. Once Go modules

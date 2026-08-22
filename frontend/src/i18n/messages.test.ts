@@ -11,7 +11,7 @@ describe("i18n key coverage", () => {
   it("loads the shared catalogs", () => {
     // If the JSON import path breaks, this is where it shows up rather than as blank UI.
     expect(reference.length).toBeGreaterThan(50);
-    expect(MESSAGES.en["app.title"]).toBe("Mizan ERP");
+    expect(MESSAGES.en["app.title"]).toBe("Mizan");
   });
 
   for (const locale of locales) {
@@ -58,7 +58,7 @@ describe("direction", () => {
 describe("translate", () => {
   it("resolves a key in the requested locale", () => {
     expect(translate("ar", "app.title")).toBe("ميزان");
-    expect(translate("en", "app.title")).toBe("Mizan ERP");
+    expect(translate("en", "app.title")).toBe("Mizan");
   });
 
   it("returns the key when nothing defines it", () => {

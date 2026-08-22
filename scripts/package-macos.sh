@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-APP_NAME="Mizan ERP"
+APP_NAME="Mizan"
 APP="build/bin/${APP_NAME}.app"
 VERSION="$(scripts/version.sh)"
 DIST="dist"

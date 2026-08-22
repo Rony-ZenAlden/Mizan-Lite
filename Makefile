@@ -86,7 +86,7 @@ build-macos: ## Build the macOS universal .app into build/bin/
 	# -o names the BUNDLE. Without it Wails falls back to wails.json's `name` and produces
 	# "mizan.app", which is what a user would then see in Finder and in Applications — the one
 	# place the product's name is least negotiable.
-	wails build -platform darwin/universal -ldflags "$(LDFLAGS)" -o "Mizan ERP"
+	wails build -platform darwin/universal -ldflags "$(LDFLAGS)" -o "Mizan"
 
 .PHONY: package-macos
 package-macos: build-macos ## Build the macOS .app and wrap it in a .dmg in dist/

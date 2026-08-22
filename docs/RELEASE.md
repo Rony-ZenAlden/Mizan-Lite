@@ -15,9 +15,9 @@ cd dist && shasum -a 256 * > SHA256SUMS.txt
 
 | Artefact | Size | What it is |
 |----------|------|------------|
-| `Mizan ERP 1.0.0.dmg` | 14M | macOS disk image, Universal (`x86_64` + `arm64`) |
-| `Mizan ERP 1.0.0 Setup.exe` | 9.4M | Windows NSIS installer |
-| `Mizan ERP 1.0.0.exe` | 20M | bare Windows binary, portable install |
+| `Mizan 1.0.0.dmg` | 14M | macOS disk image, Universal (`x86_64` + `arm64`) |
+| `Mizan 1.0.0 Setup.exe` | 9.4M | Windows NSIS installer |
+| `Mizan 1.0.0.exe` | 20M | bare Windows binary, portable install |
 | `SHA256SUMS.txt` | — | checksums, verified with `shasum -a 256 -c` |
 
 The Windows build cross-compiles from macOS because Step 0.3 chose a pure-Go SQLite driver.
@@ -76,7 +76,7 @@ installed.
 
 ### Windows
 
-- [ ] Copy `Mizan ERP <version> Setup.exe` to a clean Windows 10 or 11 machine.
+- [ ] Copy `Mizan <version> Setup.exe` to a clean Windows 10 or 11 machine.
 - [ ] Run it. **SmartScreen will warn** ("Windows protected your PC") until §4 is done — choose
       *More info → Run anyway*.
 - [ ] Confirm the installer offers a sensible path, creates a Start-menu entry, and completes.
@@ -131,10 +131,10 @@ payment, and an enrolment that cannot be done on someone's behalf.
    ```
 5. Notarize and staple, using the commands the script prints:
    ```bash
-   xcrun notarytool submit "dist/Mizan ERP <version>.dmg" --keychain-profile mizan --wait
-   xcrun stapler staple "dist/Mizan ERP <version>.dmg"
+   xcrun notarytool submit "dist/Mizan <version>.dmg" --keychain-profile mizan --wait
+   xcrun stapler staple "dist/Mizan <version>.dmg"
    ```
-6. Confirm: `spctl --assess --type execute --verbose "dist/Mizan ERP <version>.dmg"` must print
+6. Confirm: `spctl --assess --type execute --verbose "dist/Mizan <version>.dmg"` must print
    **accepted**. Anything else means a user still sees a warning.
 
 **Step 5 is not optional.** A signed but un-notarized image is still rejected — proven above.
@@ -148,13 +148,13 @@ payment, and an enrolment that cannot be done on someone's behalf.
    binary unsigned:
    ```bash
    signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 \
-     /f cert.pfx /p PASSWORD "Mizan ERP <version>.exe"
+     /f cert.pfx /p PASSWORD "Mizan <version>.exe"
    signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 \
-     /f cert.pfx /p PASSWORD "Mizan ERP <version> Setup.exe"
+     /f cert.pfx /p PASSWORD "Mizan <version> Setup.exe"
    ```
    `/tr` timestamps the signature so it stays valid after the certificate expires. Without it the
    binary stops verifying the day the certificate does.
-3. Verify: `signtool verify /pa /v "Mizan ERP <version> Setup.exe"`.
+3. Verify: `signtool verify /pa /v "Mizan <version> Setup.exe"`.
 
 There is deliberately **no `signtool` invocation in `scripts/package-windows.sh`**: it would fail
 on every machine without a certificate, and `TestSigningIsOptInAndTheBuildDoesNotNeedIt` asserts

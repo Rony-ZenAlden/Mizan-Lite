@@ -11,15 +11,15 @@ It assumes nothing technical.
 
 ### Windows
 
-1. Run **`Mizan ERP <version> Setup.exe`**.
+1. Run **`Mizan <version> Setup.exe`**.
 2. If Windows shows a blue "Windows protected your PC" box, choose **More info → Run anyway**.
    This appears because the installer is not signed by a paid certificate. It is expected.
 3. Follow the installer. Mizan appears in the Start menu.
 
 ### macOS
 
-1. Open **`Mizan ERP <version>.dmg`**.
-2. Drag **Mizan ERP** into **Applications**.
+1. Open **`Mizan <version>.dmg`**.
+2. Drag **Mizan** into **Applications**.
 3. The first time you open it, macOS may say the developer cannot be verified. Right-click the
    application and choose **Open**, then **Open** again. You only do this once.
 

@@ -34,6 +34,78 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
+# ── WebView2, installed from a bundled runtime with no network ─────────────────
+#
+# # Why this replaces Wails's own macro rather than configuring it
+#
+# `wails.webview2runtime` embeds `tmp\MicrosoftEdgeWebview2Setup.exe`, which `wails build`
+# DOWNLOADS on every run — the ~1.7MB BOOTSTRAPPER, which fetches the real runtime from Microsoft
+# at install time.
+#
+# Replacing that file does not work: the next build overwrites it. This was measured, not
+# assumed — the 203MB runtime was swapped in, `wails build` ran, and the file came back as the
+# bootstrapper with the installer down from 210MB to 9.4MB.
+#
+# So the offline runtime lives at a path Wails does not manage, and this macro — in project.nsi,
+# which Wails scaffolds once and never regenerates — installs from it.
+#
+# # Why the exit code is checked
+#
+# Wails's macro runs the installer and ignores the result. On a machine with no WebView2 and no
+# network the bootstrapper fails, the installer reports success, and the application starts and
+# shows a blank window. That reads as "the program is broken" rather than "a component is
+# missing", and it is the exact failure this whole change exists to prevent.
+!macro mizan.webview2offline
+    SetRegView 64
+
+    # Already present, machine-wide.
+    ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+    ${If} $0 != ""
+        DetailPrint "WebView2 runtime: already installed"
+        Goto webview2_done
+    ${EndIf}
+
+    # Already present, for this user.
+    ReadRegStr $0 HKCU "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+    ${If} $0 != ""
+        DetailPrint "WebView2 runtime: already installed for this user"
+        Goto webview2_done
+    ${EndIf}
+
+    SetDetailsPrint both
+    DetailPrint "Installing the WebView2 runtime (no internet required)"
+    SetDetailsPrint listonly
+
+    InitPluginsDir
+    CreateDirectory "$pluginsdir\webview2offline"
+    SetOutPath "$pluginsdir\webview2offline"
+    File "..\webview2\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+
+    ExecWait '"$pluginsdir\webview2offline\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /install' $1
+
+    ${If} $1 != 0
+        # Verify rather than trust the code: some builds of the runtime installer return a
+        # non-zero code for "already up to date", and refusing a machine that HAS the runtime
+        # would be a worse failure than the one being guarded against.
+        ReadRegStr $0 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+        ${If} $0 == ""
+            ReadRegStr $0 HKCU "Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" "pv"
+        ${EndIf}
+        ${If} $0 == ""
+            # Fail LOUDLY here. The alternative is an application that installs, starts, and
+            # shows nothing.
+            MessageBox MB_OK|MB_ICONSTOP "Mizan could not install the WebView2 runtime it needs to display its window.$\r$\n$\r$\nInstaller exit code: $1$\r$\n$\r$\nMizan has not been installed. Please contact support with this code."
+            Abort "WebView2 runtime installation failed (code $1)"
+        ${EndIf}
+    ${EndIf}
+
+    DetailPrint "WebView2 runtime: installed"
+    SetDetailsPrint both
+
+    webview2_done:
+!macroend
+
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
@@ -90,7 +162,8 @@ FunctionEnd
 Section
     !insertmacro wails.setShellContext
 
-    !insertmacro wails.webview2runtime
+    # Offline: the runtime is bundled, not fetched (10.11).
+    !insertmacro mizan.webview2offline
 
     SetOutPath $INSTDIR
 

@@ -438,3 +438,77 @@ func freshAppWith(t *testing.T, files map[string]string) (*bindings.Set, *bootst
 	set.Attach(app)
 	return set, app
 }
+
+// TestAFinishedSetupLeavesTheApplicationReadyToTrade
+//
+// # The out-of-the-box claim, asserted rather than assumed
+//
+// A first run migrates the schema, syncs permissions and creates the number series — that much
+// happens with no company at all, and 10.8 verified it on a shipped artefact.
+//
+// Everything else is PER COMPANY and happens when the wizard finishes: the chart of accounts, the
+// posting rules that decide where money lands, the units a product can be stocked in, and the
+// roles a user can hold. A first run that migrated cleanly and left a company unable to sell
+// anything would still look like a success in the log.
+//
+// This asserts the state a shopkeeper is actually in when the wizard closes.
+func TestAFinishedSetupLeavesTheApplicationReadyToTrade(t *testing.T) {
+	set, app := freshApp(t)
+	ctx := app.Context()
+
+	if result := set.Setup.Apply(validInput()); !result.OK {
+		t.Fatalf("Apply: %+v", result.Error)
+	}
+
+	count := func(query string) int {
+		t.Helper()
+		var n int
+		if err := app.DB.Reader(ctx).QueryRowContext(ctx, query).Scan(&n); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+		return n
+	}
+
+	for _, ready := range []struct {
+		what  string
+		query string
+		why   string
+	}{
+		{
+			"units of measure", "SELECT COUNT(*) FROM units_of_measure",
+			"a product cannot be created without one, so a shop could not add its first item",
+		},
+		{
+			"chart of accounts", "SELECT COUNT(*) FROM accounts",
+			"there would be nowhere for a sale to post",
+		},
+		{
+			"posting rules", "SELECT COUNT(*) FROM posting_rules",
+			"a sale would announce itself and nothing would decide which accounts move",
+		},
+		{
+			"roles", "SELECT COUNT(*) FROM roles",
+			"no user could be given any permission at all",
+		},
+		{
+			"number series", "SELECT COUNT(*) FROM number_series",
+			"no document could be numbered — the defect 7.6 found",
+		},
+		{
+			"background jobs", "SELECT COUNT(*) FROM jobs",
+			"the daily backup would never run",
+		},
+	} {
+		if n := count(ready.query); n == 0 {
+			t.Errorf("after setup there are no %s — %s", ready.what, ready.why)
+		}
+	}
+
+	// And the company is provisioned with a branch and a warehouse, which every document needs.
+	if n := count("SELECT COUNT(*) FROM companies"); n != 1 {
+		t.Errorf("%d companies after setup, want 1", n)
+	}
+	if n := count("SELECT COUNT(*) FROM warehouses"); n == 0 {
+		t.Error("no warehouse after setup, so stock has nowhere to be")
+	}
+}

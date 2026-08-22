@@ -2,6 +2,9 @@
 
 What is verified, what is not, and the steps that need a person with an account and a machine.
 
+For **what shipped in a release** and why it was decided that way, see [`../CHANGELOG.md`](../CHANGELOG.md).
+This file is the procedure; that one is the record.
+
 ---
 
 ## 1. What a release build produces

@@ -15,8 +15,8 @@ cd dist && shasum -a 256 * > SHA256SUMS.txt
 
 | Artefact | Size | What it is |
 |----------|------|------------|
-| `Mizan 1.0.0.dmg` | 14M | macOS disk image, Universal (`x86_64` + `arm64`) |
-| `Mizan 1.0.0 Setup.exe` | 9.4M | Windows NSIS installer |
+| `Mizan 1.0.0.dmg` | 15M | macOS disk image, Universal (`x86_64` + `arm64`) |
+| `Mizan 1.0.0 Setup.exe` | 211M | Windows NSIS installer, **WebView2 runtime embedded** |
 | `Mizan 1.0.0.exe` | 20M | bare Windows binary, portable install |
 | `SHA256SUMS.txt` | — | checksums, verified with `shasum -a 256 -c` |
 
@@ -65,6 +65,11 @@ The artefacts are structurally correct — `PE32 … Nullsoft Installer self-ext
 `PE32+ x86-64`, both naming the product and version — but **no Windows machine, VM, or Wine
 runtime exists in the build environment.** The installer has never been executed.
 
+This includes the offline WebView2 path. That the runtime is *embedded* is verified here — by the
+211MB artefact and by `TestTheWindowsInstallerChecksForWebView2` reading the macro — but that it
+*installs* is not, and cannot be. The unplugged-cable check in §3 is the only thing that proves
+it, and it needs a Windows machine.
+
 §3 is the checklist for the person who has a Windows machine.
 
 ---
@@ -80,18 +85,23 @@ installed.
 - [ ] Run it. **SmartScreen will warn** ("Windows protected your PC") until §4 is done — choose
       *More info → Run anyway*.
 - [ ] Confirm the installer offers a sensible path, creates a Start-menu entry, and completes.
-- [ ] Launch Mizan. Confirm WebView2 is found or installed. **This is the single most likely
-      first-run failure on a fresh Windows**, and it has a caveat worth knowing:
+- [ ] Launch Mizan. **Confirm it opens with the network cable unplugged.** WebView2 is the one
+      dependency Mizan cannot ship inside its own binary, and it is the single most likely
+      first-run failure on a fresh Windows — so the installer carries the whole runtime:
 
-      The installer checks both the machine-wide and per-user registry keys, and falls back to the
-      bundled `MicrosoftEdgeWebview2Setup.exe`. That file is the **bootstrapper** (~1.7MB), which
-      DOWNLOADS the runtime — so installing on a machine without WebView2 **needs an internet
-      connection once**. Windows 11 ships the runtime; Windows 10 usually has it through Edge.
+      `build/windows/webview2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe` (213MB) is Microsoft's
+      **Evergreen Standalone Installer**, embedded by the `mizan.webview2offline` macro in
+      `project.nsi`. It is what takes the installer from 9.4MB to 211MB, and it is why that trade
+      was made: a shop with no reliable connection must still be able to install from a USB stick.
 
-      For a genuinely offline install, replace that file with Microsoft's **Evergreen Standalone
-      Installer** (~130MB, per-architecture), update `TestTheWindowsInstallerChecksForWebView2`'s
-      size bound, and update this paragraph. The trade is a 130MB installer against never needing
-      a network — a decision for whoever ships to shops with no reliable connection.
+      The macro checks the machine-wide key, then the per-user key, and only runs the embedded
+      installer (silently, `/silent /install`) when neither is present. A machine that already has
+      the runtime — every Windows 11, and most Windows 10 through Edge — installs in seconds and
+      touches nothing.
+
+      **Nothing here reaches the network.** That is the property to test, and unplugging is the
+      only way to test it: a build machine with a connection cannot tell a bundled runtime from a
+      downloaded one.
 - [ ] Confirm the setup wizard appears and a company can be provisioned.
 - [ ] Confirm `%APPDATA%\Mizan` holds `mizan.db` and a `backups` folder with a manifest.
 - [ ] Uninstall from Add/Remove Programs. Confirm it removes cleanly and **leaves the data

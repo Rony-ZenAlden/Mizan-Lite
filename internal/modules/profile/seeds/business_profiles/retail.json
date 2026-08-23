@@ -1,0 +1,10 @@
+{
+  "code": "retail",
+  "name_key": "business_profile.retail",
+  "name": "Retail shop",
+  "description": "A counter that serves customers face to face. Opens on the till, because that is the screen a shop lives on all day and anything else is a click before every shift.",
+  "settings": {
+    "ui.landing": "/pos"
+  },
+  "flags": {}
+}

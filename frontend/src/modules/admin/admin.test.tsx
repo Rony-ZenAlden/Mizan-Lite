@@ -31,7 +31,7 @@ const ALICE: wails.User = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.users).mockResolvedValue([ALICE]);
   vi.mocked(wails.roles).mockResolvedValue([]);

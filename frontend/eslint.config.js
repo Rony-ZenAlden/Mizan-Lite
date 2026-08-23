@@ -64,6 +64,9 @@ export default [
         // saved through the browser's own download rather than Go choosing a directory.
         atob: "readonly",
         Blob: "readonly",
+        TextDecoder: "readonly",
+        Uint8Array: "readonly",
+        ArrayBuffer: "readonly",
         // Node globals, for the token gate that reads index.css off disk.
         process: "readonly",
       },

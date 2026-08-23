@@ -13,7 +13,7 @@ vi.mock("@/lib/wails", async () => {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   useSessionStore.getState().setSession({ ...SIGNED_IN, permissions: [] });
 });
@@ -126,7 +126,7 @@ describe("guide screen", () => {
     // not from the render helper's initial attribute. The first version of this test set only the
     // helper and got an English guide, which is the seeding working correctly.
     vi.mocked(wails.preferences).mockResolvedValue({
-      locale: "ar", theme: "system", availableLocales: ["en", "ar"],
+      locale: "ar", theme: "system", availableLocales: ["en", "ar"], landing: "/",
     });
     renderApp(<HelpScreen />, { locale: "ar" });
 

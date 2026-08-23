@@ -51,12 +51,12 @@ beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
     locale: "en",
     theme: "system",
-    availableLocales: ["en", "ar"],
+    availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.setLocale).mockResolvedValue({
     locale: "en",
     theme: "system",
-    availableLocales: ["en", "ar"],
+    availableLocales: ["en", "ar"], landing: "/",
   });
 });
 

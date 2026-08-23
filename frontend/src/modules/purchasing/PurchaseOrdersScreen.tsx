@@ -4,7 +4,7 @@ import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { purchaseOrders, type PurchaseOrder } from "@/lib/wails";
 import { Alert, Badge, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
-import { formatMinor } from "@/modules/accounting/money";
+import { DualAmount } from "@/modules/money/DualAmount";
 import { PurchaseOrderDetail } from "./PurchaseOrderDetail";
 
 const STATUSES = ["", "draft", "placed", "closed", "cancelled"] as const;
@@ -125,7 +125,7 @@ export function PurchaseOrdersScreen() {
           {
             key: "total",
             header: t("purchasing.total"),
-            cell: (row) => formatMinor(row.totalMinor),
+            cell: (row) => <DualAmount minor={row.totalMinor} />,
           },
         ]}
       />

@@ -78,7 +78,7 @@ export function SetupWizard({ options }: { options?: SetupOptions }) {
   return (
     <div className="flex h-full items-center justify-center p-6">
       <section
-        className="flex w-full max-w-2xl flex-col gap-5 rounded-lg border border-border bg-surface-raised p-6"
+        className="flex w-full max-w-2xl flex-col gap-5 card bg-surface-raised p-6"
         aria-labelledby="wizard-title"
       >
         <header className="flex flex-col gap-1">

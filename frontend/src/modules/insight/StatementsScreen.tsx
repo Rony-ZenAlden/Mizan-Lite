@@ -93,7 +93,7 @@ export function StatementsScreen() {
              * either one "profit" is how a shopkeeper concludes they are doing well while losing
              * money — so both are named in full, everywhere they appear.
              */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-surface-muted px-4 py-3">
+            <div className="card flex items-center justify-between bg-surface-muted px-4 py-3">
               <span className="text-sm font-medium text-text">{t("statements.netProfit")}</span>
               <span className="text-lg font-semibold tabular-nums text-text">
                 {formatMinor(pnl.data.netProfitMinor)}
@@ -171,7 +171,7 @@ function StatementSection({
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4">
+    <div className="flex flex-col gap-1 card p-4">
       <div className="flex items-center justify-between pb-2">
         <h4 className="text-sm font-medium text-text">{title}</h4>
         <span className="text-sm font-semibold tabular-nums text-text">

@@ -29,7 +29,7 @@ const SHIRT = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.productCategories).mockResolvedValue([
     { id: "c1", code: "BUILD", name: "Building", nameKey: "", path: "/BUILD/", depth: 0, isActive: true },

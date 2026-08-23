@@ -35,6 +35,8 @@ interface PreferencesApi {
   /** The theme actually applied, after resolving "system". */
   resolvedTheme: "light" | "dark";
   availableLocales: Locale[];
+  /** The route this workspace opens on, from the business profile chosen at setup. */
+  landing: string;
   setLocale: (locale: Locale) => Promise<void>;
   setTheme: (theme: ThemePreference) => Promise<void>;
   /** Translates a key in the active locale. */
@@ -60,7 +62,12 @@ function systemTheme(): "light" | "dark" {
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-const FALLBACK: Preferences = { locale: "en", theme: "system", availableLocales: ["en"] };
+const FALLBACK: Preferences = {
+  locale: "en",
+  theme: "system",
+  availableLocales: ["en"],
+  landing: "/",
+};
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<Preferences>(FALLBACK);
@@ -148,11 +155,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       theme: prefs.theme,
       resolvedTheme,
       availableLocales: prefs.availableLocales as Locale[],
+      landing: prefs.landing || "/",
       setLocale: (next) => commit(() => saveLocale(next)),
       setTheme: (next) => commit(() => saveTheme(next)),
       t,
     }),
-    [locale, prefs.theme, prefs.availableLocales, resolvedTheme, commit, t],
+    [locale, prefs.theme, prefs.availableLocales, prefs.landing, resolvedTheme, commit, t],
   );
 
   return <PreferencesContext.Provider value={api}>{children}</PreferencesContext.Provider>;

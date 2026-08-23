@@ -3,6 +3,7 @@ import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { debtPositions, debts, type Debt, type DebtPosition } from "@/lib/wails";
 import { Alert, Badge, EmptyState, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
+import { DualAmount } from "@/modules/money/DualAmount";
 import { formatMinor } from "@/modules/accounting/money";
 
 /**
@@ -91,14 +92,14 @@ function Position({ position }: { position: DebtPosition }) {
   const negative = position.netMinor.startsWith("-");
 
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4">
+    <div className="flex flex-col gap-1 card p-4">
       <span className="text-xs uppercase text-text-muted">
         {t(`debts.kind.${position.kind}`)}
       </span>
       <span
         className={`font-mono text-2xl tabular-nums ${negative ? "text-warning" : "text-text"}`}
       >
-        {formatMinor(position.netMinor)}
+        <DualAmount minor={position.netMinor} />
       </span>
       <span className="text-xs text-text-muted">
         {t(negative ? `debts.position.out.${position.kind}` : `debts.position.in.${position.kind}`)}

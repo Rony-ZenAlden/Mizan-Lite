@@ -410,6 +410,8 @@ export interface Preferences {
   locale: string;
   theme: ThemePreference;
   availableLocales: string[];
+  /** The route this workspace opens on, chosen by the business profile at setup. */
+  landing: string;
 }
 
 export function preferences(): Promise<Preferences> {
@@ -1901,7 +1903,7 @@ export function setRate(input: NewRate): Promise<Rate[]> {
 // ── exporting ───────────────────────────────────────────────────────────────────
 
 /** The formats an export can be asked for. */
-export type ExportFormat = "csv" | "xlsx" | "docx";
+export type ExportFormat = "csv" | "xlsx" | "docx" | "pdf";
 
 export interface ExportedFile {
   filename: string;

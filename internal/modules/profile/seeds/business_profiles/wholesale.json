@@ -1,0 +1,10 @@
+{
+  "code": "wholesale",
+  "name_key": "business_profile.wholesale",
+  "name": "Wholesale",
+  "description": "Selling to other businesses on account. Opens on invoices, because most of the money is owed rather than taken and a dashboard of today's takings is the wrong first thing to see.",
+  "settings": {
+    "ui.landing": "/sales/invoices"
+  },
+  "flags": {}
+}

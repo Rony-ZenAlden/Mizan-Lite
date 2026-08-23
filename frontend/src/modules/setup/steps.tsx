@@ -316,7 +316,7 @@ function currencyOptions(options?: SetupOptions) {
  */
 function Details({ summary, children }: { summary: string; children: ReactNode }) {
   return (
-    <details className="rounded-xl border border-border bg-surface-raised p-3">
+    <details className="card bg-surface-raised p-3">
       <summary className="cursor-pointer text-sm font-medium text-text">{summary}</summary>
       <div className="mt-3 flex flex-col gap-3">{children}</div>
     </details>

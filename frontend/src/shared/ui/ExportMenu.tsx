@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { type ExportedFile, type ExportFormat } from "@/lib/wails";
+import { printHTML } from "@/modules/sales/print";
 import { Button } from "./Button";
 import { cn } from "./cn";
 
@@ -37,7 +38,21 @@ export function ExportMenu({
     setBusy(format);
     setFailed(false);
     try {
-      save(await onExport(format));
+      const file = await onExport(format);
+      if (format === "pdf") {
+        /*
+         * PDF is PRINTED, not saved.
+         *
+         * The backend returns a printable page rather than a PDF file, because the browser is
+         * the only thing here that shapes Arabic correctly — and the print dialogue on both
+         * platforms offers "Save as PDF", which produces a file with real page breaks and
+         * selectable text. A Go PDF writer would need the bidirectional algorithm, contextual
+         * letter shaping and font subsetting to reach the same place.
+         */
+        printHTML(decode(file.contentBase64));
+      } else {
+        save(file);
+      }
       setOpen(false);
     } catch {
       // The reason belongs to the caller's own error surface; this control only reports that the
@@ -66,7 +81,7 @@ export function ExportMenu({
           role="menu"
           className={cn(
             "absolute top-full z-20 mt-1 flex min-w-44 flex-col overflow-hidden",
-            "rounded-lg border border-border bg-surface shadow-lg",
+            "card shadow-lg",
           )}
         >
           {FORMATS.map((format) => (
@@ -96,7 +111,27 @@ export function ExportMenu({
   );
 }
 
-const FORMATS: ExportFormat[] = ["csv", "xlsx", "docx"];
+const FORMATS: ExportFormat[] = ["pdf", "xlsx", "docx", "csv"];
+
+/** Base64 to text, for the printable page. */
+function decode(base64: string): string {
+  return new TextDecoder().decode(bytes(base64));
+}
+
+/**
+ * Base64 to bytes. Shared, so the printing path and the saving path cannot decode differently.
+ *
+ * Backed by an explicit ArrayBuffer rather than the length shorthand: `new Uint8Array(n)` is
+ * typed over `ArrayBufferLike`, which may be a SharedArrayBuffer, and a Blob will not take one.
+ */
+function bytes(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64);
+  const out = new Uint8Array(new ArrayBuffer(binary.length));
+  for (let i = 0; i < binary.length; i += 1) {
+    out[i] = binary.charCodeAt(i);
+  }
+  return out;
+}
 
 /**
  * Saves a returned file through the browser's own download.
@@ -109,13 +144,9 @@ const FORMATS: ExportFormat[] = ["csv", "xlsx", "docx"];
  * WebKit, which is the sort of thing that works on the machine it was written on.
  */
 function save(file: ExportedFile) {
-  const binary = atob(file.contentBase64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  const url = URL.createObjectURL(new Blob([bytes], { type: file.mimeType }));
+  const url = URL.createObjectURL(
+    new Blob([bytes(file.contentBase64)], { type: file.mimeType }),
+  );
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = file.filename;

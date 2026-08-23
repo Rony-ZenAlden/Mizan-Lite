@@ -58,7 +58,7 @@ function TileCard({ tile }: { tile: Tile }) {
   const { t } = useTranslation();
 
   return (
-    <article className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+    <article className="flex flex-col gap-2 card p-4">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-medium text-text">{t(`dashboard.tile.${tile.key}`)}</h3>
         {/* The range, on every tile. A periodic figure and a position look identical otherwise. */}

@@ -188,7 +188,7 @@ function BlockBody({ block, language }: { block: Block; language: Language }) {
 
     case "note":
       return (
-        <aside className="rounded-lg border border-border bg-surface-muted p-3 text-sm text-text">
+        <aside className="card bg-surface-muted p-3 text-sm text-text">
           {rtl ? block.ar : block.en}
         </aside>
       );
@@ -213,7 +213,7 @@ function BlockBody({ block, language }: { block: Block; language: Language }) {
 
     case "example":
       return (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+        <div className="flex flex-col gap-2 card p-4">
           <h4 className="text-sm font-medium text-text">
             {rtl ? block.titleAr : block.titleEn}
           </h4>
@@ -240,7 +240,7 @@ function BlockBody({ block, language }: { block: Block; language: Language }) {
           {block.stages.map((stage, index) => (
             <li
               key={index}
-              className="flex items-start gap-3 rounded-lg border border-border bg-surface p-3"
+              className="flex items-start gap-3 card p-3"
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs tabular-nums">
                 {index + 1}

@@ -91,7 +91,7 @@ function NoticeRow({
   const { t } = useTranslation();
 
   return (
-    <li className="flex items-start justify-between gap-4 rounded-lg border border-border bg-surface p-3">
+    <li className="flex items-start justify-between gap-4 card p-3">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <Badge tone={notice.severity === "danger" ? "danger" : "warning"}>

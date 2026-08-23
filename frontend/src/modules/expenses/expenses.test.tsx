@@ -37,7 +37,7 @@ const OWED = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.expenses).mockResolvedValue([PAID, OWED]);
   vi.mocked(wails.unsettledExpenses).mockResolvedValue([OWED]);

@@ -254,14 +254,64 @@ func TestEveryFormatCarriesTheSameFigures(t *testing.T) {
 
 // TestAnUnknownFormatIsRefusedRatherThanSubstituted
 //
-// A caller asking for "pdf" and silently receiving a CSV named `.pdf` produces a file the user
-// cannot open and cannot explain. The refusal is the useful answer.
+// A caller asking for a format this cannot produce and silently receiving a CSV under that name
+// produces a file the user cannot open and cannot explain. The refusal is the useful answer.
+//
+// This test named "pdf" until 10.19, when PDF became real — and it failed, which is exactly what
+// it is for. The case it guards is a format that does not exist, not a particular string.
 func TestAnUnknownFormatIsRefusedRatherThanSubstituted(t *testing.T) {
 	set, _ := signedInAdmin(t)
 
-	result := set.Insight.ExportValuation(bindings.ValuationDTO{}, "pdf")
-	if result.OK {
-		t.Errorf("an unsupported format produced a file named %q", result.Data.Filename)
+	for _, unsupported := range []string{"rtf", "ods", "pages", "PDF ", "xls"} {
+		result := set.Insight.ExportValuation(bindings.ValuationDTO{}, unsupported)
+		if result.OK {
+			t.Errorf("format %q produced a file named %q", unsupported, result.Data.Filename)
+		}
+	}
+}
+
+// TestPDFComesBackAsAPrintablePage
+//
+// PDF is the one format the backend does not produce as a FILE. It returns a page, and the
+// browser's print dialogue makes the PDF — because the browser is the only thing in the process
+// that shapes Arabic correctly.
+//
+// So the assertion is on the SHAPE of the answer: a caller that treated this like the other three
+// would hand the user an .html file to save, which is not what they asked for.
+func TestPDFComesBackAsAPrintablePage(t *testing.T) {
+	set, _ := signedInAdmin(t)
+
+	result := set.Insight.ExportValuation(bindings.ValuationDTO{
+		Lines: []bindings.ValuedLineDTO{{
+			WarehouseName: "Main", ProductName: "Tea", VariantSKU: "TEA",
+			QuantityMicro: "1000000", ValueMinor: "1500",
+		}},
+		TotalMinor: "1500",
+	}, "pdf")
+	if !result.OK {
+		t.Fatalf("ExportValuation(pdf): %+v", result.Error)
+	}
+	if result.Data.MimeType != "text/html;charset=utf-8" {
+		t.Errorf("mime = %q, want a printable page", result.Data.MimeType)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(result.Data.ContentBase64)
+	if err != nil {
+		t.Fatalf("not base64: %v", err)
+	}
+	page := string(decoded)
+	if !strings.HasPrefix(page, "<!doctype html>") {
+		t.Errorf("the page does not start with a doctype:\n%.80s", page)
+	}
+	// Self-contained: a shop prints during an outage, and a stylesheet that failed to load is a
+	// report with no layout handed to an accountant.
+	for _, external := range []string{"http://", "https://", "<link", "<script"} {
+		if strings.Contains(page, external) {
+			t.Errorf("the printable page reaches outside itself for %q", external)
+		}
+	}
+	if !strings.Contains(page, "1,500.00") && !strings.Contains(page, "1500") {
+		t.Error("the page does not carry the figure it is a report of")
 	}
 }
 

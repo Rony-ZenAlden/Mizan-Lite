@@ -26,7 +26,7 @@ const CEMENT = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.stockOnHand).mockResolvedValue([CEMENT]);
   vi.mocked(wails.checkLedger).mockResolvedValue({

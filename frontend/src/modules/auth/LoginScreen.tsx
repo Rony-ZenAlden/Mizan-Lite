@@ -62,7 +62,7 @@ export function LoginScreen() {
     <div className="flex h-full items-center justify-center p-6">
       <form
         onSubmit={submit}
-        className="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-border bg-surface-raised p-6"
+        className="flex w-full max-w-sm flex-col gap-4 card bg-surface-raised p-6"
         aria-labelledby="login-title"
       >
         <div className="flex items-start justify-between gap-4">

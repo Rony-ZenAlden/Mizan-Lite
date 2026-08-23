@@ -164,11 +164,11 @@ const MOCKS: Record<string, Record<string, Invoker>> = {
       }),
   },
   Config: {
-    Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en", "ar"] }),
+    Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/" }),
     SetLocale: (locale) =>
-      ok({ locale: String(locale), theme: "system", availableLocales: ["en", "ar"] }),
+      ok({ locale: String(locale), theme: "system", availableLocales: ["en", "ar"], landing: "/" }),
     SetTheme: (theme) =>
-      ok({ locale: "en", theme: String(theme), availableLocales: ["en", "ar"] }),
+      ok({ locale: "en", theme: String(theme), availableLocales: ["en", "ar"], landing: "/" }),
   },
   Ops: {
     Jobs: () =>

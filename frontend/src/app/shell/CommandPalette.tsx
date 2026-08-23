@@ -205,7 +205,7 @@ export function CommandPalette({
             setActive(0);
           }}
           className={cn(
-            "w-full rounded-lg border border-border bg-surface-raised px-3 py-2",
+            "w-full card bg-surface-raised px-3 py-2",
             "text-base text-text placeholder:text-text-muted",
           )}
         />

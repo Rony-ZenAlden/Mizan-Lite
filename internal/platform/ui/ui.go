@@ -40,3 +40,41 @@ var Theme = config.DeclareEnum(config.Def{
 	Scopes:      []config.Scope{config.ScopeSystem, config.ScopeCompany, config.ScopeUser},
 	Description: "settings.ui.theme",
 })
+
+// LandingSettingKey is the stable key of the screen a user lands on.
+const LandingSettingKey = "ui.landing"
+
+// The screens a workspace can open on.
+//
+// PATHS, matching the router's own — not module names. The alternative was an abstract token the
+// frontend maps to a route, which is a second list to keep in step and a mapping that goes stale
+// the first time a route moves.
+const (
+	LandingOverview = "/"
+	LandingTill     = "/pos"
+	LandingInvoices = "/sales/invoices"
+)
+
+// Landing is the screen this installation opens on.
+//
+// # Why a shop's trade decides its home screen
+//
+// A retail counter opens Mizan to sell something; the till is the screen it lives on all day, and
+// starting anywhere else is a click before every shift. A wholesaler opens it to raise and chase
+// invoices, and a dashboard of today's takings is the wrong first thing when most of the money is
+// owed rather than taken. A services business is closer to the second than the first.
+//
+// So the business profile sets it — through the ordinary settings mechanism, which means it is a
+// DEFAULT and not a rule: §C.1's constraint on the whole profile system is that a profile supplies
+// defaults and never constrains later configuration. A shop that disagrees changes one setting.
+//
+// An enum rather than free text: an arbitrary string here would be a route this application may
+// not serve, and the landing screen is the one place a bad value strands somebody with nowhere to
+// go.
+var Landing = config.DeclareEnum(config.Def{
+	Key:         LandingSettingKey,
+	Default:     LandingOverview,
+	Enum:        []string{LandingOverview, LandingTill, LandingInvoices},
+	Scopes:      []config.Scope{config.ScopeSystem, config.ScopeCompany, config.ScopeUser},
+	Description: "settings.ui.landing",
+})

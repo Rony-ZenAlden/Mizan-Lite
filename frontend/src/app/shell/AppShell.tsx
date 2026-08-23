@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { usePreferences, useTranslation } from "@/app/providers/PreferencesProvider";
 import { RequirePermission } from "@/app/session/Can";
 import { useSession, hasPermission } from "@/app/session/session";
@@ -22,6 +22,7 @@ import type { Locale } from "@/i18n/messages";
 export function AppShell() {
   // The palette's open state lives here, not in the Header, because the shortcut is global: it
   // must work while focus is in a table, a form, or nothing at all.
+  const { landing } = usePreferences();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const open = useCallback(() => setPaletteOpen(true), []);
   useCommandPaletteShortcut(open);
@@ -34,7 +35,27 @@ export function AppShell() {
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
         <main className="flex-1 overflow-y-auto p-6">
           <Routes>
-            {ROUTES.map((route) => (
+            {/*
+             * The workspace's own home screen.
+             *
+             * A retail counter opens Mizan to sell something and lives on the till; a wholesaler
+             * opens it to chase invoices, and a dashboard of today's takings is the wrong first
+             * thing when most of the money is owed rather than taken. The business profile chose
+             * this at setup and it is an ordinary setting, so a shop that disagrees changes it.
+             *
+             * Rendered in place of the table's own "/" entry rather than beside it: two routes
+             * for one path is a race between them, and which wins depends on declaration order —
+             * exactly the kind of thing that survives review and breaks on an upgrade.
+             *
+             * `replace` keeps the redirect out of history, or Back from the landing screen would
+             * bounce off it forever.
+             */}
+            {landing && landing !== "/" ? (
+              <Route path="/" element={<Navigate to={landing} replace />} />
+            ) : null}
+            {ROUTES.filter(
+              (route) => !(route.path === "/" && landing !== "" && landing !== "/"),
+            ).map((route) => (
               <Route
                 key={route.path}
                 path={route.path}

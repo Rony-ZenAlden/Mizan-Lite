@@ -22,6 +22,11 @@ type PreferencesDTO struct {
 	// AvailableLocales is discovered from the embedded catalogs, not hardcoded — adding
 	// locales/ku/ ships a new language with no code change (Step 0.8 §3.2).
 	AvailableLocales []string `json:"availableLocales"`
+	// Landing is the route this workspace opens on, chosen by the business profile at setup.
+	//
+	// A PATH, matching the router's own. An abstract token the frontend maps to a route would be
+	// a second list to keep in step, and one that goes stale the first time a route moves.
+	Landing string `json:"landing"`
 }
 
 // configPolicies declares what Config's methods require.
@@ -128,6 +133,7 @@ func (c *Config) read(ctx context.Context) PreferencesDTO {
 		Locale:           resolvedLocale(ctx).String(),
 		Theme:            ui.Theme.Get(ctx),
 		AvailableLocales: available,
+		Landing:          ui.Landing.Get(ctx),
 	}
 }
 

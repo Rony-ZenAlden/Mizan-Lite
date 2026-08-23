@@ -33,7 +33,7 @@ const MERCHANT = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.customers).mockResolvedValue([SHOP, MERCHANT]);
   vi.mocked(wails.suppliers).mockResolvedValue([MERCHANT]);

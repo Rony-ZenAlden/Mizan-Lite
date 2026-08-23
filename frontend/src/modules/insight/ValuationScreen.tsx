@@ -129,7 +129,7 @@ function Figure({
   tone?: "success" | "danger";
 }) {
   return (
-    <article className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4">
+    <article className="flex flex-col gap-1 card p-4">
       <span className="text-sm text-text-muted">{label}</span>
       <span className="text-xl font-semibold tabular-nums text-text">{value}</span>
       {tone && (

@@ -49,7 +49,7 @@ export function SearchBox({ onPick }: { onPick?: (result: SearchResult) => void 
           {found.data.results.length === 0 ? (
             <EmptyState title={t("search.none")} />
           ) : (
-            <ul className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
+            <ul className="flex flex-col divide-y divide-border card">
               {found.data.results.map((result) => (
                 <li key={`${result.kind}:${result.id}`}>
                   <button

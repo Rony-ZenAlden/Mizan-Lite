@@ -11,7 +11,7 @@ function ok(data: unknown) {
 }
 
 const PREFS = {
-  Preferences: () => ok({ locale: "en", theme: "light", availableLocales: ["en", "ar"] }),
+  Preferences: () => ok({ locale: "en", theme: "light", availableLocales: ["en", "ar"], landing: "/" }),
 };
 
 function renderPanel() {

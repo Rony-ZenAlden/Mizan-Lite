@@ -33,7 +33,7 @@ describe("PreferencesProvider", () => {
   it("reads locale and theme from the backend, not from component state", async () => {
     installBridge({
       Config: {
-        Preferences: () => ok({ locale: "ar", theme: "dark", availableLocales: ["en", "ar"] }),
+        Preferences: () => ok({ locale: "ar", theme: "dark", availableLocales: ["en", "ar"], landing: "/" }),
       },
     });
 
@@ -50,11 +50,11 @@ describe("PreferencesProvider", () => {
   it("switches language with no reload, updating lang and dir", async () => {
     const user = userEvent.setup();
     const setLocale = vi.fn(() =>
-      ok({ locale: "ar", theme: "system", availableLocales: ["en", "ar"] }),
+      ok({ locale: "ar", theme: "system", availableLocales: ["en", "ar"], landing: "/" }),
     );
     installBridge({
       Config: {
-        Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en", "ar"] }),
+        Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/" }),
         SetLocale: setLocale,
       },
     });
@@ -86,7 +86,7 @@ describe("PreferencesProvider", () => {
     const user = userEvent.setup();
     installBridge({
       Config: {
-        Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en", "ar"] }),
+        Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/" }),
         SetLocale: () =>
           Promise.resolve({
             ok: false,
@@ -139,7 +139,7 @@ describe("PreferencesProvider", () => {
 
     installBridge({
       Config: {
-        Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en"] }),
+        Preferences: () => ok({ locale: "en", theme: "system", availableLocales: ["en"], landing: "/" }),
       },
     });
 
@@ -188,7 +188,7 @@ describe("PreferencesProvider", () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBeTruthy());
     expect(document.documentElement.dataset.themeTransitions).toBeUndefined();
 
-    release({ ok: true, data: { locale: "en", theme: "dark", availableLocales: ["en"] } });
+    release({ ok: true, data: { locale: "en", theme: "dark", availableLocales: ["en"], landing: "/" } });
 
     await waitFor(() =>
       expect(document.documentElement.dataset.themeTransitions).toBeDefined(),

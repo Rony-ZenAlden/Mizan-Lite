@@ -307,3 +307,93 @@ func TestAMalformedSheetIsRefusedByEveryFormat(t *testing.T) {
 		t.Error("the CSV accepted a row that does not match its columns")
 	}
 }
+
+// ── the printable page ──────────────────────────────────────────────────────────
+
+// TestAPrintablePageRepeatsItsHeaderOnEveryPage
+//
+// # The one line that decides whether a long report is readable
+//
+// A stock valuation runs to several pages. Without `display: table-header-group` the browser
+// prints the column headers once, and pages two and three are columns of unlabelled numbers —
+// which is worse than useless for a document somebody reads a figure off.
+//
+// It is invisible on screen and invisible in a one-page test. Hence a test on the stylesheet.
+func TestAPrintablePageRepeatsItsHeaderOnEveryPage(t *testing.T) {
+	page, err := tabular.PrintableHTML(awkward(), tabular.PrintOptions{Title: "Valuation"})
+	if err != nil {
+		t.Fatalf("PrintableHTML: %v", err)
+	}
+	if !strings.Contains(page, "display: table-header-group") {
+		t.Error("the header does not repeat; pages after the first lose their column labels")
+	}
+	if !strings.Contains(page, "page-break-inside: avoid") {
+		t.Error("rows may split across a page break")
+	}
+}
+
+// TestAPrintablePageIsSelfContained
+//
+// A shop prints during an outage. A stylesheet or font that failed to load is a report with no
+// layout handed to an accountant.
+func TestAPrintablePageIsSelfContained(t *testing.T) {
+	page, err := tabular.PrintableHTML(awkward(), tabular.PrintOptions{Title: "Valuation"})
+	if err != nil {
+		t.Fatalf("PrintableHTML: %v", err)
+	}
+	for _, external := range []string{"http://", "https://", "<link", "<script", "@import"} {
+		if strings.Contains(page, external) {
+			t.Errorf("the page reaches outside itself for %q", external)
+		}
+	}
+}
+
+// TestAnArabicPageIsLaidOutRightToLeft
+//
+// And every CELL carries dir="auto": a product name in Arabic beside a figure in Western digits
+// is the ordinary case here, and a cell that inherits the page direction reorders the number.
+func TestAnArabicPageIsLaidOutRightToLeft(t *testing.T) {
+	page, err := tabular.PrintableHTML(awkward(), tabular.PrintOptions{
+		Title: "كشف حساب", RightToLeft: true,
+	})
+	if err != nil {
+		t.Fatalf("PrintableHTML: %v", err)
+	}
+	if !strings.Contains(page, `dir="rtl"`) {
+		t.Error("an Arabic page is not marked right-to-left")
+	}
+	if !strings.Contains(page, `lang="ar"`) {
+		t.Error("an Arabic page does not declare its language, so line breaking is wrong")
+	}
+	if !strings.Contains(page, `dir="auto"`) {
+		t.Error("cells do not resolve their own direction, so mixed text reorders")
+	}
+	// And the English one is not secretly RTL.
+	english, err := tabular.PrintableHTML(awkward(), tabular.PrintOptions{Title: "Valuation"})
+	if err != nil {
+		t.Fatalf("PrintableHTML: %v", err)
+	}
+	if strings.Contains(english, `dir="rtl"`) {
+		t.Error("an English page was laid out right to left")
+	}
+}
+
+// TestAPrintablePageEscapesWhatWouldBreakIt
+//
+// A product named `<script>` is not an attack here — it is a shop that named something oddly —
+// but unescaped it ends the table and the rest of the report vanishes.
+func TestAPrintablePageEscapesWhatWouldBreakIt(t *testing.T) {
+	page, err := tabular.PrintableHTML(awkward(), tabular.PrintOptions{Title: "Valuation"})
+	if err != nil {
+		t.Fatalf("PrintableHTML: %v", err)
+	}
+	if strings.Contains(page, "Widget <tag>") {
+		t.Error("a value containing markup was written unescaped")
+	}
+	if !strings.Contains(page, "&lt;tag&gt;") {
+		t.Error("the escaped value is missing; the cell was dropped rather than escaped")
+	}
+	if strings.Contains(page, "\x07") {
+		t.Error("a control character reached the page")
+	}
+}

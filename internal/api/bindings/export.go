@@ -48,6 +48,13 @@ const (
 	FormatCSV  = "csv"
 	FormatXLSX = "xlsx"
 	FormatDOCX = "docx"
+	// FormatPDF returns a printable PAGE, not a PDF file.
+	//
+	// The browser makes the PDF: both supported platforms offer "Save as PDF" in the print
+	// dialogue, and the file it produces has correctly shaped Arabic, selectable text and real
+	// page breaks — none of which a Go PDF writer gets without the bidirectional algorithm,
+	// contextual shaping and font subsetting. The frontend prints this rather than saving it.
+	FormatPDF = "pdf"
 )
 
 // exportSheetAs renders one finished sheet in the format the caller asked for.
@@ -79,6 +86,15 @@ func exportSheetAs(
 		})
 		mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 		extension = ".xlsx"
+	case FormatPDF:
+		var page string
+		page, err = tabular.PrintableHTML(sheet, tabular.PrintOptions{
+			Title:       report,
+			Subtitle:    subtitleFor(from, to),
+			RightToLeft: rightToLeft,
+		})
+		content = []byte(page)
+		mime, extension = "text/html;charset=utf-8", ".html"
 	case FormatDOCX:
 		content, err = tabular.DOCX(sheet, tabular.DOCXOptions{
 			Title:       report,

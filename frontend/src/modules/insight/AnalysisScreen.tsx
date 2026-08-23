@@ -158,7 +158,7 @@ export function AnalysisScreen() {
            * Summing the rows in the browser would be a second implementation, and one that would
            * silently be wrong the day a report is paginated.
            */}
-          <div className="flex flex-wrap items-center justify-end gap-6 rounded-lg border border-border bg-surface-muted px-4 py-3 text-sm">
+          <div className="card flex flex-wrap items-center justify-end gap-6 bg-surface-muted px-4 py-3 text-sm">
             <span className="text-text-muted">{t("analysis.total")}</span>
             <span className="tabular-nums font-semibold">
               {formatMinor(analysis.data.total.revenueMinor)}

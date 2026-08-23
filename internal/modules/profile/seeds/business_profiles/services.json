@@ -1,0 +1,10 @@
+{
+  "code": "services",
+  "name_key": "business_profile.services",
+  "name": "Services",
+  "description": "Work billed rather than goods sold. Opens on invoices like wholesale: the day is organised around what has been billed and what is still owed, not around a counter.",
+  "settings": {
+    "ui.landing": "/sales/invoices"
+  },
+  "flags": {}
+}

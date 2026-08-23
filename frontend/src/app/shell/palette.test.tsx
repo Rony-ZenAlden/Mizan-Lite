@@ -18,7 +18,7 @@ beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
     locale: "en",
     theme: "system",
-    availableLocales: ["en", "ar"],
+    availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.globalSearch).mockResolvedValue({ query: "", results: [], failed: [] });
   useSessionStore.getState().setSession({ ...SIGNED_IN, permissions: EVERYTHING });

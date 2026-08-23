@@ -38,7 +38,7 @@ const BALANCED_SHEET = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   useSessionStore.getState().setSession({
     ...SIGNED_IN,

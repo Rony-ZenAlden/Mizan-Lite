@@ -48,7 +48,7 @@ export function NewProductForm({ onCreated }: { onCreated: () => void }) {
 
   return (
     <form
-      className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4"
+      className="flex flex-col gap-3 card p-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (ready) {

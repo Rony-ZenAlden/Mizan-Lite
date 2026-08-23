@@ -122,3 +122,32 @@ describe("the core navigation", () => {
     expect(core.length + advanced.length).toBe(ROUTES.length);
   });
 });
+
+/**
+ * Role-based workspaces (Step 10.19).
+ *
+ * The business profile chosen at setup decides which screen the application opens on. These
+ * assert the DATA — that every landing a profile can choose is a route this application serves —
+ * because the failure is a user stranded on a blank screen with no way to say what went wrong.
+ */
+describe("workspace landings", () => {
+  // The values the Go setting's enum allows. Kept here as a literal deliberately: this test
+  // exists to catch the two lists drifting apart, so deriving one from the other would defeat it.
+  const LANDINGS = ["/", "/pos", "/sales/invoices"];
+
+  it("offers only landings this application can actually serve", () => {
+    const paths = new Set(ROUTES.map((route) => route.path));
+    for (const landing of LANDINGS) {
+      expect(paths, `a workspace may open on ${landing}, which no route serves`).toContain(landing);
+    }
+  });
+
+  it("keeps every landing in the CORE list", () => {
+    // A home screen folded into "Advanced" would be a screen the user opens on and then cannot
+    // find again — the sidebar would show no trace of where they are.
+    const core = new Set(ROUTES.filter((route) => !route.advanced).map((route) => route.path));
+    for (const landing of LANDINGS) {
+      expect(core, `${landing} is a landing but is hidden in the Advanced fold`).toContain(landing);
+    }
+  });
+});

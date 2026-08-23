@@ -63,7 +63,7 @@ const EMPTY_STATEMENT = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "ar", theme: "system", availableLocales: ["en", "ar"],
+    locale: "ar", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.dashboard).mockResolvedValue({ from: "", to: "", tiles: [] });
   vi.mocked(wails.profitAndLoss).mockResolvedValue(EMPTY_STATEMENT);

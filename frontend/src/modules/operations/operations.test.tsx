@@ -21,7 +21,7 @@ vi.mock("@/lib/wails", async () => {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.backups).mockResolvedValue([]);
   vi.mocked(wails.pendingRestore).mockResolvedValue({

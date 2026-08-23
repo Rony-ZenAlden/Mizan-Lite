@@ -104,7 +104,7 @@ export function ShiftBar({
   // ── the open state ───────────────────────────────────────────────────────────
   if (closing) {
     return (
-      <section className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+      <section className="flex flex-col gap-3 card p-4">
         <h3 className="text-sm font-medium text-text">{t("shift.closeTitle")}</h3>
         {/* The expected figure is NOT shown while counting, for the reason a stock count is
             blind (0022): a tired person shown "412.50" counts 412.50. */}
@@ -139,7 +139,7 @@ export function ShiftBar({
   }
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-2">
+    <div className="flex items-center justify-between card px-4 py-2">
       <span className="flex items-center gap-3 text-sm">
         <Badge tone="success">{t("shift.trading")}</Badge>
         <span className="text-text-muted">

@@ -4,6 +4,7 @@ import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { salesDocuments, type SalesDocument } from "@/lib/wails";
 import { Alert, Badge, EmptyState, Input, PageHeader, Select, Sheet, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
+import { DualAmount } from "@/modules/money/DualAmount";
 import { formatMinor, isZeroMinor } from "@/modules/accounting/money";
 import { InvoiceDetail } from "./InvoiceDetail";
 import { KpiStrip } from "@/modules/insight/KpiStrip";
@@ -135,7 +136,7 @@ export function InvoicesScreen() {
           {
             key: "total",
             header: t("sales.total"),
-            cell: (row) => formatMinor(row.totalMinor),
+            cell: (row) => <DualAmount minor={row.totalMinor} />,
           },
           {
             key: "outstanding",

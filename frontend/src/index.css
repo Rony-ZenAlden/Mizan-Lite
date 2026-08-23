@@ -216,6 +216,36 @@ body {
   line-height: 1.75;
 }
 
+/* ─── The card ────────────────────────────────────────────────────────────────
+   ONE definition of what a container looks like, as a component class.
+
+   Twenty-seven places had hand-written `rounded-lg border border-border
+   bg-surface` before 10.19. Every one of them was the same intent spelled
+   slightly differently — some `rounded-lg`, some `rounded-xl`, some with a
+   shadow and some without — so the application had no single card, it had
+   twenty-seven near-misses. Refining the look meant editing all of them, which
+   is why it had never been refined.
+
+   A hairline border rather than a shadow does the separating. A 1px line at
+   low contrast reads as structure; a drop shadow at this density reads as
+   clutter, and stacked cards start to look like they are floating at different
+   heights. The shadow that remains is almost nothing — it exists to lift a card
+   off the sunken background, not to announce itself. */
+@layer components {
+  .card {
+    border-radius: var(--radius-lg);
+    border: 1px solid rgb(var(--color-border));
+    background-color: rgb(var(--color-surface));
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+
+  :root[data-theme="dark"] .card {
+    /* On dark, a light-tuned shadow is a smudge. The border does the work and the
+       shadow only deepens the edge. */
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  }
+}
+
 /* ─── Micro-interactions ──────────────────────────────────────────────────────
    Applied to the things a pointer or a keyboard actually lands on, not to `*`.
    A blanket transition catches table rows and list items too, so a filtered

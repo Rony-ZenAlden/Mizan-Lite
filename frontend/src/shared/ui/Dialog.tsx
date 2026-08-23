@@ -78,7 +78,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
           className={cn(
             "fixed z-50 flex w-[min(32rem,calc(100vw-2rem))] flex-col gap-4",
             "top-1/2 start-1/2 -translate-y-1/2 -translate-x-1/2 rtl:translate-x-1/2",
-            "rounded-lg border border-border bg-surface p-6 shadow-lg",
+            "card p-6 shadow-lg",
           )}
         >
           <Header title={title} description={description} />

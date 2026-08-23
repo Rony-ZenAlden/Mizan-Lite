@@ -67,7 +67,7 @@ export function PartnerStatement({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure label={t("statement.receivable")} value={balance.receivableMinor} />
         <Figure label={t("statement.payable")} value={balance.payableMinor} />
-        <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4">
+        <div className="flex flex-col gap-1 card p-4">
           <span className="text-xs uppercase text-text-muted">{t("statement.net")}</span>
           <span className="font-mono text-2xl tabular-nums text-text">
             {formatMinor(balance.netMinor)}
@@ -158,7 +158,7 @@ function OpenItems({ title, items }: { title: string; items: OpenItem[] }) {
 
 function Figure({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-4">
+    <div className="flex flex-col gap-1 card p-4">
       <span className="text-xs uppercase text-text-muted">{label}</span>
       <span className="font-mono text-2xl tabular-nums text-text">{formatMinor(value)}</span>
     </div>

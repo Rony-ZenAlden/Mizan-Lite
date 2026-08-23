@@ -54,7 +54,7 @@ const SALE = {
 
 beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
-    locale: "en", theme: "system", availableLocales: ["en", "ar"],
+    locale: "en", theme: "system", availableLocales: ["en", "ar"], landing: "/",
   });
   vi.mocked(wails.currentShift).mockResolvedValue(OPEN_SHIFT);
   vi.mocked(wails.heldSales).mockResolvedValue([]);

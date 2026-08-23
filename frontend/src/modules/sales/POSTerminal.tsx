@@ -16,6 +16,7 @@ import {
 } from "@/lib/wails";
 import { Alert, Badge, Button, EmptyState, Input, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
+import { DualAmount } from "@/modules/money/DualAmount";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity } from "@/modules/inventory/quantity";
 import { PaymentPanel } from "./PaymentPanel";
@@ -241,15 +242,18 @@ export function POSTerminal() {
         </div>
 
         {/* ── the totals and the tender ────────────────────────────────────── */}
-        <aside className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+        <aside className="flex flex-col gap-3 card p-4">
           <dl className="flex flex-col gap-1 text-sm">
             <Figure label={t("pos.net")} value={formatMinor(sale?.document.netMinor ?? "0")} />
             <Figure label={t("pos.tax")} value={formatMinor(sale?.document.taxMinor ?? "0")} />
             <div className="mt-2 flex items-baseline justify-between border-t border-border pt-3">
               <dt className="text-sm font-medium text-text">{t("pos.total")}</dt>
               {/* Read across a counter, sometimes by the customer. */}
+              {/* Both currencies at the till: the shopkeeper is asked "how much in dollars?"
+                  several times a day, and doing that arithmetic in their head over a queue is
+                  where mistakes come from. */}
               <dd className="font-mono text-3xl font-semibold tabular-nums text-text">
-                {formatMinor(total)}
+                <DualAmount minor={total} />
               </dd>
             </div>
           </dl>

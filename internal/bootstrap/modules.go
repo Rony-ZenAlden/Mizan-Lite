@@ -17,6 +17,25 @@ import (
 	"github.com/mizan-erp/mizan/internal/modules/tax"
 	"github.com/mizan-erp/mizan/internal/platform/auth"
 	"github.com/mizan-erp/mizan/internal/platform/modules"
+
+	// Imported for its SETTING DECLARATIONS, which register in the default registry at package
+	// init and are otherwise never linked into a build that does not reach the API layer.
+	//
+	// # The defect this fixes, found by the profile validator
+	//
+	// `ui.theme` and `ui.landing` belong to no module — a colour scheme and a home screen are
+	// properties of the application, not of accounting or sales — so they are declared in
+	// platform/ui, which until 10.19 only `bindings/config.go` imported.
+	//
+	// Boot VALIDATES the shipped profiles against the declared settings. A profile that sets
+	// `ui.landing` therefore failed to load in any binary that did not happen to link the API
+	// layer, with the honest but unhelpful message "the profile sets a setting that no module
+	// declares". The setting existed; nothing had told the registry about it.
+	//
+	// It was latent for `ui.theme` for nine phases and would have surfaced the first time a
+	// country profile set a theme. Importing it where profiles are validated is what makes the
+	// declaration and the validation reach the same registry.
+	_ "github.com/mizan-erp/mizan/internal/platform/ui"
 )
 
 // DeclarationModules is every module in the build, constructed with NO service.

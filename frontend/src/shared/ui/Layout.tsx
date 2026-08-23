@@ -69,11 +69,10 @@ export function Card({
 }) {
   return (
     <section
-      className={cn(
-        "flex flex-col overflow-hidden rounded-xl border border-border bg-surface",
-        "shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-        className,
-      )}
+      // `card` is the shared definition in index.css. The primitive uses it rather than
+      // restating it, so the component and the twenty-seven places that used to hand-roll a
+      // card cannot drift apart again.
+      className={cn("card flex flex-col overflow-hidden", className)}
     >
       {title || actions ? (
         <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-4 py-3">
@@ -116,11 +115,7 @@ export function StatTile({
 }) {
   return (
     <article
-      className={cn(
-        "flex flex-col gap-1 rounded-xl border border-border bg-surface p-4",
-        "shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-        className,
-      )}
+      className={cn("card flex flex-col gap-1 p-4", className)}
     >
       <span className="text-xs font-medium uppercase tracking-wide text-text-muted">{label}</span>
       <span

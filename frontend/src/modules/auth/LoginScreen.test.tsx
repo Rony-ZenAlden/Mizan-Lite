@@ -13,7 +13,7 @@ beforeEach(() => {
   vi.mocked(wails.preferences).mockResolvedValue({
     locale: "en",
     theme: "system",
-    availableLocales: ["en", "ar"],
+    availableLocales: ["en", "ar"], landing: "/",
   });
 });
 

@@ -8,6 +8,7 @@ import { CommandPalette, useCommandPaletteShortcut } from "@/app/shell/CommandPa
 import { NAV_GROUPS, ROUTES } from "@/app/shell/routes";
 import { type ThemePreference } from "@/lib/wails";
 import { Button, Select, Tooltip } from "@/shared/ui";
+import { RateWidget } from "@/modules/money/RateWidget";
 import type { Locale } from "@/i18n/messages";
 
 /**
@@ -208,6 +209,8 @@ function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
       </button>
 
       <div className="flex items-center gap-2">
+        {/* The day's trading rate, where it is looked at rather than behind a menu. */}
+        <RateWidget />
         {session ? (
           <>
             <span className="hidden truncate text-sm text-text-muted sm:inline">

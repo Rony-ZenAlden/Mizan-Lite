@@ -165,3 +165,34 @@ func (s *Service) SetRate(
 func (s *Service) RateTypes(ctx context.Context) ([]domain.RateType, error) {
 	return s.repos.RateTypes.List(ctx)
 }
+
+// Rates lists the recorded history for a currency pair, newest first.
+//
+// The history is the point, not a single current figure. A shop in a country whose currency moves
+// weekly needs to see WHEN each rate started and what it replaced — and because rates are
+// append-only, the list is also the audit trail of every correction.
+func (s *Service) Rates(
+	ctx context.Context, from, to, rateTypeCode string, limit int,
+) ([]domain.Rate, error) {
+	rt, err := s.repos.RateTypes.ByCode(ctx, rateTypeCode)
+	if err != nil {
+		return nil, err
+	}
+	return s.repos.Rates.History(ctx, from, to, rt.ID, limit)
+}
+
+// RateOn resolves the rate the engine would actually use on a date.
+//
+// Exposed so a screen can show what a document WILL be converted at, rather than showing the
+// newest row and leaving the reader to work out whether it applies yet. The two differ whenever
+// somebody records tomorrow's rate today, which is the ordinary case for a shop that gets its
+// rate in the evening.
+func (s *Service) RateOn(
+	ctx context.Context, from, to, rateTypeCode string, at time.Time,
+) (domain.Rate, bool, error) {
+	rt, err := s.repos.RateTypes.ByCode(ctx, rateTypeCode)
+	if err != nil {
+		return domain.Rate{}, false, err
+	}
+	return s.repos.Rates.Newest(ctx, from, to, rt.ID, at)
+}

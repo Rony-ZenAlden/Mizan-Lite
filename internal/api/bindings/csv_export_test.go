@@ -1,8 +1,12 @@
 package bindings_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/base64"
 	"encoding/csv"
+	"io"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -54,7 +58,7 @@ func TestAnExportRendersTheReportItWasGivenAndDoesNotRequery(t *testing.T) {
 		},
 	}
 
-	result := set.Insight.ExportAnalysis(analysis, "Sales by product", true)
+	result := set.Insight.ExportAnalysis(analysis, "Sales by product", true, "")
 	if !result.OK {
 		t.Fatalf("ExportAnalysis: %+v", result.Error)
 	}
@@ -101,7 +105,7 @@ func TestASpendExportOmitsTheMarginColumnsRatherThanZeroingThem(t *testing.T) {
 		Rows: []bindings.AnalysisRowDTO{
 			{Key: "s1", Label: "Acme Supplies", Documents: 2, RevenueMinor: "30000"},
 		},
-	}, "Spend by supplier", false)
+	}, "Spend by supplier", false, "")
 	if !result.OK {
 		t.Fatalf("ExportAnalysis: %+v", result.Error)
 	}
@@ -132,7 +136,7 @@ func TestAStatementExportsFlatWithItsDepth(t *testing.T) {
 					AmountMinor: "5000"},
 			},
 		},
-	}, "Profit and loss", "2026-08-01", "2026-08-31")
+	}, "Profit and loss", "2026-08-01", "2026-08-31", "")
 	if !result.OK {
 		t.Fatalf("ExportStatement: %+v", result.Error)
 	}
@@ -160,7 +164,7 @@ func TestAnEmptyReportExportsHeadersRatherThanNothing(t *testing.T) {
 
 	result := set.Insight.ExportAnalysis(bindings.AnalysisDTO{
 		From: "2026-08-01", To: "2026-08-31",
-	}, "Sales by product", true)
+	}, "Sales by product", true, "")
 	if !result.OK {
 		t.Fatalf("ExportAnalysis: %+v", result.Error)
 	}
@@ -173,4 +177,111 @@ func TestAnEmptyReportExportsHeadersRatherThanNothing(t *testing.T) {
 	if records[0][0] != "key" {
 		t.Errorf("header = %v", records[0])
 	}
+}
+
+// TestEveryFormatCarriesTheSameFigures
+//
+// # The guarantee that makes three formats safe rather than three times the risk
+//
+// A shop exports the same report as a spreadsheet for its accountant and as a document for its
+// customer. If those two disagree by a single figure, the shop finds out when somebody queries an
+// invoice — and there is no way to tell which of the two was right.
+//
+// They cannot disagree here BY CONSTRUCTION: all three renderers receive the same finished
+// `tabular.Sheet`, and no format re-queries. This drill is what stops a future format quietly
+// fetching its own rows.
+func TestEveryFormatCarriesTheSameFigures(t *testing.T) {
+	set, _ := signedInAdmin(t)
+
+	analysis := bindings.AnalysisDTO{
+		From: "2026-08-01", To: "2026-08-31",
+		Rows: []bindings.AnalysisRowDTO{
+			{Key: "2026-08-01", Label: "1 August", Documents: 3,
+				QuantityMicro: "3000000", RevenueMinor: "123456"},
+		},
+		Total: bindings.AnalysisRowDTO{
+			Key: "", Label: "TOTAL", Documents: 3,
+			QuantityMicro: "3000000", RevenueMinor: "123456",
+		},
+	}
+
+	var seen []string
+	for _, format := range []string{"csv", "xlsx", "docx"} {
+		result := set.Insight.ExportAnalysis(analysis, "Sales", false, format)
+		if !result.OK {
+			t.Fatalf("ExportAnalysis(%s): %+v", format, result.Error)
+		}
+
+		decoded, err := base64.StdEncoding.DecodeString(result.Data.ContentBase64)
+		if err != nil {
+			t.Fatalf("%s is not valid base64: %v", format, err)
+		}
+		if len(decoded) == 0 {
+			t.Fatalf("%s produced an empty file", format)
+		}
+
+		// The row count is the SHEET's, so all three must agree on it — a format that dropped
+		// the total row or added a spacer would show up here rather than in a customer's inbox.
+		seen = append(seen, format+":"+strconv.Itoa(result.Data.Rows))
+
+		// The figure itself survives into every format. Two of the three are zip archives, so
+		// this looks for it in the uncompressed bytes rather than the container.
+		if format == "csv" && !bytes.Contains(decoded, []byte("123456")) {
+			t.Errorf("the CSV does not carry the revenue figure")
+		}
+		if format != "csv" {
+			if !bytes.HasPrefix(decoded, []byte("PK")) {
+				t.Errorf("%s is not a zip archive; Office will refuse it", format)
+			}
+			if !archiveContains(t, decoded, "123456") {
+				t.Errorf("the %s does not carry the revenue figure", format)
+			}
+		}
+
+		// The extension matches the format. A .docx full of CSV opens as an error the user
+		// cannot explain.
+		if !strings.HasSuffix(result.Data.Filename, "."+format) {
+			t.Errorf("%s was named %q", format, result.Data.Filename)
+		}
+	}
+
+	for _, count := range seen[1:] {
+		if strings.SplitN(count, ":", 2)[1] != strings.SplitN(seen[0], ":", 2)[1] {
+			t.Errorf("the formats report different row counts: %v", seen)
+		}
+	}
+}
+
+// TestAnUnknownFormatIsRefusedRatherThanSubstituted
+//
+// A caller asking for "pdf" and silently receiving a CSV named `.pdf` produces a file the user
+// cannot open and cannot explain. The refusal is the useful answer.
+func TestAnUnknownFormatIsRefusedRatherThanSubstituted(t *testing.T) {
+	set, _ := signedInAdmin(t)
+
+	result := set.Insight.ExportValuation(bindings.ValuationDTO{}, "pdf")
+	if result.OK {
+		t.Errorf("an unsupported format produced a file named %q", result.Data.Filename)
+	}
+}
+
+// archiveContains reports whether any part of an OOXML package contains a string.
+func archiveContains(t *testing.T, archive []byte, want string) bool {
+	t.Helper()
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		t.Fatalf("not a zip archive: %v", err)
+	}
+	for _, file := range reader.File {
+		opened, openErr := file.Open()
+		if openErr != nil {
+			continue
+		}
+		body, readErr := io.ReadAll(opened)
+		_ = opened.Close()
+		if readErr == nil && bytes.Contains(body, []byte(want)) {
+			return true
+		}
+	}
+	return false
 }

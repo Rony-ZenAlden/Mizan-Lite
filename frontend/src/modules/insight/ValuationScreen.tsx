@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { exportValuation } from "@/lib/wails";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import { stockValuation, type ValuedLine } from "@/lib/wails";
-import { Alert, Badge, EmptyState, PageHeader, Table } from "@/shared/ui";
+import { Alert, Badge, EmptyState, ExportMenu, PageHeader, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 import { formatQuantity } from "@/modules/inventory/quantity";
@@ -36,7 +37,17 @@ export function ValuationScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title={t("valuation.title")} description={t("valuation.help")} />
+      <PageHeader
+        title={t("valuation.title")}
+        description={t("valuation.help")}
+        actions={
+          /* The DTO the screen was given is what gets exported — not a fresh query with the
+             same arguments. That is what makes the file and the screen agree by construction. */
+          <ExportMenu
+            onExport={(format) => exportValuation(valuation.data, format)}
+          />
+        }
+      />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Figure label={t("valuation.onTheShelf")} value={formatMinor(valuation.data.totalMinor)} />

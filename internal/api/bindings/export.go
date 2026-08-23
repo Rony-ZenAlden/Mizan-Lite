@@ -2,6 +2,9 @@ package bindings
 
 import (
 	"encoding/base64"
+	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/kernel/locale"
+	"strings"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/platform/tabular"
@@ -37,17 +40,84 @@ type ExportDTO struct {
 // cannot re-derive a column — which is DoD criterion 7: **every export's columns are the report's
 // own, and no export re-queries.** A second query would be a second answer, and the user would
 // have a spreadsheet that disagrees with the screen it came from.
-func exportSheet(sheet tabular.Sheet, report, from, to string) envelope.Result[ExportDTO] {
-	content, err := tabular.CSV(sheet)
+// The formats an export can be asked for.
+//
+// Strings rather than an enum across the boundary, because the frontend picks one from a menu and
+// a typo must produce a clear refusal rather than silently falling back to CSV.
+const (
+	FormatCSV  = "csv"
+	FormatXLSX = "xlsx"
+	FormatDOCX = "docx"
+)
+
+// exportSheetAs renders one finished sheet in the format the caller asked for.
+//
+// # One sheet, three renderers, no re-querying
+//
+// The DoD rule this file was built around — **every export's columns are the report's own, and no
+// export re-queries** — is what makes adding formats cheap AND safe. All three renderers receive
+// the same finished `tabular.Sheet`, so a spreadsheet, a document and a CSV of the same report
+// cannot disagree with each other or with the screen. A format that fetched its own rows would be
+// a fourth answer to a question that already has one.
+func exportSheetAs(
+	sheet tabular.Sheet, report, from, to, format string, rightToLeft bool,
+) envelope.Result[ExportDTO] {
+	var (
+		content   []byte
+		err       error
+		mime      string
+		extension string
+	)
+
+	switch format {
+	case "", FormatCSV:
+		content, err = tabular.CSV(sheet)
+		mime, extension = "text/csv;charset=utf-8", ".csv"
+	case FormatXLSX:
+		content, err = tabular.XLSX(sheet, tabular.XLSXOptions{
+			SheetName: report, RightToLeft: rightToLeft,
+		})
+		mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+		extension = ".xlsx"
+	case FormatDOCX:
+		content, err = tabular.DOCX(sheet, tabular.DOCXOptions{
+			Title:       report,
+			Subtitle:    subtitleFor(from, to),
+			RightToLeft: rightToLeft,
+		})
+		mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+		extension = ".docx"
+	default:
+		// Refused rather than defaulted. A caller asking for "pdf" and silently receiving a CSV
+		// named .pdf would produce a file the user cannot open and cannot explain.
+		return envelope.Fail[ExportDTO](errs.Validation(tabular.CodeWriteFailed,
+			"that is not a format this export can produce").WithParam("format", format))
+	}
 	if err != nil {
 		return envelope.Fail[ExportDTO](err)
 	}
+
+	name := tabular.Filename(report, from, to)
+	name = strings.TrimSuffix(name, ".csv") + extension
+
 	return envelope.Ok(ExportDTO{
-		Filename:      tabular.Filename(report, from, to),
-		MimeType:      "text/csv;charset=utf-8",
+		Filename:      name,
+		MimeType:      mime,
 		ContentBase64: base64.StdEncoding.EncodeToString(content),
 		Rows:          len(sheet.Rows),
 	})
+}
+
+// subtitleFor is the range line under a document's title, or blank when there is no range.
+func subtitleFor(from, to string) string {
+	switch {
+	case from != "" && to != "":
+		return from + " — " + to
+	case from != "":
+		return from
+	default:
+		return to
+	}
 }
 
 // ExportAnalysis renders a sales or spend analysis as a spreadsheet.
@@ -55,7 +125,7 @@ func exportSheet(sheet tabular.Sheet, report, from, to string) envelope.Result[E
 // The DTO the SCREEN was given is what gets exported — not a fresh query with the same arguments.
 // That is what makes the file and the screen agree by construction rather than by coincidence.
 func (i *Insight) ExportAnalysis(
-	analysis AnalysisDTO, title string, withMargin bool,
+	analysis AnalysisDTO, title string, withMargin bool, format string,
 ) envelope.Result[ExportDTO] {
 	if _, _, err := i.guard("ExportAnalysis"); err != nil {
 		return envelope.Fail[ExportDTO](err)
@@ -88,12 +158,12 @@ func (i *Insight) ExportAnalysis(
 	}
 	rows = append(rows, total)
 
-	return exportSheet(tabular.Sheet{Columns: columns, Rows: rows},
-		title, analysis.From, analysis.To)
+	return exportSheetAs(tabular.Sheet{Columns: columns, Rows: rows},
+		title, analysis.From, analysis.To, format, i.rightToLeft())
 }
 
 // ExportValuation renders a stock valuation as a spreadsheet.
-func (i *Insight) ExportValuation(valuation ValuationDTO) envelope.Result[ExportDTO] {
+func (i *Insight) ExportValuation(valuation ValuationDTO, format string) envelope.Result[ExportDTO] {
 	if _, _, err := i.guard("ExportValuation"); err != nil {
 		return envelope.Fail[ExportDTO](err)
 	}
@@ -105,13 +175,13 @@ func (i *Insight) ExportValuation(valuation ValuationDTO) envelope.Result[Export
 			line.QuantityMicro, line.AvgCostMicro, line.ValueMinor,
 		})
 	}
-	return exportSheet(tabular.Sheet{
+	return exportSheetAs(tabular.Sheet{
 		Columns: []string{
 			"productName", "variantSku", "warehouseName",
 			"quantityMicro", "avgCostMicro", "valueMinor",
 		},
 		Rows: rows,
-	}, "stock-valuation", "", "")
+	}, "stock-valuation", "", "", format, i.rightToLeft())
 }
 
 // ExportStatement renders a profit and loss or balance sheet section tree.
@@ -119,7 +189,7 @@ func (i *Insight) ExportValuation(valuation ValuationDTO) envelope.Result[Export
 // FLATTENED with a depth column, unlike the DTO. A spreadsheet has no nesting, and a reader
 // indents on the depth — which is why the depth crosses the boundary at all.
 func (i *Insight) ExportStatement(
-	nodes []StatementNodeDTO, title string, from, to string,
+	nodes []StatementNodeDTO, title string, from, to, format string,
 ) envelope.Result[ExportDTO] {
 	if _, _, err := i.guard("ExportStatement"); err != nil {
 		return envelope.Fail[ExportDTO](err)
@@ -139,10 +209,10 @@ func (i *Insight) ExportStatement(
 		walk(node)
 	}
 
-	return exportSheet(tabular.Sheet{
+	return exportSheetAs(tabular.Sheet{
 		Columns: []string{"depth", "code", "name", "type", "amountMinor"},
 		Rows:    rows,
-	}, title, from, to)
+	}, title, from, to, format, i.rightToLeft())
 }
 
 func itoaInt(n int) string {
@@ -165,4 +235,23 @@ func itoaInt(n int) string {
 		digits[i] = '-'
 	}
 	return string(digits[i:])
+}
+
+// rightToLeft reports whether the caller's language reads right to left.
+//
+// # Why the EXPORT asks and not the caller
+//
+// A workbook's sheet direction and a document's section direction are not decoration: a
+// right-to-left reader handed a left-to-right sheet reads the columns backwards, and gets a
+// number from the wrong one. It has to be right without anybody remembering to ask for it.
+//
+// Read from the session's locale rather than passed in from JavaScript, for the same reason the
+// print path resolves its own direction: the frontend already knows, and a second copy of "is
+// this language RTL" is a second thing to keep in step.
+func (i *Insight) rightToLeft() bool {
+	ctx, _, err := i.guard("rightToLeft")
+	if err != nil {
+		return false
+	}
+	return locale.FromContext(ctx).Direction() == locale.RTL
 }

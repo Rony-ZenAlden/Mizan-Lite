@@ -29,6 +29,7 @@ import { ReceiveDeliveryScreen } from "@/modules/purchasing/ReceiveDeliveryScree
 import { SupplierReturnsScreen } from "@/modules/purchasing/SupplierReturnsScreen";
 import { SupplierPaymentsScreen } from "@/modules/purchasing/SupplierPaymentsScreen";
 import { HelpScreen } from "@/modules/help/HelpScreen";
+import { RatesScreen } from "@/modules/money/RatesScreen";
 
 /**
  * One route.
@@ -192,6 +193,13 @@ export const ROUTES: AppRoute[] = [
     labelKey: "nav.debts",
     element: <DebtsScreen />,
     permission: PERMISSIONS.debtView,
+  },
+  {
+    path: "/money/rates", advanced: true,
+    group: "money",
+    labelKey: "nav.rates",
+    element: <RatesScreen />,
+    permission: PERMISSIONS.accountView,
   },
   {
     path: "/accounting/chart", advanced: true,

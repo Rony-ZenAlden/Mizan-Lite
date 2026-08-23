@@ -60,6 +60,10 @@ export default [
         // caught.
         File: "readonly",
         btoa: "readonly",
+        // atob, Blob and URL for the export menu: the backend hands back base64, and the file is
+        // saved through the browser's own download rather than Go choosing a directory.
+        atob: "readonly",
+        Blob: "readonly",
         // Node globals, for the token gate that reads index.css off disk.
         process: "readonly",
       },

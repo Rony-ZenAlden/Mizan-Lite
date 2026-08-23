@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "@/app/providers/PreferencesProvider";
 import {
+  exportAnalysis,
   salesByPartner,
   salesByPeriod,
   salesByProduct,
@@ -11,7 +12,7 @@ import {
   type Analysis,
   type AnalysisRow,
 } from "@/lib/wails";
-import { Alert, EmptyState, Input, PageHeader, Select, Table } from "@/shared/ui";
+import { Alert, EmptyState, ExportMenu, Input, PageHeader, Select, Table } from "@/shared/ui";
 import { useErrorText } from "@/modules/admin/useAdminError";
 import { formatMinor } from "@/modules/accounting/money";
 
@@ -46,7 +47,19 @@ export function AnalysisScreen() {
 
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title={t("analysis.title")} description={t("analysis.help")} />
+      <PageHeader
+        title={t("analysis.title")}
+        description={t("analysis.help")}
+        actions={
+          analysis.data ? (
+            <ExportMenu
+              onExport={(format) =>
+                exportAnalysis(analysis.data, t("analysis.title"), true, format)
+              }
+            />
+          ) : null
+        }
+      />
 
       <div className="flex flex-wrap items-end gap-3">
         <Select

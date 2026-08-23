@@ -320,3 +320,69 @@ func (r *RateRepo) Append(ctx context.Context, rate domain.Rate) error {
 	}
 	return nil
 }
+
+// History lists the most recently RECORDED rates for a pair, newest first.
+//
+// # Why recorded order rather than effective order
+//
+// Rates are append-only: a correction is a new row carrying the same `valid_from` as the one it
+// corrects (Step 0.9, D3). A screen ordered by `valid_from` alone would show the correction and
+// the mistake adjacent and indistinguishable, and the reader would have no way to tell which of
+// the two the system is actually using.
+//
+// Ordered the same way resolution orders — valid_from, then created_at — the row the engine will
+// pick is always the first one shown for its date. What the screen says and what the till charges
+// cannot disagree.
+//
+// # Why the rate TYPE is part of the query
+//
+// A market rate and an official rate for the same pair are different numbers, both current, and
+// used by different parts of the system: §G.1 binds trade to `market` and anything the state
+// reads to `official`. Listing them together would put two rows on screen that are both correct
+// and only one of which any given document will use — and no ordering can make that legible.
+func (r *RateRepo) History(
+	ctx context.Context, from, to string, rateTypeID id.ID, limit int,
+) ([]domain.Rate, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := r.db.Reader(ctx).QueryContext(ctx,
+		`SELECT `+rateColumns+` FROM exchange_rates
+		  WHERE from_currency = ? AND to_currency = ? AND rate_type_id = ?
+		  ORDER BY valid_from DESC, created_at DESC, id DESC
+		  LIMIT ?`, from, to, rateTypeID.String(), limit)
+	if err != nil {
+		return nil, errs.Wrap(err, errs.CategoryInternal, domain.CodeNoRate,
+			"listing exchange rates")
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]domain.Rate, 0, limit)
+	for rows.Next() {
+		var (
+			rate                 domain.Rate
+			rawID, rawType       string
+			validFrom, createdAt string
+			validTo, batchID     *string
+		)
+		if err = rows.Scan(&rawID, &rate.From, &rate.To, &rawType, &rate.Nano,
+			&validFrom, &validTo, &rate.Source, &batchID, &createdAt); err != nil {
+			return nil, errs.Wrap(err, errs.CategoryInternal, domain.CodeNoRate,
+				"reading an exchange rate")
+		}
+		rate.ID = id.ID(rawID)
+		rate.RateTypeID = id.ID(rawType)
+		rate.ValidFrom, _ = clock.ParseDate(validFrom)
+		rate.CreatedAt, _ = clock.ParseTimestamp(createdAt)
+		if validTo != nil {
+			if t, ok := clock.ParseDate(*validTo); ok {
+				rate.ValidTo = &t
+			}
+		}
+		if batchID != nil {
+			rate.BatchID = *batchID
+		}
+		out = append(out, rate)
+	}
+	return out, rows.Err()
+}

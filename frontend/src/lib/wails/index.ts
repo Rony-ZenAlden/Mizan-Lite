@@ -282,6 +282,7 @@ export const PERMISSIONS = {
   auditView: "audit.entry.view",
   auditPayload: "audit.entry.view_payload",
   accountView: "accounting.account.view",
+  accountManage: "accounting.account.manage",
   catalogView: "catalog.view",
   catalogManage: "catalog.manage",
   customerView: "partner.customer.view",
@@ -1850,4 +1851,89 @@ export interface EditProduct {
 
 export function updateProduct(input: EditProduct): Promise<ProductRow> {
   return call<ProductRow>("Catalog", "UpdateProduct", input);
+}
+
+// ── exchange rates ──────────────────────────────────────────────────────────────
+
+export interface Rate {
+  from: string;
+  to: string;
+  /** Which kind of rate: market for trade, official for the state (§G.1). */
+  rateType: string;
+  /** The rate ×10⁹, as a decimal string. Never parsed into a number. */
+  rateNano: string;
+  /** The same figure, formatted for display. */
+  rate: string;
+  validFrom: string;
+  source: string;
+  recordedAt: string;
+  /** Whether this is the row the engine would use today. */
+  inForce: boolean;
+}
+
+export interface RateType {
+  code: string;
+  name: string;
+}
+
+export interface NewRate {
+  from: string;
+  to: string;
+  rate: string;
+  rateTypeCode: string;
+  validFrom: string;
+  source: string;
+}
+
+export function rateTypes(): Promise<RateType[]> {
+  return call<RateType[]>("Money", "RateTypes");
+}
+
+export function rates(from: string, to: string, rateTypeCode = "", limit = 0): Promise<Rate[]> {
+  return call<Rate[]>("Money", "Rates", from, to, rateTypeCode, limit);
+}
+
+/** Records a rate and returns the pair's whole history, so a screen redraws from one answer. */
+export function setRate(input: NewRate): Promise<Rate[]> {
+  return call<Rate[]>("Money", "SetRate", input);
+}
+
+// ── exporting ───────────────────────────────────────────────────────────────────
+
+/** The formats an export can be asked for. */
+export type ExportFormat = "csv" | "xlsx" | "docx";
+
+export interface ExportedFile {
+  filename: string;
+  mimeType: string;
+  /** The file itself. Base64 because the boundary is JSON. */
+  contentBase64: string;
+  /** How many data rows it holds, so a screen can say what it produced. */
+  rows: number;
+}
+
+export function exportAnalysis(
+  analysis: Analysis,
+  title: string,
+  withMargin: boolean,
+  format: ExportFormat,
+): Promise<ExportedFile> {
+  return call<ExportedFile>("Insight", "ExportAnalysis", analysis, title, withMargin, format);
+}
+
+export function exportValuation(
+  valuation: Valuation,
+  format: ExportFormat,
+): Promise<ExportedFile> {
+  return call<ExportedFile>("Insight", "ExportValuation", valuation, format);
+}
+
+export function exportStatement(
+  nodes: StatementNode[],
+  title: string,
+  from: string,
+  to: string,
+  format: ExportFormat,
+): Promise<ExportedFile> {
+  return call<ExportedFile>("Insight", "ExportStatement", nodes, title, from, to, format);
 }

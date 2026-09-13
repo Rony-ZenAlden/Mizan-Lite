@@ -8,6 +8,8 @@
 /mizan
 /archlint
 /Mizan ERP
+# `go build ./cmd/demoseed` from the root drops a 13MB binary here. Built, never committed.
+/demoseed
 
 # Go
 /vendor/

@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens. Components use Tailwind names mapped to these variables and never a raw colour.
+ *
+ * The font stack is SYSTEM-FIRST and ends in a generic family. Mizan 10.17 found its application
+ * rendering in Times because the stack named a font no machine had and no generic terminator.
+ * Nothing is bundled: Lite installs with no network, and each platform ships an Arabic-capable face —
+ * Segoe UI on Windows, SF Arabic and Geeza Pro on macOS.
+ */
+:root {
+  --font-sans: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", "SF Arabic", "Geeza Pro",
+    "Noto Sans Arabic", Tahoma, sans-serif;
+
+  --color-surface: 248 250 252;
+  --color-surface-raised: 255 255 255;
+  --color-border: 226 232 240;
+  --color-text: 15 23 42;
+  --color-text-muted: 71 85 105;
+  --color-primary: 67 56 202;
+  --color-primary-fg: 255 255 255;
+  --color-danger: 185 28 28;
+  --color-danger-subtle: 254 226 226;
+  --color-success: 4 120 87;
+  --color-success-subtle: 209 250 229;
+  --color-ring: 99 102 241;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: 15 23 42;
+    --color-surface-raised: 30 41 59;
+    --color-border: 51 65 85;
+    --color-text: 241 245 249;
+    --color-text-muted: 148 163 184;
+    --color-primary: 129 140 248;
+    --color-primary-fg: 15 23 42;
+    --color-danger: 252 165 165;
+    --color-danger-subtle: 69 10 10;
+    --color-success: 110 231 183;
+    --color-success-subtle: 6 46 36;
+    --color-ring: 165 180 252;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+}

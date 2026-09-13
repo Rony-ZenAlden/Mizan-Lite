@@ -51,9 +51,57 @@ rules:
       # would make the future PostgreSQL port a rewrite instead of one new dialect.
       - name: dialect-is-platform-only
         description: Only the database platform may be dialect-aware.
-        applies_to: ["self/internal/modules/**", "self/internal/api/**"]
+        applies_to: ["self/internal/modules/**", "self/internal/api/**", "self/internal/lite/**"]
         forbid: ["self/internal/platform/database/dialect**"]
         message: "only platform/database may be dialect-aware (ARCHITECTURE_v1 §8.5)"
+
+      # ── Mizan Lite (docs/mizan_lite/DESIGN.md §6.2) ───────────────────────────
+      # The edition boundary, in both directions. Lite reuses Mizan's kernel and a named set of
+      # platform packages and nothing else — never a business module, never Mizan's bindings or
+      # composition root — so it cannot quietly grow a dependency on the full ERP. And nothing in Mizan
+      # may depend on Lite. Each rule was seen FAILING by planting a violation (scripts/lite-arch-drill.sh
+      # does it on every lite-ci run), because a rule nobody has watched fail may match nothing.
+      - name: lite-edition-boundary
+        description: Mizan Lite imports only the kernel, its named platform packages, the envelope, and itself.
+        applies_to: ["self/internal/lite/**"]
+        allow_only:
+          - "std"
+          - "self/internal/kernel/**"
+          - "self/internal/platform/database"
+          - "self/internal/platform/migrate"
+          - "self/internal/platform/backup"
+          - "self/internal/platform/jobs"
+          - "self/internal/platform/i18n"
+          - "self/internal/api/envelope"
+          - "self/internal/lite/**"
+        message: "Mizan Lite may import only the kernel, platform/{database,migrate,backup,jobs,i18n}, api/envelope and internal/lite (design §3.1, §6.2)"
+
+      - name: mizan-independent-of-lite
+        description: Nothing in Mizan depends on Mizan Lite.
+        applies_to:
+          - "self"
+          - "self/internal/kernel/**"
+          - "self/internal/platform/**"
+          - "self/internal/modules/**"
+          - "self/internal/api/**"
+          - "self/internal/bootstrap/**"
+          - "self/internal/buildinfo/**"
+          - "self/cmd/**"
+          - "self/tools/**"
+        forbid: ["self/internal/lite/**", "self/apps/**"]
+        message: "Mizan must not import Mizan Lite — the dependency runs one way"
+
+      - name: lite-app-entry
+        description: The Lite desktop entry point wires Wails to Lite and holds nothing else.
+        applies_to: ["self/apps/lite/**"]
+        allow_only: ["std", "github.com/wailsapp/wails/v2/**", "self/internal/lite/**", "self/internal/kernel/errs"]
+        message: "apps/lite may import only the standard library, Wails and internal/lite"
+
+      - name: lite-domain-purity
+        description: Lite domain packages hold rules only; no infrastructure.
+        applies_to: ["self/internal/lite/*/domain/**"]
+        allow_only: ["std", "self/internal/kernel/**", "self/internal/lite/*/domain/**"]
+        message: "Lite domain packages may import only stdlib, kernel, and Lite domain packages"
 
   # ── Forbidden calls, scoped by location ─────────────────────────────────────
   forbid-call:
@@ -93,7 +141,9 @@ rules:
         message: "use structured logging (log/slog), not fmt.Printf"
 
       - selector: "time.Now"
-        applies_to: ["self/internal/modules/*/domain/**", "self/internal/kernel/money/**"]
+        # Lite in full, not only its domains: Lite is small enough that every time-dependent path —
+        # backups' minimum age, a sale's business date — must take an injected clock to be testable.
+        applies_to: ["self/internal/modules/*/domain/**", "self/internal/kernel/money/**", "self/internal/lite/**"]
         exclude: ["**_test.go", "**/clock/**"]
         message: "do not call time.Now() in domain code — take a kernel/clock.Clock"
 
@@ -126,6 +176,10 @@ rules:
       - "self/internal/modules/*/domain/**"
       - "self/internal/modules/*/app/**"
       - "self/internal/api/**"
+      # Lite: SQL lives only in each module's infra/sqlite package and in migrations. `lite/*` is a
+      # module's service package (one segment), which never reaches its own infra/sqlite (three).
+      - "self/internal/lite/*"
+      - "self/internal/lite/*/domain/**"
     message: "SQL belongs to infra/platform — domain, app, and api must not contain it"
 
   # ── No floating-point in money/domain ───────────────────────────────────────
@@ -134,6 +188,8 @@ rules:
     applies_to:
       - "self/internal/kernel/**"
       - "self/internal/modules/*/domain/**"
+      # All of Lite, not only its domains: a till's arithmetic can leak through any layer.
+      - "self/internal/lite/**"
     message: "float32/float64 are forbidden here — use kernel integer money/quantity types"
 
 # ── Planned rule kinds (documented seams, added later without redesign) ────────

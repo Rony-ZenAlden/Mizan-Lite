@@ -1,0 +1,116 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"sync"
+
+	"github.com/wailsapp/wails/v2/pkg/options"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/lite/api"
+	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	"github.com/mizan-erp/mizan/internal/lite/paths"
+)
+
+// startFunc builds the graph. bootstrap.Start in the application; a controllable fake in tests.
+type startFunc func(context.Context, bootstrap.Options) (*bootstrap.App, error)
+
+// shell owns the lifecycle around the window: build the graph after the window opens, attach it to
+// the bindings, and tear it down when the window closes.
+type shell struct {
+	set     *api.Set
+	paths   paths.Paths
+	log     *slog.Logger
+	version string
+	start   startFunc
+
+	mu      sync.Mutex
+	ctx     context.Context
+	app     *bootstrap.App
+	closing bool
+	booted  chan struct{}
+}
+
+func newShell(set *api.Set, p paths.Paths, log *slog.Logger, version string, start startFunc) *shell {
+	return &shell{set: set, paths: p, log: log, version: version, start: start, booted: make(chan struct{})}
+}
+
+// startup runs when the window is ready. It must return at once: Wails calls it on the main thread,
+// and a migration can take minutes.
+func (s *shell) startup(ctx context.Context) {
+	s.mu.Lock()
+	s.ctx = ctx
+	s.mu.Unlock()
+	s.set.SetContext(ctx)
+	go s.boot(ctx)
+}
+
+func (s *shell) boot(ctx context.Context) {
+	defer close(s.booted)
+
+	app, err := s.start(ctx, bootstrap.Options{
+		Paths:          s.paths,
+		Logger:         s.log,
+		AppVersion:     s.version,
+		StartScheduler: true,
+		Progress:       s.set.Progress,
+	})
+	if err != nil {
+		s.set.Fail(err)
+		s.log.ErrorContext(ctx, "mizan lite could not start",
+			slog.String("code", errs.CodeOf(err)), slog.Any("error", err))
+		return
+	}
+
+	s.mu.Lock()
+	if s.closing {
+		// The window closed while the graph was still being built. Nothing will ever call shutdown
+		// again, so the graph this boot produced must be torn down here or the database stays open —
+		// on Windows, locked until the process dies.
+		s.mu.Unlock()
+		if err := app.Shutdown(context.WithoutCancel(ctx)); err != nil {
+			s.log.WarnContext(ctx, "shutting down a graph finished after the window closed", slog.Any("error", err))
+		}
+		return
+	}
+	s.app = app
+	s.mu.Unlock()
+
+	s.set.Attach(app)
+	s.log.InfoContext(ctx, "mizan lite ready", slog.String("version", s.version))
+}
+
+// shutdown tears the graph down when the window closes. Safe to call more than once, and safe to
+// call while boot is still running.
+func (s *shell) shutdown(ctx context.Context) {
+	s.mu.Lock()
+	s.closing = true
+	app := s.app
+	s.app = nil
+	s.mu.Unlock()
+
+	if app == nil {
+		return
+	}
+	// WithoutCancel, so a cancellation can never skip the close-time backup. Wails v2.13 passes an
+	// UNcancelled context here (internal/app/app_production.go hands OnShutdown the app's own
+	// context), so today this changes nothing — it exists so the backup does not depend on that
+	// framework detail staying true. The shutdown steps carry their own timeouts.
+	if err := app.Shutdown(context.WithoutCancel(ctx)); err != nil {
+		s.log.WarnContext(ctx, "shutdown completed with errors", slog.Any("error", err))
+	}
+}
+
+// secondLaunch brings the running window forward when the application is launched again.
+func (s *shell) secondLaunch(options.SecondInstanceData) {
+	s.mu.Lock()
+	ctx := s.ctx
+	s.mu.Unlock()
+	if ctx == nil {
+		return // launched again before the first window finished opening; nothing to focus yet
+	}
+	wailsruntime.WindowUnminimise(ctx)
+	wailsruntime.Show(ctx)
+}

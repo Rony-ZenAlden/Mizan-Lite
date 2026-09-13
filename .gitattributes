@@ -1,0 +1,20 @@
+# Line endings that must not depend on the machine that checked the repository out.
+#
+# Migration files are checksummed (SHA-256 of their bytes) and the checksum is verified on every
+# boot. A Windows checkout with core.autocrlf=true rewrites LF to CRLF, which changes the bytes,
+# which changes the checksum — so a database created on a Mac would refuse to start under a binary
+# built on Windows from the "same" source. Pinning LF makes the checksum a property of the
+# repository rather than of the checkout.
+*.sql  text eol=lf
+
+# Embedded catalogs are compared byte-for-byte by nothing today, but they are go:embed'd into the
+# binary and imported by Vite, and one set of bytes for both is the point of sharing them.
+*.json text eol=lf
+
+# A shell script with CRLF fails under Git Bash with "$'\r': command not found".
+*.sh   text eol=lf
+
+# Binary assets must never be normalised.
+*.png  binary
+*.ico  binary
+*.icns binary

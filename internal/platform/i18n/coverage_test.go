@@ -50,9 +50,16 @@ func declaredErrorCodes(t *testing.T) map[string]string {
 	root := repoRoot(t)
 	codes := map[string]string{} // code value → where it was declared
 
+	lite := filepath.Join(root, "internal", "lite")
 	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		// Mizan Lite is a separate edition with its own catalog (internal/lite/locales) and its own
+		// coverage gate. Its codes can never reach a Mizan screen, and translating them in Mizan's
+		// catalog would make Mizan depend on Lite — the direction arch-rules.yml forbids.
+		if d.IsDir() && path == lite {
+			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil

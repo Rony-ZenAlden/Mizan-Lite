@@ -106,3 +106,24 @@ tools: ## Install developer tools that must be global
 	@command -v makensis >/dev/null 2>&1 || { \
 		echo "makensis is needed for the Windows installer:"; \
 		echo "  brew install makensis"; }
+
+# ── Mizan Lite ───────────────────────────────────────────────────────────────────
+# A second Wails application in apps/lite, built against this module (docs/mizan_lite/DESIGN.md §2).
+LITE_VERSION := $(shell sed -n 's/.*"productVersion": *"\([^"]*\)".*/\1/p' apps/lite/wails.json)
+LITE_LDFLAGS := -X main.version=$(LITE_VERSION)
+
+.PHONY: lite-ci
+lite-ci: ## Mizan Lite: full local CI — Go, cross-compile, archlint + drills, frontend, bundle gate
+	scripts/lite-check.sh
+
+.PHONY: lite-dev
+lite-dev: ## Mizan Lite: run with hot reload (requires the wails CLI)
+	cd apps/lite && wails dev
+
+.PHONY: lite-build-macos
+lite-build-macos: ## Mizan Lite: build the macOS universal .app into apps/lite/build/bin/
+	cd apps/lite && wails build -clean -platform darwin/universal -ldflags "$(LITE_LDFLAGS)"
+
+.PHONY: lite-build-windows
+lite-build-windows: ## Mizan Lite: cross-build the Windows .exe into apps/lite/build/bin/
+	cd apps/lite && wails build -platform windows/amd64 -ldflags "$(LITE_LDFLAGS)"

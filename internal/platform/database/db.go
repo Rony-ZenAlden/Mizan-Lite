@@ -101,7 +101,7 @@ func Open(cfg Config) (*Store, error) {
 // (foreign_keys in particular must be set per connection).
 func buildDSN(cfg Config) string {
 	ms := int(cfg.BusyTimeout / time.Millisecond)
-	path := strings.ReplaceAll(cfg.Path, " ", "%20")
+	path := uriPathEscaper.Replace(cfg.Path)
 	pragmas := []string{
 		"journal_mode(WAL)",
 		"synchronous(NORMAL)",
@@ -124,6 +124,26 @@ func buildDSN(cfg Config) string {
 	}
 	return b.String()
 }
+
+// uriPathEscaper percent-encodes the four characters that change the meaning of a SQLite URI
+// filename.
+//
+// # The defect this replaced
+//
+// Only spaces were escaped. The DSN is a `file:` URI, and modernc hands it whole to SQLite's own
+// URI parser (SQLITE_OPEN_URI), which ends the path at a raw `?` or `#` and decodes `%HH`. So:
+//
+//   - a data directory containing `#` opened a database at a TRUNCATED path — silently, with no
+//     error — while the migration runner's restore and the backup service worked on the real
+//     path, a different file;
+//   - a directory containing `%` followed by two hex digits failed to open at all.
+//
+// Both characters are legal in a Windows user name, and the data directory lives under the user's
+// profile. Found by Mizan Lite's L0 while proving the data path on both platforms.
+//
+// One Replacer, not chained ReplaceAll calls: it substitutes in a single pass, so the `%` of an
+// inserted `%20` is never itself re-escaped to `%2520`.
+var uriPathEscaper = strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23", " ", "%20")
 
 // Writer resolves the write executor from context (§executor.go).
 func (s *Store) Writer(ctx context.Context) Executor {

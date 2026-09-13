@@ -83,3 +83,13 @@ testdata/rapid/
 # `scripts/package-windows.sh` refuses to build without it, so its absence is loud rather than a
 # quietly network-dependent installer.
 /build/windows/webview2/
+
+# ── Mizan Lite (apps/lite) ─────────────────────────────────────────────────────
+# The same shapes as the root Wails project above, anchored to the second project.
+/apps/lite/build/bin/
+/apps/lite/frontend/node_modules/
+/apps/lite/frontend/wailsjs/
+/apps/lite/frontend/package.json.md5
+# Keep a dist placeholder so `go:embed all:frontend/dist` compiles before a frontend build.
+/apps/lite/frontend/dist/*
+!/apps/lite/frontend/dist/index.html

@@ -35,7 +35,7 @@ func TestEveryFacadeIsExportedAndAttached(t *testing.T) {
 		}
 		// Every façade is a pointer to a struct embedding graph. The unexported members of Set
 		// (session, remember) are skipped by the export check above.
-		if field.Type.Kind() != reflect.Ptr || field.Type.Elem().Kind() != reflect.Struct {
+		if field.Type.Kind() != reflect.Pointer || field.Type.Elem().Kind() != reflect.Struct {
 			continue
 		}
 		exported[field.Name] = value.Field(i)

@@ -161,7 +161,9 @@ func (s *Service) SyncPermissions(ctx context.Context, byModule map[string][]aut
 func (s *Service) SeedRoles(ctx context.Context, companyID id.ID) error {
 	return s.db.Do(ctx, func(ctx context.Context) error {
 		for _, seed := range defaultRoles() {
-			role, err := s.repos.RoleByCode(ctx, companyID, seed.Code)
+			// Asked only whether the role exists: an existing role is left exactly as the administrator
+			// has it, so its row is never read.
+			_, err := s.repos.RoleByCode(ctx, companyID, seed.Code)
 			switch {
 			case err == nil:
 				// Already present. Grants are NOT re-applied: an administrator who removed a
@@ -172,7 +174,7 @@ func (s *Service) SeedRoles(ctx context.Context, companyID id.ID) error {
 				if idErr != nil {
 					return idErr
 				}
-				role = sqlite.Role{
+				role := sqlite.Role{
 					ID: identifier, CompanyID: companyID, Code: seed.Code,
 					Name: seed.Name, Description: seed.Description,
 					IsSystem: true, IsActive: true,

@@ -67,7 +67,7 @@ func TestAllocateFairness(t *testing.T) {
 		if err != nil {
 			rt.Fatal(err)
 		}
-		var lo, hi int64 = parts[0].Minor(), parts[0].Minor()
+		lo, hi := parts[0].Minor(), parts[0].Minor()
 		for _, p := range parts {
 			if p.Minor() < lo {
 				lo = p.Minor()

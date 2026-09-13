@@ -100,6 +100,9 @@ release: ci build-windows package-macos ## Everything shippable, both platforms
 .PHONY: tools
 tools: ## Install developer tools that must be global
 	go install github.com/wailsapp/wails/v2/cmd/wails@latest
+	@# v2, built by THIS Go toolchain: a golangci-lint built by an older Go cannot read newer export data
+	@# (v1.64.8 failed on every package under Go 1.27 — Mizan Lite L0, finding F2).
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 	@command -v makensis >/dev/null 2>&1 || { \
 		echo "makensis is needed for the Windows installer:"; \
 		echo "  brew install makensis"; }

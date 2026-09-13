@@ -7,6 +7,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	"github.com/mizan-erp/mizan/internal/lite/setup"
 )
 
 // App is the application's own state: whether it has started, and what it is running on.
@@ -77,5 +78,39 @@ func (a *App) Health() envelope.Result[HealthDTO] {
 			Platform:      runtime.GOOS,
 			DataDir:       app.Paths.Data,
 		}, nil
+	})
+}
+
+// FirstRunStatusDTO says whether the first-run screen is needed.
+type FirstRunStatusDTO struct {
+	Complete bool `json:"complete"`
+}
+
+// FirstRunStatus reports whether first run has happened. The gate before the shell calls it.
+func (a *App) FirstRunStatus() envelope.Result[FirstRunStatusDTO] {
+	return call(a.core, "App.FirstRunStatus", func(ctx context.Context, app *bootstrap.App) (FirstRunStatusDTO, error) {
+		complete, err := app.Setup.Complete(ctx)
+		return FirstRunStatusDTO{Complete: complete}, err
+	})
+}
+
+// FirstRunInput is what the first-run screen collects. The PIN is typed twice on the screen; one copy
+// crosses the boundary.
+type FirstRunInput struct {
+	ShopName string `json:"shopName"`
+	Locale   string `json:"locale"`
+	PIN      string `json:"pin"`
+}
+
+// FirstRunResultDTO carries the recovery code — returned exactly once, and stored nowhere readable.
+type FirstRunResultDTO struct {
+	RecoveryCode string `json:"recoveryCode"`
+}
+
+// CompleteFirstRun sets the shop name, the language and the owner PIN together.
+func (a *App) CompleteFirstRun(in FirstRunInput) envelope.Result[FirstRunResultDTO] {
+	return call(a.core, "App.CompleteFirstRun", func(ctx context.Context, app *bootstrap.App) (FirstRunResultDTO, error) {
+		code, err := app.Setup.Run(ctx, setup.Input{ShopName: in.ShopName, Locale: in.Locale, PIN: in.PIN})
+		return FirstRunResultDTO{RecoveryCode: code}, err
 	})
 }

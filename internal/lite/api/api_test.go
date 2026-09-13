@@ -18,6 +18,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
+	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 	"github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
@@ -31,7 +32,7 @@ func attached(t *testing.T, log *slog.Logger) (*api.Set, *bootstrap.App) {
 			t.Fatal(err)
 		}
 	}
-	app, err := bootstrap.Start(context.Background(), bootstrap.Options{Paths: p, Logger: litetest.Logger()})
+	app, err := bootstrap.Start(context.Background(), bootstrap.Options{Paths: p, Logger: litetest.Logger(), PINHasher: ownertest.Hasher()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestAttachedBindingsServeTheRealGraph(t *testing.T) {
 	if !health.OK {
 		t.Fatalf("Health = %+v", health.Error)
 	}
-	want := api.HealthDTO{Version: "1.2.3-test", SchemaVersion: 1, Platform: runtime.GOOS, DataDir: app.Paths.Data}
+	want := api.HealthDTO{Version: "1.2.3-test", SchemaVersion: litetest.LatestSchemaVersion(t), Platform: runtime.GOOS, DataDir: app.Paths.Data}
 	if health.Data != want {
 		t.Fatalf("Health = %+v, want %+v", health.Data, want)
 	}
@@ -140,13 +141,13 @@ func TestAttachedBindingsServeTheRealGraph(t *testing.T) {
 	}
 
 	got := set.Settings.Get()
-	if !got.OK || got.Data != (api.SettingsDTO{Locale: "ar", Direction: "rtl"}) {
+	if !got.OK || got.Data != (api.SettingsDTO{Locale: "ar", ShopName: "", Direction: "rtl"}) {
 		t.Fatalf("Settings.Get = %+v", got)
 	}
 
 	en := "en"
 	updated := set.Settings.Update(api.SettingsInput{Locale: &en})
-	if !updated.OK || updated.Data != (api.SettingsDTO{Locale: "en", Direction: "ltr"}) {
+	if !updated.OK || updated.Data != (api.SettingsDTO{Locale: "en", ShopName: "", Direction: "ltr"}) {
 		t.Fatalf("Settings.Update = %+v", updated)
 	}
 
@@ -208,7 +209,7 @@ func TestTheWireShapeIsWhatTheFrontendUnwraps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"ok":true,"data":{"locale":"ar","direction":"rtl"}}`
+	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl"}}`
 	if string(wire) != want {
 		t.Fatalf("wire = %s\nwant %s", wire, want)
 	}

@@ -1,0 +1,371 @@
+{
+  "comment": "Demo catalogue for lite-demoseed: believable, not real. Prices are illustrative, not market data.",
+  "shopName": "بقالية المونة",
+  "priceChange": {
+    "product": "زيت زيتون بلدي",
+    "currency": "USD",
+    "price": "6.75"
+  },
+  "products": [
+    {
+      "nameAr": "زيت زيتون بلدي",
+      "nameEn": "Local olive oil",
+      "unit": "l",
+      "currency": "USD",
+      "price": "6.50",
+      "barcode": "6290001000011",
+      "quickSlot": 1
+    },
+    {
+      "nameAr": "زيت زيتون تنكة ١٦ لتر",
+      "nameEn": "Olive oil tin 16 L",
+      "unit": "tin",
+      "currency": "USD",
+      "price": "95.00",
+      "barcode": "6290001000028",
+      "quickSlot": 2
+    },
+    {
+      "nameAr": "دبس رمان",
+      "nameEn": "Pomegranate molasses",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "45000",
+      "barcode": "6290001000035",
+      "quickSlot": 3
+    },
+    {
+      "nameAr": "دبس عنب",
+      "nameEn": "Grape molasses",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "38000",
+      "barcode": "6290001000042",
+      "quickSlot": 4
+    },
+    {
+      "nameAr": "دبس خرنوب",
+      "nameEn": "Carob molasses",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "40000",
+      "barcode": "6290001000059",
+      "quickSlot": 5
+    },
+    {
+      "nameAr": "لبنة بلدية",
+      "nameEn": "Labneh",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "60000",
+      "barcode": "",
+      "quickSlot": 6
+    },
+    {
+      "nameAr": "جبنة بيضاء",
+      "nameEn": "White cheese",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "75000",
+      "barcode": "",
+      "quickSlot": 7
+    },
+    {
+      "nameAr": "سمن عربي",
+      "nameEn": "Ghee",
+      "unit": "tin",
+      "currency": "USD",
+      "price": "18.00",
+      "barcode": "6290001000066",
+      "quickSlot": 8
+    },
+    {
+      "nameAr": "زعتر أخضر",
+      "nameEn": "Green za'atar",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "90000",
+      "barcode": "",
+      "quickSlot": 9
+    },
+    {
+      "nameAr": "سماق",
+      "nameEn": "Sumac",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "85000",
+      "barcode": "",
+      "quickSlot": 10
+    },
+    {
+      "nameAr": "برغل ناعم",
+      "nameEn": "Fine bulgur",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "18000",
+      "barcode": "",
+      "quickSlot": 11
+    },
+    {
+      "nameAr": "فريكة",
+      "nameEn": "Freekeh",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "42000",
+      "barcode": "",
+      "quickSlot": 12
+    },
+    {
+      "nameAr": "برغل خشن",
+      "nameEn": "Coarse bulgur",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "17000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "عدس أحمر",
+      "nameEn": "Red lentils",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "22000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "عدس أسود",
+      "nameEn": "Brown lentils",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "20000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "حمص حب",
+      "nameEn": "Chickpeas",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "24000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "فول يابس",
+      "nameEn": "Dried fava beans",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "19000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "مكدوس باذنجان",
+      "nameEn": "Makdous",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "65000",
+      "barcode": "6290001000073",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "مخلل خيار",
+      "nameEn": "Pickled cucumbers",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "25000",
+      "barcode": "6290001000080",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "مخلل لفت",
+      "nameEn": "Pickled turnips",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "23000",
+      "barcode": "6290001000097",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "زيتون أخضر",
+      "nameEn": "Green olives",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "55000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "زيتون أسود",
+      "nameEn": "Black olives",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "58000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "طحينة",
+      "nameEn": "Tahini",
+      "unit": "jar",
+      "currency": "USD",
+      "price": "4.25",
+      "barcode": "6290001000103",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "حلاوة طحينية",
+      "nameEn": "Halva",
+      "unit": "box",
+      "currency": "SYP",
+      "price": "35000",
+      "barcode": "6290001000110",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "مربى مشمش",
+      "nameEn": "Apricot jam",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "30000",
+      "barcode": "6290001000127",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "مربى تين",
+      "nameEn": "Fig jam",
+      "unit": "jar",
+      "currency": "SYP",
+      "price": "32000",
+      "barcode": "6290001000134",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "عسل طبيعي",
+      "nameEn": "Natural honey",
+      "unit": "jar",
+      "currency": "USD",
+      "price": "12.00",
+      "barcode": "6290001000141",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "كشك",
+      "nameEn": "Kishk",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "70000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "ملوخية يابسة",
+      "nameEn": "Dried molokhia",
+      "unit": "bag",
+      "currency": "SYP",
+      "price": "15000",
+      "barcode": "6290001000158",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "بامية يابسة",
+      "nameEn": "Dried okra",
+      "unit": "bag",
+      "currency": "SYP",
+      "price": "28000",
+      "barcode": "6290001000165",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "شنكليش",
+      "nameEn": "Shanklish",
+      "unit": "piece",
+      "currency": "SYP",
+      "price": "12000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "رز مصري",
+      "nameEn": "Egyptian rice",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "16000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "شعيرية",
+      "nameEn": "Vermicelli",
+      "unit": "bag",
+      "currency": "SYP",
+      "price": "8000",
+      "barcode": "6290001000172",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "سكر",
+      "nameEn": "Sugar",
+      "unit": "kg",
+      "currency": "SYP",
+      "price": "14000",
+      "barcode": "",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "ملح صخري",
+      "nameEn": "Rock salt",
+      "unit": "bag",
+      "currency": "SYP",
+      "price": "5000",
+      "barcode": "6290001000189",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "ماء ورد",
+      "nameEn": "Rose water",
+      "unit": "bottle",
+      "currency": "SYP",
+      "price": "18000",
+      "barcode": "6290001000196",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "ماء زهر",
+      "nameEn": "Orange blossom water",
+      "unit": "bottle",
+      "currency": "SYP",
+      "price": "18000",
+      "barcode": "6290001000202",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "خل عنب",
+      "nameEn": "Grape vinegar",
+      "unit": "bottle",
+      "currency": "SYP",
+      "price": "20000",
+      "barcode": "6290001000219",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "قهوة مع هيل",
+      "nameEn": "Coffee with cardamom",
+      "unit": "bag",
+      "currency": "USD",
+      "price": "3.75",
+      "barcode": "6290001000226",
+      "quickSlot": 0
+    },
+    {
+      "nameAr": "شاي سيلاني",
+      "nameEn": "Ceylon tea",
+      "unit": "box",
+      "currency": "USD",
+      "price": "2.50",
+      "barcode": "6290001000233",
+      "quickSlot": 0
+    }
+  ]
+}

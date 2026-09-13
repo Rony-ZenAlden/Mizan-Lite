@@ -9,6 +9,8 @@ export interface APIError {
   code: string;
   messageKey: string;
   params?: Record<string, string>;
+  /** Which form fields a validation failure concerns, so a form can show it under the right input. */
+  fields?: { field: string; code: string; messageKey: string; params?: Record<string, string> }[];
 }
 
 /** The frontend's own codes — the only error codes not declared in Go. Each has a catalog entry. */

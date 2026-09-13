@@ -3,7 +3,9 @@
 package domain
 
 import (
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 )
@@ -14,6 +16,31 @@ const CodeInvalidLocale = "lite.settings.invalid_locale"
 // KeyLocale is the stored key for the interface language. It is the only place the string exists:
 // call sites use Settings.Locale, never the key.
 const KeyLocale = "ui.locale"
+
+// KeyShopName is the stored key for the shop's name (L1 §8): the header now, the receipt from L7.
+const KeyShopName = "shop.name"
+
+// Shop name codes and bound.
+const (
+	CodeShopNameRequired = "lite.settings.shop_name_required"
+	CodeShopNameTooLong  = "lite.settings.shop_name_too_long"
+	MaxShopNameRunes     = 100
+	FieldShopName        = "shopName"
+)
+
+// ParseShopName trims a shop name and refuses an empty or over-long one.
+func ParseShopName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", errs.Validation(CodeShopNameRequired, "the shop name is required").
+			WithField(FieldShopName, CodeShopNameRequired, "required")
+	}
+	if utf8.RuneCountInString(name) > MaxShopNameRunes {
+		return "", errs.Validation(CodeShopNameTooLong, "the shop name is too long").
+			WithField(FieldShopName, CodeShopNameTooLong, "too long").WithParam("max", strconv.Itoa(MaxShopNameRunes))
+	}
+	return name, nil
+}
 
 // Locale is a language Lite ships a complete catalog for.
 type Locale string
@@ -64,6 +91,8 @@ func (l Locale) Direction() Direction {
 // form.
 type Settings struct {
 	Locale Locale
+	// ShopName is empty until first run sets it.
+	ShopName string
 }
 
 // Defaults is what a fresh installation uses.
@@ -107,6 +136,13 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.Locale = locale
+		case KeyShopName:
+			name, err := ParseShopName(value)
+			if err != nil {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.ShopName = name
 		default:
 			problems = append(problems, Problem{Key: key, Value: value, Kind: UnknownKey})
 		}
@@ -122,7 +158,8 @@ type Change struct {
 
 // Update is a partial change to settings. A nil field is left as it is.
 type Update struct {
-	Locale *string
+	Locale   *string
+	ShopName *string
 }
 
 // Apply validates an update against the current settings and returns the result and the rows that
@@ -138,6 +175,16 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 		if locale != s.Locale {
 			next.Locale = locale
 			changes = append(changes, Change{Key: KeyLocale, Value: string(locale)})
+		}
+	}
+	if u.ShopName != nil {
+		name, err := ParseShopName(*u.ShopName)
+		if err != nil {
+			return s, nil, err
+		}
+		if name != s.ShopName {
+			next.ShopName = name
+			changes = append(changes, Change{Key: KeyShopName, Value: name})
 		}
 	}
 	return next, changes, nil

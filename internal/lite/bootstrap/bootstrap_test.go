@@ -55,8 +55,8 @@ func TestAFreshInstallationStartsMigratedAndUsable(t *testing.T) {
 	p := dataDir(t)
 	app := start(t, p, clock.System())
 
-	if app.SchemaVersion != 1 {
-		t.Errorf("SchemaVersion = %d, want 1", app.SchemaVersion)
+	if want := litetest.LatestSchemaVersion(t); app.SchemaVersion != want {
+		t.Errorf("SchemaVersion = %d, want %d", app.SchemaVersion, want)
 	}
 	if _, err := os.Stat(p.DBFile); err != nil {
 		t.Fatalf("no database at %q: %v", p.DBFile, err)
@@ -117,8 +117,8 @@ func TestTheScheduledBackupTakesAVerifiedSnapshot(t *testing.T) {
 	if len(scheduled) != 1 {
 		t.Fatalf("scheduled snapshots = %d in %+v, want 1", len(scheduled), list)
 	}
-	if m := scheduled[0].Manifest; m.SchemaVersion != 1 || m.AppVersion != "test-1" {
-		t.Fatalf("manifest = %+v, want schema 1 and the build's version", m)
+	if m := scheduled[0].Manifest; m.SchemaVersion != litetest.LatestSchemaVersion(t) || m.AppVersion != "test-1" {
+		t.Fatalf("manifest = %+v, want the latest schema and the build's version", m)
 	}
 }
 
@@ -143,7 +143,7 @@ func TestRestartingKeepsDataAndAppliesNothing(t *testing.T) {
 	if err != nil || got.Locale != domain.English {
 		t.Fatalf("after restart Settings.Get = %+v, %v", got, err)
 	}
-	if second.SchemaVersion != 1 {
+	if second.SchemaVersion != litetest.LatestSchemaVersion(t) {
 		t.Fatalf("SchemaVersion = %d", second.SchemaVersion)
 	}
 }

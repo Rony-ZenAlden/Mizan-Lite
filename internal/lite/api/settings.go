@@ -13,18 +13,20 @@ type Settings struct{ core *core }
 
 // SettingsDTO is every setting, resolved.
 type SettingsDTO struct {
-	Locale string `json:"locale"`
+	Locale   string `json:"locale"`
+	ShopName string `json:"shopName"`
 	// Direction is derived, not stored, and sent so the frontend never re-derives it.
 	Direction string `json:"direction"`
 }
 
 // SettingsInput is a partial change. An absent field is left as it is.
 type SettingsInput struct {
-	Locale *string `json:"locale,omitempty"`
+	Locale   *string `json:"locale,omitempty"`
+	ShopName *string `json:"shopName,omitempty"`
 }
 
 func toSettingsDTO(s domain.Settings) SettingsDTO {
-	return SettingsDTO{Locale: string(s.Locale), Direction: string(s.Locale.Direction())}
+	return SettingsDTO{Locale: string(s.Locale), ShopName: s.ShopName, Direction: string(s.Locale.Direction())}
 }
 
 // Get returns the current settings.
@@ -38,7 +40,7 @@ func (s *Settings) Get() envelope.Result[SettingsDTO] {
 // Update applies a partial change and returns the settings as they now are.
 func (s *Settings) Update(in SettingsInput) envelope.Result[SettingsDTO] {
 	return call(s.core, "Settings.Update", func(ctx context.Context, app *bootstrap.App) (SettingsDTO, error) {
-		updated, err := app.Settings.Update(ctx, domain.Update{Locale: in.Locale})
+		updated, err := app.Settings.Update(ctx, domain.Update{Locale: in.Locale, ShopName: in.ShopName})
 		return toSettingsDTO(updated), err
 	})
 }

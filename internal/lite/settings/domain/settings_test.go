@@ -121,3 +121,39 @@ func TestApply(t *testing.T) {
 		}
 	})
 }
+
+func TestShopName(t *testing.T) {
+	if got, err := domain.ParseShopName("  بقالية المونة  "); err != nil || got != "بقالية المونة" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if _, err := domain.ParseShopName("   "); errs.CodeOf(err) != domain.CodeShopNameRequired {
+		t.Fatalf("an empty shop name = %v", err)
+	}
+	long := make([]rune, domain.MaxShopNameRunes+1)
+	for i := range long {
+		long[i] = 'م'
+	}
+	if _, err := domain.ParseShopName(string(long)); errs.CodeOf(err) != domain.CodeShopNameTooLong {
+		t.Fatalf("an over-long shop name = %v", err)
+	}
+}
+
+func TestShopNameIsStoredAndApplied(t *testing.T) {
+	name := "  المونة  "
+	next, changes, err := domain.Defaults().Apply(domain.Update{ShopName: &name})
+	if err != nil || next.ShopName != "المونة" || len(changes) != 1 || changes[0].Key != domain.KeyShopName {
+		t.Fatalf("next %+v changes %+v err %v", next, changes, err)
+	}
+	got, problems := domain.FromStored(map[string]string{domain.KeyShopName: "المونة"})
+	if got.ShopName != "المونة" || len(problems) != 0 {
+		t.Fatalf("got %+v problems %+v", got, problems)
+	}
+	got, problems = domain.FromStored(map[string]string{domain.KeyShopName: "  "})
+	if got.ShopName != "" || len(problems) != 1 {
+		t.Fatalf("a damaged stored shop name: %+v %+v", got, problems)
+	}
+	empty := ""
+	if _, _, err := domain.Defaults().Apply(domain.Update{ShopName: &empty}); errs.CodeOf(err) != domain.CodeShopNameRequired {
+		t.Fatalf("clearing the shop name = %v", err)
+	}
+}

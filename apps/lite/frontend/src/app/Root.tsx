@@ -2,8 +2,10 @@ import { HashRouter } from "react-router-dom";
 import { ClientProvider } from "@/api/ClientContext";
 import type { Client } from "@/api/client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
+import { OwnerProvider } from "@/owner/OwnerProvider";
 import { Boot } from "./Boot";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { FirstRunGate } from "./FirstRun";
 import { Shell } from "./Shell";
 
 /**
@@ -16,9 +18,13 @@ export function Root({ client }: { client: Client }) {
       <ClientProvider client={client}>
         <LocaleProvider>
           <Boot>
-            <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Shell />
-            </HashRouter>
+            <FirstRunGate>
+              <OwnerProvider>
+                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                  <Shell />
+                </HashRouter>
+              </OwnerProvider>
+            </FirstRunGate>
           </Boot>
         </LocaleProvider>
       </ClientProvider>

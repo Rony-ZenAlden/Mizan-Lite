@@ -52,3 +52,25 @@ func OpenMigratedAt(t testing.TB, path string) *database.Store {
 	}
 	return store
 }
+
+// LatestSchemaVersion is the version a fully migrated Lite database is at: the highest migration this
+// build carries. Tests compare against it rather than a literal, so adding a phase's migration does not
+// turn every schema assertion into a false failure.
+func LatestSchemaVersion(t testing.TB) int64 {
+	t.Helper()
+	loaded, err := migrate.Load(migrations.SQLite())
+	if err != nil {
+		t.Fatalf("loading migrations: %v", err)
+	}
+	if len(loaded) == 0 {
+		t.Fatal("no migrations")
+	}
+	return loaded[len(loaded)-1].Version
+}
+
+// Immediate is a transactor that runs fn with no transaction, for service tests over an in-memory fake.
+// Atomicity is never proven through it — only against a real database.
+type Immediate struct{}
+
+// Do runs fn.
+func (Immediate) Do(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }

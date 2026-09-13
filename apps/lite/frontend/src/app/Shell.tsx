@@ -1,8 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { useClient } from "@/api/ClientContext";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { LOCALES, isLocale } from "@/i18n/messages";
+import { formatCountdown } from "@/i18n/numbers";
+import { useOwner } from "@/owner/OwnerProvider";
+import { Button } from "@/ui/Button";
 import { Alert } from "@/ui/Alert";
 import { ROUTES } from "./routes";
 
@@ -10,6 +13,8 @@ import { ROUTES } from "./routes";
 export function Shell() {
   const client = useClient();
   const { t, locale, setLocale, adoptStored, saveError, errorText } = useLocale();
+  const { status, lock } = useOwner();
+  const [shopName, setShopName] = useState("");
 
   // The document was served in the language read from the database before launch. If that read fell
   // back to the default (the file was locked, say), the real stored setting wins once it can be read.
@@ -18,7 +23,9 @@ export function Shell() {
     client.settings
       .get()
       .then((stored) => {
-        if (!cancelled && isLocale(stored.locale)) adoptStored(stored.locale);
+        if (cancelled) return;
+        if (isLocale(stored.locale)) adoptStored(stored.locale);
+        setShopName(stored.shopName);
       })
       .catch(() => {
         // Keep the language already on screen; a settings read failing is not worth a banner here.
@@ -33,7 +40,18 @@ export function Shell() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-border bg-surface-raised px-6 py-3">
-        <p className="text-lg font-semibold">{t("app.name")}</p>
+        <div>
+          <p className="text-lg font-semibold">{shopName || t("app.name")}</p>
+          {shopName ? <p className="text-xs text-text-muted">{t("app.name")}</p> : null}
+        </div>
+        {status.elevatedSeconds > 0 ? (
+          <div role="status" className="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1">
+            <span className="text-sm font-medium text-primary">
+              {t("header.owner_mode", { time: formatCountdown(status.elevatedSeconds) })}
+            </span>
+            <Button onClick={() => void lock()}>{t("header.lock")}</Button>
+          </div>
+        ) : null}
         <div role="group" aria-label={t("language.label")} className="flex gap-1">
           {LOCALES.map((option) => (
             <button

@@ -111,6 +111,10 @@ linters:
       # The arch-lint tool is a CLI; fmt/os.Exit are legitimate there.
       - path: tools/archlint/
         linters: [forbidigo]
+      # So are commands: cmd/lite-demoseed prints its result to the terminal that ran it. archlint's
+      # fmt.Print rules already stop at internal/, for the same reason.
+      - path: cmd/
+        linters: [forbidigo]
     paths:
       - third_party$
       - builtin$

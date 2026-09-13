@@ -46,7 +46,7 @@ func TestBootAttachesTheGraphAndShutdownClosesIt(t *testing.T) {
 	waitBooted(t, s)
 
 	health := set.App.Health()
-	if !health.OK || health.Data.Version != "1.0-test" || health.Data.SchemaVersion != 1 {
+	if !health.OK || health.Data.Version != "1.0-test" || health.Data.SchemaVersion != litetest.LatestSchemaVersion(t) {
 		t.Fatalf("Health after boot = %+v %+v", health.Data, health.Error)
 	}
 

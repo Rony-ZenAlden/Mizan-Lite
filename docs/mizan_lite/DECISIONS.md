@@ -34,7 +34,7 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | Q4 | Sell beyond stock, with a visible warning | approved | [DESIGN §13.1](DESIGN.md) |
 | Q5 | SYP cash rounding to the nearest paper denomination | approved; value confirmed in L4 | [DESIGN §13.1](DESIGN.md) |
 | Q6 | Latin digits 0–9 in both languages | approved (confirmed by owner) | [DESIGN §13.1](DESIGN.md) |
-| Q7 | Owner PIN for void, exchange-rate change, profit reports | approved; mechanism in L1 | [DESIGN §13.1](DESIGN.md) |
+| Q7 | Owner PIN for void, exchange-rate change, profit reports | approved; mechanism proposed in L1 | [phases/L1_CATALOGUE.md §7](phases/L1_CATALOGUE.md) |
 | Q8 | Open packages and sell loose | approved; lands in L2 | [DESIGN §13.1](DESIGN.md) |
 | Q9 | Fast-forward `main`; ignore the `demoseed` binary | approved; done | [DESIGN §13.1](DESIGN.md) |
 | R1 | Windows and macOS equally | approved requirement | [DESIGN §13.2](DESIGN.md) |
@@ -59,6 +59,40 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | A11 | Primitives built when needed | made | [DESIGN §13.3](DESIGN.md) |
 | D-L0.1–7 | L0 implementation decisions (first paint, migrations, fakes, console gate, polling, native frame, primitives) | made | [phases/L0_SKELETON.md §3](phases/L0_SKELETON.md) |
 
-## L1
+## L1 — approved 2026-09-13
 
-Not yet proposed.
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L1.1 | One migration `0002_catalogue_owner.sql`; currencies and units seeded by it | approved | [L1 §3](phases/L1_CATALOGUE.md) |
+| D-L1.2 | `name_key` UNIQUE across active and inactive products | approved | [L1 §3, §5](phases/L1_CATALOGUE.md) |
+| D-L1.3 | Arabic normalisation, Go only; definite article kept | approved | [L1 §5](phases/L1_CATALOGUE.md) |
+| D-L1.4 | Number normalisation in Go and TypeScript, bound by one shared fixture | approved | [L1 §6](phases/L1_CATALOGUE.md) |
+| D-L1.5 | Price input decimals = currency decimals; zero allowed | approved | [L1 §4.2](phases/L1_CATALOGUE.md) |
+| D-L1.6 | PIN hashed with `platform/crypto`; it joins the edition boundary | approved | [L1 §7.2](phases/L1_CATALOGUE.md) |
+| D-L1.7 | Persisted lockout, 30 s doubling to 15 min, never permanent | approved | [L1 §7.3](phases/L1_CATALOGUE.md) |
+| D-L1.8 | Elevation in Go memory, fixed window, Lock button, countdown | approved | [L1 §7.4](phases/L1_CATALOGUE.md) |
+| D-L1.9 | The guard is a port; records the act in the caller's transaction | approved | [L1 §7.6](phases/L1_CATALOGUE.md) |
+| D-L1.10 | `lite.owner.required` → PIN dialog → retry once | approved | [L1 §7.6](phases/L1_CATALOGUE.md) |
+| D-L1.11 | First run in one transaction; status read from the data | approved | [L1 §8](phases/L1_CATALOGUE.md) |
+| D-L1.12 | Seeder drives services, completes first run, refuses a set-up installation | approved | [L1 §9](phases/L1_CATALOGUE.md) |
+| D-L1.13 | The PIN defends the counter, not the file — stated plainly | approved | [L1 §7.1](phases/L1_CATALOGUE.md) |
+| Q-L1.1 | PIN guards price change and deactivation; no delete exists | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+| Q-L1.2 | PIN 6–12 digits | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+| Q-L1.3 | Owner mode 2 minutes from entry, plus Lock | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+| Q-L1.4 | One-time recovery code at setup | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+| Q-L1.5 | Nine units: kg, litre, piece, jar, container, tin, bag, bottle, box | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+| Q-L1.6 | 24 quick-grid buttons | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+| Q-L1.7 | Shop name required at first run | approved | [L1 §13.3](phases/L1_CATALOGUE.md) |
+
+### L1 — decisions made while building (approved with the phase)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L1.i1 | `textkey`/`numinput` allowed in domains; `lite-pure-text` keeps them pure | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i2 | `setup` is an orchestrator, through two ports | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i3 | A failed PIN attempt commits its failure, then refuses | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i4 | Owner mode switched on only after the attempt commits | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i5 | Tests read the expected schema version from the migration set | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i6 | Cheap test hashing via `PINHasher`; password strength in production | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i7 | Product form reads fresh; sends only the acts that change something | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+| D-L1.i8 | `cmd/` excluded from golangci's `fmt.Print` rule | approved | [L1 §15](phases/L1_CATALOGUE.md) |

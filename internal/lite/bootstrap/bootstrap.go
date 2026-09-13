@@ -6,20 +6,28 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"errors"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/lite/catalog"
+	catalogdb "github.com/mizan-erp/mizan/internal/lite/catalog/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/locales"
 	"github.com/mizan-erp/mizan/internal/lite/migrations"
+	"github.com/mizan-erp/mizan/internal/lite/owner"
+	ownerdb "github.com/mizan-erp/mizan/internal/lite/owner/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 	"github.com/mizan-erp/mizan/internal/lite/settings"
 	settingsdb "github.com/mizan-erp/mizan/internal/lite/settings/infra/sqlite"
+	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/platform/backup"
+	"github.com/mizan-erp/mizan/internal/platform/crypto"
 	"github.com/mizan-erp/mizan/internal/platform/database"
 	"github.com/mizan-erp/mizan/internal/platform/i18n"
 	"github.com/mizan-erp/mizan/internal/platform/jobs"
@@ -64,6 +72,11 @@ type Options struct {
 	BackupInterval time.Duration
 	// ShutdownStepTimeout bounds each shutdown step. Default 10s.
 	ShutdownStepTimeout time.Duration
+	// PINHasher hashes the owner's PIN and recovery code. Default: Argon2id at password strength
+	// (crypto.DefaultParams). Tests pass a cheap one; nothing about the owner's logic depends on the cost.
+	PINHasher crypto.Hasher
+	// Random draws recovery codes. Default crypto/rand.Reader.
+	Random io.Reader
 }
 
 func (o Options) withDefaults() Options {
@@ -79,6 +92,12 @@ func (o Options) withDefaults() Options {
 	if o.ShutdownStepTimeout <= 0 {
 		o.ShutdownStepTimeout = defaultShutdownStep
 	}
+	if o.PINHasher == nil {
+		o.PINHasher = crypto.NewArgon2id(crypto.DefaultParams())
+	}
+	if o.Random == nil {
+		o.Random = rand.Reader
+	}
 	return o
 }
 
@@ -90,6 +109,9 @@ type App struct {
 	Messages  *i18n.Catalog
 	Scheduler *jobs.Scheduler
 	Backups   *backup.Service
+	Catalog   *catalog.Service
+	Owner     *owner.Service
+	Setup     *setup.Service
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -143,6 +165,10 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		_ = db.Close()
 		return nil, wrapKeepingParams(err, CodeStartupFailed, "reading settings")
 	}
+
+	app.Owner = owner.NewService(db, ownerdb.NewStore(db), opts.PINHasher, opts.Clock, opts.Random, opts.Logger)
+	app.Catalog = catalog.NewService(db, catalogdb.NewStore(db, opts.Clock), ownerGate{owner: app.Owner})
+	app.Setup = setup.NewService(db, app.Settings, app.Owner)
 
 	scheduler, err := jobs.New(db, jobs.Options{Clock: opts.Clock, Logger: opts.Logger})
 	if err != nil {
@@ -303,3 +329,14 @@ type backupDatabase struct{ db *database.Store }
 
 func (b backupDatabase) WriterPool() *sql.DB     { return b.db.WriterPool() }
 func (b backupDatabase) Dialect() backup.Dialect { return b.db.Dialect() }
+
+// ownerGate satisfies the catalogue's OwnerGate port with the owner service. The port is declared by the
+// module that needs it, so catalog never imports owner and owner never learns what a product is (D-L1.9);
+// this adapter is the only place the two meet.
+type ownerGate struct{ owner *owner.Service }
+
+func (g ownerGate) Require(ctx context.Context, act catalog.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{
+		Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After,
+	})
+}

@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export GOTOOLCHAIN=local
 
-LITE_GO="./internal/lite/... ./apps/lite/"
+LITE_GO="./internal/lite/... ./apps/lite/ ./cmd/lite-demoseed/"
 # platform/database is Mizan's, and Lite depends on the DSN fix made to it in L0.
 SHARED_GO="./internal/platform/database/..."
 
@@ -38,7 +38,7 @@ echo "  ok"
 
 if [ "$run_go" = 1 ]; then
   step "gofmt"
-  unformatted="$(gofmt -l internal/lite apps/lite internal/platform/database)"
+  unformatted="$(gofmt -l internal/lite apps/lite cmd/lite-demoseed internal/platform/database)"
   if [ -n "$unformatted" ]; then echo "unformatted:"; echo "$unformatted"; exit 1; fi
   echo "  ok"
 
@@ -50,7 +50,13 @@ if [ "$run_go" = 1 ]; then
   step "cross-compile: go vet + test binaries for windows/amd64"
   GOOS=windows GOARCH=amd64 go vet $LITE_GO
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-  GOOS=windows GOARCH=amd64 go test -c -o "$tmp" $LITE_GO >/dev/null
+  # One binary per package, named by its import path: several packages share a base name (three `domain`,
+  # three `sqlite`), and `go test -c -o DIR` refuses to write two binaries called domain.test into one place.
+  for pkg in $(GOOS=windows go list $LITE_GO); do
+    GOOS=windows GOARCH=amd64 go test -c -o "$tmp/$(echo "$pkg" | tr '/.' '__').test.exe" "$pkg" >/dev/null
+  done
+  # The demo seeder is a shipped developer tool: it must BUILD for Windows, not only vet.
+  GOOS=windows GOARCH=amd64 go build -o "$tmp/lite-demoseed.exe" ./cmd/lite-demoseed
   echo "  ok"
 
   step "cross-compile: go vet for darwin/amd64 (Intel Macs)"
@@ -73,7 +79,7 @@ if [ "$run_go" = 1 ]; then
     # produced would be false. Reported as NOT RUN, never as passed.
     notrun+=("golangci-lint: $(golangci-lint --version 2>/dev/null | grep -oE 'version v?[0-9.]+') is not v2 — make tools")
   else
-    golangci-lint run ./internal/lite/... ./apps/lite/ ./internal/platform/database/...
+    golangci-lint run ./internal/lite/... ./apps/lite/ ./cmd/lite-demoseed/ ./internal/platform/database/...
     echo "  ok"
   fi
 fi

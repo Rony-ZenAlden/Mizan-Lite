@@ -25,8 +25,8 @@ what is not verified — once built.
 
 | Phase | Scope | Document | Status |
 |---|---|---|---|
-| **L0** | Skeleton and gates | [phases/L0_SKELETON.md](phases/L0_SKELETON.md) | ✅ implemented, committed |
-| **L1** | Catalogue, units, owner PIN, demo data generator | — | next: design note |
+| **L0** | Skeleton and gates | [phases/L0_SKELETON.md](phases/L0_SKELETON.md) | ✅ complete — `c2a1d0e` |
+| **L1** | Catalogue, units, owner PIN, demo data generator | [phases/L1_CATALOGUE.md](phases/L1_CATALOGUE.md) | ✅ complete — committed |
 | L2 | Stock: receipts, adjustments, weighted-average cost, opening packages | — | not started |
 | L3 | Exchange rates (manual) | — | not started |
 | L4 | The till | — | not started |

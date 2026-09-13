@@ -84,4 +84,33 @@ drill no-sql-in-lite-service "SQL belongs to infra/platform" \
   internal/lite/settings/zz_drill.go "package settings
 const drillQuery = \"SELECT value FROM settings WHERE setting_key = ?\""
 
+# ── added in L1 ─────────────────────────────────────────────────────────────────────────────────────
+drill mizan-cmd-independent-of-lite "Mizan must not import Mizan Lite" \
+  cmd/demoseed/zz_drill.go "package main
+import _ \"$M/internal/lite/paths\""
+
+drill lite-pure-text "textkey and numinput may import only" \
+  internal/lite/textkey/zz_drill.go "package textkey
+import _ \"$M/internal/platform/database\""
+
+drill lite-cmd-entry "cmd/lite-demoseed may import only" \
+  cmd/lite-demoseed/zz_drill.go "package main
+import _ \"$M/internal/platform/config\""
+
+drill lite-catalog-isolated "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/owner\""
+
+drill lite-owner-isolated "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/catalog\""
+
+drill lite-settings-isolated "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/owner\""
+
+drill lite-setup-reaches-only-its-ports "setup may reach settings and owner only" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/catalog\""
+
 echo "every Lite architecture rule was seen failing"

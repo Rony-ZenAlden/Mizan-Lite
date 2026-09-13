@@ -54,6 +54,9 @@ export default [
         clearTimeout: "readonly",
         HTMLElement: "readonly",
         HTMLButtonElement: "readonly",
+        HTMLDivElement: "readonly",
+        HTMLInputElement: "readonly",
+        HTMLSelectElement: "readonly",
         Element: "readonly",
         // Node globals, for the gates that read the source tree off disk.
         process: "readonly",

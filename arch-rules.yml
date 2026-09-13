@@ -72,9 +72,11 @@ rules:
           - "self/internal/platform/backup"
           - "self/internal/platform/jobs"
           - "self/internal/platform/i18n"
+          # L1 (D-L1.6): Argon2id for the owner PIN — reuse of Mizan's tested hasher, not a second one.
+          - "self/internal/platform/crypto"
           - "self/internal/api/envelope"
           - "self/internal/lite/**"
-        message: "Mizan Lite may import only the kernel, platform/{database,migrate,backup,jobs,i18n}, api/envelope and internal/lite (design §3.1, §6.2)"
+        message: "Mizan Lite may import only the kernel, platform/{database,migrate,backup,jobs,i18n,crypto}, api/envelope and internal/lite (design §3.1, §6.2)"
 
       - name: mizan-independent-of-lite
         description: Nothing in Mizan depends on Mizan Lite.
@@ -86,7 +88,8 @@ rules:
           - "self/internal/api/**"
           - "self/internal/bootstrap/**"
           - "self/internal/buildinfo/**"
-          - "self/cmd/**"
+          # Mizan's own commands only: cmd/lite-demoseed is Lite's and must import it (L1 §11).
+          - "self/cmd/demoseed/**"
           - "self/tools/**"
         forbid: ["self/internal/lite/**", "self/apps/**"]
         message: "Mizan must not import Mizan Lite — the dependency runs one way"
@@ -100,8 +103,78 @@ rules:
       - name: lite-domain-purity
         description: Lite domain packages hold rules only; no infrastructure.
         applies_to: ["self/internal/lite/*/domain/**"]
-        allow_only: ["std", "self/internal/kernel/**", "self/internal/lite/*/domain/**"]
-        message: "Lite domain packages may import only stdlib, kernel, and Lite domain packages"
+        # textkey and numinput are Lite's two PURE text packages — Arabic normalisation and typed-number
+        # normalisation — and they are what a domain rule is made of ("a name made only of marks is
+        # missing"; "a price has no more decimals than its currency"). lite-pure-text keeps them pure.
+        allow_only:
+          - "std"
+          - "self/internal/kernel/**"
+          - "self/internal/lite/*/domain/**"
+          - "self/internal/lite/textkey"
+          - "self/internal/lite/numinput"
+        message: "Lite domain packages may import only stdlib, kernel, textkey, numinput and Lite domain packages"
+
+      - name: lite-pure-text
+        description: textkey and numinput stay pure, so domains may depend on them.
+        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**"]
+        allow_only: ["std", "self/internal/kernel/errs"]
+        message: "textkey and numinput may import only the standard library and kernel/errs — domain packages depend on them"
+
+      - name: lite-cmd-entry
+        description: Lite's commands wire internal/lite and hold nothing else.
+        applies_to: ["self/cmd/lite-demoseed/**"]
+        allow_only: ["std", "self/internal/lite/**"]
+        message: "cmd/lite-demoseed may import only the standard library and internal/lite"
+
+      # ── Lite module isolation (DESIGN §13.3 A10, L1 §11) ──────────────────────
+      # Modules import none of each other. Only the orchestrators — bootstrap, api, setup, demoseed (and pos
+      # from L4) — reach several, and a module reaches another only through a port it declares itself
+      # (catalog.OwnerGate). Written in L1 because it needed two modules to plant a violation between.
+      - name: lite-catalog-isolated
+        description: The catalogue imports no other Lite module.
+        applies_to: ["self/internal/lite/catalog/**"]
+        forbid:
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "catalog may not import another Lite module — declare a port (see catalog.OwnerGate)"
+
+      - name: lite-owner-isolated
+        description: The owner module imports no other Lite module.
+        applies_to: ["self/internal/lite/owner/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "owner may not import another Lite module — it must not learn what it guards"
+
+      - name: lite-settings-isolated
+        description: The settings module imports no other Lite module.
+        applies_to: ["self/internal/lite/settings/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "settings may not import another Lite module"
+
+      - name: lite-setup-reaches-only-its-ports
+        description: First run orchestrates settings and owner, and nothing it has no reason to know.
+        applies_to: ["self/internal/lite/setup/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "setup may reach settings and owner only"
 
   # ── Forbidden calls, scoped by location ─────────────────────────────────────
   forbid-call:

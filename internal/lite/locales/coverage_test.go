@@ -67,7 +67,7 @@ func TestEveryReachableErrorCodeIsTranslated(t *testing.T) {
 	}
 }
 
-// declaredCodes returns every string constant named Code* in the non-test Go files under dir.
+// declaredCodes returns every string constant named Code* or Finding* in the non-test Go files under dir.
 func declaredCodes(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -94,7 +94,8 @@ func declaredCodes(t *testing.T, dir string) map[string]string {
 					continue
 				}
 				for i, name := range vs.Names {
-					if !strings.HasPrefix(name.Name, "Code") || i >= len(vs.Values) {
+					// Code* is an error code; Finding* is a stock verifier finding, which a screen shows the same way.
+					if !(strings.HasPrefix(name.Name, "Code") || strings.HasPrefix(name.Name, "Finding")) || i >= len(vs.Values) {
 						continue
 					}
 					lit, ok := vs.Values[i].(*ast.BasicLit)

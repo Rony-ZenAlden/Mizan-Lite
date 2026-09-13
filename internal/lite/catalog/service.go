@@ -34,6 +34,17 @@ type Store interface {
 	// Update writes p if the stored row is still at p.RowVersion, and increments the version.
 	// A row that moved on is refused with domain.ErrStale.
 	Update(ctx context.Context, p domain.Product) (domain.Product, error)
+
+	// Package returns the link a package product has, or found=false.
+	Package(ctx context.Context, packageProductID id.ID) (domain.Package, bool, error)
+	// Packages returns every link.
+	Packages(ctx context.Context) ([]domain.Package, error)
+	// IsContent reports whether any package opens into productID.
+	IsContent(ctx context.Context, productID id.ID) (bool, error)
+	// SavePackage inserts a link whose RowVersion is 0, or updates one still at its RowVersion.
+	SavePackage(ctx context.Context, p domain.Package) (domain.Package, error)
+	// DeletePackage removes a package product's link, if it has one.
+	DeletePackage(ctx context.Context, packageProductID id.ID) error
 }
 
 // Transactor runs fn atomically. platform/database.Store satisfies it.
@@ -69,6 +80,9 @@ type Query struct {
 	IncludeInactive bool
 	Limit           int
 }
+
+// AllProducts is a limit no catalogue reaches, for the reads that need every product (L2's stock levels).
+const AllProducts = 1 << 30
 
 // DefaultLimit bounds a search. A pantry shop's catalogue is hundreds of products, not tens of thousands.
 const DefaultLimit = 500
@@ -274,6 +288,99 @@ func (s *Service) unpinHolder(ctx context.Context, slot int, productID id.ID) er
 		return err
 	}
 	_, err = s.store.Update(ctx, unpinned)
+	return err
+}
+
+// All returns every product, active or not.
+func (s *Service) All(ctx context.Context) ([]domain.Product, error) {
+	return s.store.Search(ctx, Query{IncludeInactive: true, Limit: AllProducts})
+}
+
+// Package returns a package product's link, or found=false.
+func (s *Service) Package(ctx context.Context, packageProductID id.ID) (domain.Package, bool, error) {
+	return s.store.Package(ctx, packageProductID)
+}
+
+// Packages returns every link.
+func (s *Service) Packages(ctx context.Context) ([]domain.Package, error) {
+	return s.store.Packages(ctx)
+}
+
+// SetPackageInput links a package product to what it opens into.
+type SetPackageInput struct {
+	PackageProductID id.ID
+	ContentProductID id.ID
+	ContentQuantity  string
+}
+
+// SetPackage links or relinks a package product (L2 §3.5). One level only (Q-L2.8): the content may not itself open,
+// and the package may not be another package's content.
+func (s *Service) SetPackage(ctx context.Context, in SetPackageInput) (domain.Package, error) {
+	var out domain.Package
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		pkg, err := s.store.Get(ctx, in.PackageProductID)
+		if err != nil {
+			return err
+		}
+		content, err := s.store.Get(ctx, in.ContentProductID)
+		if err != nil {
+			return withPackageField(err)
+		}
+		ref, err := s.Reference(ctx)
+		if err != nil {
+			return err
+		}
+		link, err := domain.NewPackage(pkg, content, in.ContentQuantity, ref)
+		if err != nil {
+			return err
+		}
+		_, contentOpens, err := s.store.Package(ctx, content.ID)
+		if err != nil || contentOpens {
+			return nestedOr(err)
+		}
+		isContent, err := s.store.IsContent(ctx, pkg.ID)
+		if err != nil || isContent {
+			return nestedOr(err)
+		}
+		existing, found, err := s.store.Package(ctx, pkg.ID)
+		if err != nil {
+			return err
+		}
+		if found {
+			link.RowVersion = existing.RowVersion
+			if link == existing {
+				out = existing
+				return nil
+			}
+		}
+		out, err = s.store.SavePackage(ctx, link)
+		return err
+	})
+	return out, err
+}
+
+// ClearPackage removes a package product's link. A product with no link is left as it is.
+func (s *Service) ClearPackage(ctx context.Context, packageProductID id.ID) error {
+	return s.tx.Do(ctx, func(ctx context.Context) error {
+		if _, err := s.store.Get(ctx, packageProductID); err != nil {
+			return err
+		}
+		return s.store.DeletePackage(ctx, packageProductID)
+	})
+}
+
+func nestedOr(err error) error {
+	if err != nil {
+		return err
+	}
+	return errs.Conflict(domain.CodePackageNested, "packages open one level only").
+		WithField(domain.FieldPackageContent, domain.CodePackageNested, "nested")
+}
+
+func withPackageField(err error) error {
+	if typed, ok := errs.AsError(err); ok {
+		return typed.WithField(domain.FieldPackageContent, typed.Code, "invalid")
+	}
 	return err
 }
 

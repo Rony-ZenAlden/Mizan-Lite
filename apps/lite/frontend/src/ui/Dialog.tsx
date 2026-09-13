@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
  * Small on purpose. Lite's dialogs are forms of a few fields; a library for focus-trapping every edge case
  * would be the eleven-primitive copy D7 was amended away from.
  */
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Dialog({ title, onClose, wide = false, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
 
@@ -31,7 +31,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-md space-y-4 rounded-lg border border-border bg-surface-raised p-6 shadow-lg"
+        className={`max-h-full w-full ${wide ? "max-w-4xl" : "max-w-md"} space-y-4 overflow-auto rounded-lg border border-border bg-surface-raised p-6 shadow-lg`}
       >
         <h2 id={titleId} className="text-lg font-semibold">
           {title}

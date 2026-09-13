@@ -96,3 +96,49 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L1.i6 | Cheap test hashing via `PINHasher`; password strength in production | approved | [L1 §15](phases/L1_CATALOGUE.md) |
 | D-L1.i7 | Product form reads fresh; sends only the acts that change something | approved | [L1 §15](phases/L1_CATALOGUE.md) |
 | D-L1.i8 | `cmd/` excluded from golangci's `fmt.Print` rule | approved | [L1 §15](phases/L1_CATALOGUE.md) |
+
+## L2 — approved 2026-09-13
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L2.1 | Stock owns `stock_levels` and `stock_ledger`; catalogue owns `product_packages`; no stock columns on `products` (amends DESIGN §5) | approved | [L2 §2.3](phases/L2_STOCK.md) |
+| D-L2.2 | Every ledger row records before and after; the chain is verifiable (amends DESIGN §5) | approved | [L2 §2.3](phases/L2_STOCK.md) |
+| D-L2.3 | Sale kinds and `sale_id` arrive with the till, through a planned rebuild in L4 | approved | [L2 §2.3](phases/L2_STOCK.md) |
+| D-L2.4 | Costing rules: receipts average in; counts, adjustments, issues never move the average; on hand ≤ 0 takes the receipt cost | approved | [L2 §3.2](phases/L2_STOCK.md) |
+| D-L2.5 | Values through `money.LineExtension`; value tests at 0, 2, 3 decimals | approved | [L2 §3.4](phases/L2_STOCK.md) |
+| D-L2.6 | Kernel: `SplitUnitCost`, `UnitCostFromTotal`, `DivideByRate` beside `WeightedAverageUnit` | approved | [L2 §3.6](phases/L2_STOCK.md) |
+| D-L2.7 | Opening packages conserve value to within one cent, shown in history | approved | [L2 §3.5](phases/L2_STOCK.md) |
+| D-L2.8 | Business dates from `time.Local`; no `LoadLocation` | approved | [L2 §3.7](phases/L2_STOCK.md) |
+| D-L2.9 | Opening stock only as the first movement | approved | [L2 §5.2](phases/L2_STOCK.md) |
+| D-L2.10 | A count takes the counted quantity | approved | [L2 §5.3](phases/L2_STOCK.md) |
+| D-L2.11 | No raising stock that has no cost | approved | [L2 §3.2](phases/L2_STOCK.md) |
+| D-L2.12 | No receiving into an inactive product | approved | [L2 §5.1](phases/L2_STOCK.md) |
+| D-L2.13 | `owner.Allowed` for guarded reads, unrecorded | approved | [L2 §6](phases/L2_STOCK.md) |
+| D-L2.14 | The verifier reports, never repairs; the seeder fails on a finding | approved | [L2 §7](phases/L2_STOCK.md) |
+| Q-L2.1 | Rate typed on a pound receipt; pre-filled from L3 | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.2 | No negative stock outside the till | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.3 | Owner PIN for anything that lowers stock | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.4 | Cost and value in owner mode only | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.5 | Receipt reversal and owner cost correction | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.6 | Reasons: count, damaged, expired, own use, **gift or sample**, other | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.7 | Total or unit cost, total by default | approved | [L2 §12.3](phases/L2_STOCK.md) |
+| Q-L2.8 | Single-level packages | approved | [L2 §12.3](phases/L2_STOCK.md) |
+
+### L2 — decisions made while building (approved 2026-09-14)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L2.i1 | The ledger is ordered by a per-product `seq` under `UNIQUE (product_id, seq)`, not by `occurred_at`; `last_movement_id` gains its foreign key | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i2 | No count or adjustment on a product that never moved; no raise while on hand ≤ 0 and the average is 0 | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i3 | `ProductDTO` carries the package link as two flat strings, not a nullable object | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i4 | A stock act replies with quantities only, never the movement's costs | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i5 | Costs are cleared, and the reversible receipt chosen, in the stock service | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i6 | `Stock.Verify` is owner-guarded; `VerifyUnguarded` for tests | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i7 | An adjustment is an unsigned quantity and a direction | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i8 | An inactive product may be counted and written off, not received; no opening into inactive content | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i9 | A movement's time is held to the millisecond, the ledger's precision | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i10 | The shared number fixture gains `quantities`, read by Go and Vitest | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i11 | The error-code coverage gate reads `Finding*` constants too | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i12 | `bizdate` joins `lite-pure-text` | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i13 | The product form's package section saves on its own | approved | [L2 §14](phases/L2_STOCK.md) |
+| D-L2.i14 | Guarded stock acts record quantities (and averages) before → after | approved | [L2 §14](phases/L2_STOCK.md) |

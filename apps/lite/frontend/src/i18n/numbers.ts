@@ -78,6 +78,20 @@ export function normaliseNumber(raw: string): Normalised {
   return { ok: true, value: out };
 }
 
+export const CODE_QUANTITY_DECIMALS = "lite.stock.quantity_decimals";
+
+/**
+ * Why a typed quantity would be refused for a unit of `decimals` input decimals, or null when Go would take it — the
+ * TypeScript half of stock/domain.ParseQuantity's checks, held to the fixture's `quantities` cases.
+ */
+export function quantityProblem(raw: string, decimals: number): string | null {
+  const typed = normaliseNumber(raw);
+  if (!typed.ok) return typed.code;
+  const point = typed.value.indexOf(".");
+  const places = point < 0 ? 0 : typed.value.length - point - 1;
+  return places > decimals ? CODE_QUANTITY_DECIMALS : null;
+}
+
 /** The TypeScript half of numinput.LatinDigits: digits to Latin, surrounding whitespace trimmed. */
 export function latinDigits(raw: string): string {
   return [...raw.trim()].map(latinDigit).join("");

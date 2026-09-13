@@ -44,6 +44,7 @@ func main() {
 
 	fmt.Printf("Seeded %s in %s\n", res.ShopName, resolved.Data)
 	fmt.Printf("  products:      %d (%d on the quick grid)\n", res.Products, res.QuickSlots)
+	fmt.Printf("  stock:         %d opening balances, %d deliveries, value %s USD\n", res.Openings, res.Receipts, res.StockValue)
 	fmt.Printf("  owner PIN:     %s\n", *pin)
 	fmt.Printf("  recovery code: %s\n", res.RecoveryCode)
 }

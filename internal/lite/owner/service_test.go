@@ -483,3 +483,28 @@ func TestOwnerModeIsNotGrantedWhenTheAttemptFailsToSave(t *testing.T) {
 		t.Fatalf("owner mode was granted although the attempt did not save: %v", err)
 	}
 }
+
+func TestAllowedFollowsOwnerModeAndRecordsNothing(t *testing.T) {
+	ctx := context.Background()
+	f := fake(t)
+	f.setUp(t)
+	if f.svc.Allowed(ctx) {
+		t.Fatal("allowed outside owner mode")
+	}
+	if _, err := f.svc.Elevate(ctx, pin); err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.events(t))
+	for range 2 { // asked twice: a second look records no more than the first
+		if !f.svc.Allowed(ctx) {
+			t.Fatal("not allowed in owner mode")
+		}
+	}
+	if len(f.events(t)) != before {
+		t.Fatal("a guarded read was recorded in the owner's history")
+	}
+	f.clk.Advance(domain.ElevationWindow)
+	if f.svc.Allowed(ctx) {
+		t.Fatal("allowed after owner mode ended")
+	}
+}

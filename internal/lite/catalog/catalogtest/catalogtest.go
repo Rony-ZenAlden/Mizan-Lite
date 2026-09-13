@@ -35,11 +35,14 @@ var (
 type Fake struct {
 	mu         sync.Mutex
 	products   map[id.ID]domain.Product
+	packages   map[id.ID]domain.Package
 	failUpdate bool
 }
 
 // NewFake returns an empty store.
-func NewFake() *Fake { return &Fake{products: map[id.ID]domain.Product{}} }
+func NewFake() *Fake {
+	return &Fake{products: map[id.ID]domain.Product{}, packages: map[id.ID]domain.Package{}}
+}
 
 // FailUpdates makes every Update fail.
 func (f *Fake) FailUpdates() { f.mu.Lock(); f.failUpdate = true; f.mu.Unlock() }
@@ -171,6 +174,65 @@ func (f *Fake) Update(_ context.Context, p domain.Product) (domain.Product, erro
 	p.RowVersion++
 	f.products[p.ID] = p
 	return p, nil
+}
+
+func (f *Fake) Package(_ context.Context, packageProductID id.ID) (domain.Package, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	p, ok := f.packages[packageProductID]
+	return p, ok, nil
+}
+
+func (f *Fake) Packages(context.Context) ([]domain.Package, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]domain.Package, 0, len(f.packages))
+	for _, p := range f.packages {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].PackageProductID < out[j].PackageProductID })
+	return out, nil
+}
+
+func (f *Fake) IsContent(_ context.Context, productID id.ID) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.packages {
+		if p.ContentProductID == productID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (f *Fake) SavePackage(_ context.Context, p domain.Package) (domain.Package, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, pkgExists := f.products[p.PackageProductID]
+	_, contentExists := f.products[p.ContentProductID]
+	if !pkgExists || !contentExists {
+		return domain.Package{}, errs.Validation("database.constraint_violation", "foreign key")
+	}
+	if p.PackageProductID == p.ContentProductID || p.ContentQuantityMicro <= 0 {
+		return domain.Package{}, errs.Validation("database.constraint_violation", "check constraint")
+	}
+	stored, exists := f.packages[p.PackageProductID]
+	switch {
+	case p.RowVersion == 0 && exists:
+		return domain.Package{}, errs.Conflict("database.duplicate", "primary key")
+	case p.RowVersion != 0 && (!exists || stored.RowVersion != p.RowVersion):
+		return domain.Package{}, domain.ErrStale()
+	}
+	p.RowVersion++
+	f.packages[p.PackageProductID] = p
+	return p, nil
+}
+
+func (f *Fake) DeletePackage(_ context.Context, packageProductID id.ID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.packages, packageProductID)
+	return nil
 }
 
 // Gate is a recording owner gate. With Elevated false it refuses as the owner module would.
@@ -364,6 +426,63 @@ func StoreContract(t *testing.T, newStore func(t *testing.T) catalog.Store) {
 		got, _ = s.Search(ctx, catalog.Query{Limit: 1})
 		if len(got) != 1 {
 			t.Fatalf("the limit was not applied: %v", names(got))
+		}
+	})
+
+	t.Run("a package link is stored, versioned, listed and removed", func(t *testing.T) {
+		s := newStore(t)
+		tin, oil, other := product(t, "تنكة زيت", ""), product(t, "زيت فرط", ""), product(t, "زيت آخر", "")
+		for _, p := range []domain.Product{tin, oil, other} {
+			if err := s.Insert(ctx, p); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, found, err := s.Package(ctx, tin.ID); err != nil || found {
+			t.Fatalf("a product with no link: %v %v", found, err)
+		}
+		link := domain.Package{PackageProductID: tin.ID, ContentProductID: oil.ID, ContentQuantityMicro: 16_000_000}
+		saved, err := s.SavePackage(ctx, link)
+		if err != nil || saved.RowVersion != 1 {
+			t.Fatalf("SavePackage = %+v, %v", saved, err)
+		}
+		got, found, err := s.Package(ctx, tin.ID)
+		if err != nil || !found || got != saved {
+			t.Fatalf("Package = %+v %v %v", got, found, err)
+		}
+		is, err := s.IsContent(ctx, oil.ID)
+		if err != nil || !is {
+			t.Fatalf("IsContent(oil) = %v, %v", is, err)
+		}
+		if is, _ := s.IsContent(ctx, tin.ID); is {
+			t.Fatal("the package is reported as content")
+		}
+		if _, err = s.SavePackage(ctx, link); err == nil {
+			t.Fatal("a second insert of the same link was accepted")
+		}
+		relinked := saved
+		relinked.ContentProductID, relinked.ContentQuantityMicro = other.ID, 15_000_000
+		updated, err := s.SavePackage(ctx, relinked)
+		if err != nil || updated.RowVersion != 2 {
+			t.Fatalf("relink = %+v, %v", updated, err)
+		}
+		if _, err := s.SavePackage(ctx, relinked); errs.CodeOf(err) != "database.concurrent_modification" {
+			t.Fatalf("a stale link was written: %v", err)
+		}
+		if all, err := s.Packages(ctx); err != nil || len(all) != 1 || all[0] != updated {
+			t.Fatalf("Packages = %+v, %v", all, err)
+		}
+		if err := s.DeletePackage(ctx, tin.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, found, _ := s.Package(ctx, tin.ID); found {
+			t.Fatal("the link survived its removal")
+		}
+		if err := s.DeletePackage(ctx, tin.ID); err != nil {
+			t.Fatalf("removing no link: %v", err)
+		}
+		missing, _ := id.New()
+		if _, err := s.SavePackage(ctx, domain.Package{PackageProductID: tin.ID, ContentProductID: missing, ContentQuantityMicro: 1}); err == nil {
+			t.Fatal("a link to a product that does not exist was stored")
 		}
 	})
 

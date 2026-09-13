@@ -223,3 +223,94 @@ func (s *Store) Update(ctx context.Context, p domain.Product) (domain.Product, e
 	p.RowVersion++
 	return p, nil
 }
+
+func scanPackage(row scanner) (domain.Package, error) {
+	var (
+		p                   domain.Package
+		rawPackage, rawItem string
+	)
+	if err := row.Scan(&rawPackage, &rawItem, &p.ContentQuantityMicro, &p.RowVersion); err != nil {
+		return domain.Package{}, err
+	}
+	var err error
+	if p.PackageProductID, err = id.Parse(rawPackage); err != nil {
+		return domain.Package{}, err
+	}
+	if p.ContentProductID, err = id.Parse(rawItem); err != nil {
+		return domain.Package{}, err
+	}
+	return p, nil
+}
+
+const packageColumns = `package_product_id, content_product_id, content_quantity_micro, row_version`
+
+func (s *Store) Package(ctx context.Context, packageProductID id.ID) (domain.Package, bool, error) {
+	p, err := scanPackage(s.db.Reader(ctx).QueryRowContext(ctx,
+		`SELECT `+packageColumns+` FROM product_packages WHERE package_product_id = ?`, packageProductID.String()))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Package{}, false, nil
+	}
+	if err != nil {
+		return domain.Package{}, false, s.db.Dialect().TranslateError(err)
+	}
+	return p, true, nil
+}
+
+func (s *Store) Packages(ctx context.Context) ([]domain.Package, error) {
+	rows, err := s.db.Reader(ctx).QueryContext(ctx,
+		`SELECT `+packageColumns+` FROM product_packages ORDER BY package_product_id`)
+	if err != nil {
+		return nil, s.db.Dialect().TranslateError(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []domain.Package
+	for rows.Next() {
+		p, err := scanPackage(rows)
+		if err != nil {
+			return nil, s.db.Dialect().TranslateError(err)
+		}
+		out = append(out, p)
+	}
+	return out, s.db.Dialect().TranslateError(rows.Err())
+}
+
+func (s *Store) IsContent(ctx context.Context, productID id.ID) (bool, error) {
+	var n int
+	err := s.db.Reader(ctx).QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM product_packages WHERE content_product_id = ?`, productID.String()).Scan(&n)
+	return n > 0, s.db.Dialect().TranslateError(err)
+}
+
+func (s *Store) SavePackage(ctx context.Context, p domain.Package) (domain.Package, error) {
+	now := clock.Format(s.clk.Now())
+	if p.RowVersion == 0 {
+		_, err := s.db.Writer(ctx).ExecContext(ctx, `
+			INSERT INTO product_packages (package_product_id, content_product_id, content_quantity_micro, row_version, updated_at)
+			VALUES (?, ?, ?, 1, ?)`,
+			p.PackageProductID.String(), p.ContentProductID.String(), p.ContentQuantityMicro, now)
+		if err != nil {
+			return domain.Package{}, s.db.Dialect().TranslateError(err)
+		}
+		p.RowVersion = 1
+		return p, nil
+	}
+	res, err := s.db.Writer(ctx).ExecContext(ctx, `
+		UPDATE product_packages
+		   SET content_product_id = ?, content_quantity_micro = ?, row_version = row_version + 1, updated_at = ?
+		 WHERE package_product_id = ? AND row_version = ?`,
+		p.ContentProductID.String(), p.ContentQuantityMicro, now, p.PackageProductID.String(), p.RowVersion)
+	if err != nil {
+		return domain.Package{}, s.db.Dialect().TranslateError(err)
+	}
+	if err := database.VersionedUpdateResult(res); err != nil {
+		return domain.Package{}, err
+	}
+	p.RowVersion++
+	return p, nil
+}
+
+func (s *Store) DeletePackage(ctx context.Context, packageProductID id.ID) error {
+	_, err := s.db.Writer(ctx).ExecContext(ctx,
+		`DELETE FROM product_packages WHERE package_product_id = ?`, packageProductID.String())
+	return s.db.Dialect().TranslateError(err)
+}

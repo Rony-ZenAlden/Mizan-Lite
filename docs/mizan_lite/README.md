@@ -27,7 +27,7 @@ what is not verified — once built.
 |---|---|---|---|
 | **L0** | Skeleton and gates | [phases/L0_SKELETON.md](phases/L0_SKELETON.md) | ✅ complete — `c2a1d0e` |
 | **L1** | Catalogue, units, owner PIN, demo data generator | [phases/L1_CATALOGUE.md](phases/L1_CATALOGUE.md) | ✅ complete — committed |
-| L2 | Stock: receipts, adjustments, weighted-average cost, opening packages | — | not started |
+| **L2** | Stock: receipts, adjustments, weighted-average cost, opening packages | [phases/L2_STOCK.md](phases/L2_STOCK.md) | ✅ complete — committed |
 | L3 | Exchange rates (manual) | — | not started |
 | L4 | The till | — | not started |
 | L5 | Customers and debts | — | not started |

@@ -150,3 +150,75 @@ describe("ProductForm — edit", () => {
   });
 });
 
+
+describe("ProductForm — what a package opens into", () => {
+  const units = async () => [
+    { code: "tin", kind: "count", inputDecimals: 0 },
+    { code: "l", kind: "volume", inputDecimals: 3 },
+  ];
+  const tin = aProduct({ id: "tin", nameAr: "تنكة زيت", nameEn: "Oil tin", unitCode: "tin" });
+  const loose = aProduct({ id: "loose", nameAr: "زيت فرط", nameEn: "Loose oil", unitCode: "l" });
+
+  it("is not offered for a product sold by volume or weight", async () => {
+    renderWithProviders(<ProductForm product={loose} onSaved={() => undefined} onClose={() => undefined} />, {
+      client: fakeClient({ catalog: { units, products: async () => [tin, loose] } }),
+      locale: "en",
+    });
+    await settle();
+    expect(screen.queryByRole("group", { name: "Opens into" })).not.toBeInTheDocument();
+  });
+
+  it("links a tin to loose oil, checking the content's decimals, and removes the link", async () => {
+    const setPackage = vi.fn(async () => aProduct({ ...tin, packageContentId: "loose", packageContentQuantity: "16.000" }));
+    const clearPackage = vi.fn(async () => tin);
+    const onSaved = vi.fn();
+    renderWithProviders(<ProductForm product={tin} onSaved={onSaved} onClose={() => undefined} />, {
+      client: fakeClient({ catalog: { units, products: async () => [tin, loose], setPackage, clearPackage } }),
+      locale: "en",
+    });
+    await settle();
+
+    const section = screen.getByRole("group", { name: "Opens into" });
+    const options = within(within(section).getByLabelText("Loose product")).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Not linked", "Loose oil — Litre"]); // never itself
+    await userEvent.selectOptions(within(section).getByLabelText("Loose product"), "loose");
+    await userEvent.type(within(section).getByLabelText("Quantity in one package"), "16.0005");
+    expect(within(section).getByText("This unit takes at most 3 decimal places.")).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Save link" })).toBeDisabled();
+
+    await userEvent.clear(within(section).getByLabelText("Quantity in one package"));
+    await userEvent.type(within(section).getByLabelText("Quantity in one package"), "16");
+    await userEvent.click(within(section).getByRole("button", { name: "Save link" }));
+    await settle();
+    expect(setPackage).toHaveBeenCalledWith({ packageProductId: "tin", contentProductId: "loose", contentQuantity: "16" });
+    expect(within(section).getByText("Link saved.")).toBeInTheDocument();
+    expect(within(section).getByLabelText("Quantity in one package")).toHaveValue("16.000");
+    expect(onSaved).not.toHaveBeenCalled(); // the link saves on its own; the form stays open
+
+    await userEvent.click(within(section).getByRole("button", { name: "Remove link" }));
+    await settle();
+    expect(clearPackage).toHaveBeenCalledWith("tin");
+    expect(within(section).getByLabelText("Loose product")).toHaveValue("");
+    expect(within(section).queryByRole("button", { name: "Remove link" })).not.toBeInTheDocument();
+  });
+
+  it("shows a nesting refusal from Go", async () => {
+    const setPackage = vi.fn(async () => {
+      throw new BindingError({
+        code: "lite.catalog.package_nested",
+        messageKey: "lite.catalog.package_nested",
+        fields: [{ field: "contentProductId", code: "lite.catalog.package_nested", messageKey: "lite.catalog.package_nested" }],
+      });
+    });
+    renderWithProviders(<ProductForm product={tin} onSaved={() => undefined} onClose={() => undefined} />, {
+      client: fakeClient({ catalog: { units, products: async () => [tin, loose], setPackage } }),
+      locale: "en",
+    });
+    await settle();
+    const section = screen.getByRole("group", { name: "Opens into" });
+    await userEvent.selectOptions(within(section).getByLabelText("Loose product"), "loose");
+    await userEvent.type(within(section).getByLabelText("Quantity in one package"), "12");
+    await userEvent.click(within(section).getByRole("button", { name: "Save link" }));
+    expect(await within(section).findByText(/Packages open one level only/)).toBeInTheDocument();
+  });
+});

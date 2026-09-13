@@ -89,7 +89,7 @@ drill mizan-cmd-independent-of-lite "Mizan must not import Mizan Lite" \
   cmd/demoseed/zz_drill.go "package main
 import _ \"$M/internal/lite/paths\""
 
-drill lite-pure-text "textkey and numinput may import only" \
+drill lite-pure-text "textkey, numinput and bizdate may import only" \
   internal/lite/textkey/zz_drill.go "package textkey
 import _ \"$M/internal/platform/database\""
 
@@ -112,5 +112,34 @@ import _ \"$M/internal/lite/owner\""
 drill lite-setup-reaches-only-its-ports "setup may reach settings and owner only" \
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/catalog\""
+
+# ── added in L2 ─────────────────────────────────────────────────────────────────────────────────────
+drill lite-stock-isolated "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/catalog\""
+
+drill lite-stock-isolated-from-owner "stock may not import another Lite module" \
+  internal/lite/stock/domain/zz_drill.go "package domain
+import _ \"$M/internal/lite/owner/domain\""
+
+drill lite-catalog-forbids-stock "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/stock\""
+
+drill lite-owner-forbids-stock "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/stock\""
+
+drill lite-settings-forbids-stock "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/stock\""
+
+drill lite-setup-forbids-stock "setup may reach settings and owner only" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/stock\""
+
+drill lite-bizdate-pure "textkey, numinput and bizdate may import only" \
+  internal/lite/bizdate/zz_drill.go "package bizdate
+import _ \"$M/internal/kernel/clock\""
 
 echo "every Lite architecture rule was seen failing"

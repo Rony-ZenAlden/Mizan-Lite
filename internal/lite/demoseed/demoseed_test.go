@@ -9,12 +9,15 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
+	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/lite/demoseed"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
+	"github.com/mizan-erp/mizan/internal/lite/stock"
+	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
 )
 
 func start(t *testing.T) *bootstrap.App {
@@ -82,6 +85,82 @@ func TestTheSeederBuildsAShop(t *testing.T) {
 	}
 	if status, _ := app.Owner.Status(ctx); status.ElevatedFor != 0 {
 		t.Fatal("the seeder left the installation in owner mode")
+	}
+}
+
+func TestTheSeederStocksTheShop(t *testing.T) {
+	ctx := context.Background()
+	app := start(t)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Openings != 40 || res.Receipts != 3 || res.StockValue == "" {
+		t.Fatalf("result = %+v", res)
+	}
+
+	byName := map[string]catalogdomain.Product{}
+	products, _ := app.Catalog.Search(ctx, "", true)
+	for _, p := range products {
+		byName[p.NameEN] = p
+	}
+	levels, err := app.Stock.Levels(ctx)
+	if err != nil || len(levels) != 40 {
+		t.Fatalf("%d levels, %v — every product has opening stock", len(levels), err)
+	}
+	onHand := map[string]int64{}
+	for _, l := range levels {
+		for name, p := range byName {
+			if p.ID == l.ProductID {
+				onHand[name] = l.OnHandMicro
+			}
+		}
+	}
+	for name, want := range map[string]int64{
+		"Olive oil tin 16 L":   2_000_000,  // three, one opened
+		"Local olive oil":      20_000_000, // four, and sixteen from the tin
+		"Pomegranate molasses": 10_000_000, // counted two jars fewer
+		"Labneh":               17_000_000, // 8.5 + 10 received − 1.5 spoiled
+		"Fine bulgur":          65_000_000, // 40 + 25 received
+	} {
+		if onHand[name] != want {
+			t.Errorf("%s on hand = %d, want %d", name, onHand[name], want)
+		}
+	}
+
+	tin := byName["Olive oil tin 16 L"]
+	if link, found, _ := app.Catalog.Package(ctx, tin.ID); !found || link.ContentProductID != byName["Local olive oil"].ID || link.ContentQuantityMicro != 16_000_000 {
+		t.Fatalf("package link = %+v, %v", link, found)
+	}
+
+	// A pound delivery keeps what was typed: 337,500 for 25 kg at 15,000 is 13,500 a kilo, $0.90.
+	if hidden, err := app.Stock.History(ctx, byName["Fine bulgur"].ID, 10); err != nil || hidden.CostsVisible {
+		t.Fatalf("the seeder left costs visible: %v", err)
+	}
+	if _, err := app.Owner.Elevate(ctx, "481537"); err != nil {
+		t.Fatal(err)
+	}
+	history, _ := app.Stock.History(ctx, byName["Fine bulgur"].ID, 10)
+	receipt := history.Movements[0]
+	if receipt.Kind != stockdomain.KindReceipt || receipt.Entered.Currency != "SYP" || receipt.Entered.UnitCostMicro != 13_500_000_000 ||
+		receipt.Entered.LocalPerUSDNano != 15_000_000_000_000 || receipt.UnitCostMicro != 900_000 {
+		t.Fatalf("the pound delivery = %+v", receipt)
+	}
+
+	// The count and the write-off went through the owner's guard, and are in the history.
+	events, _ := app.Owner.Events(ctx, 200)
+	acts := map[string]int{}
+	for _, e := range events {
+		if e.Kind == ownerdomain.EventGuardedAct {
+			acts[e.Action]++
+		}
+	}
+	if acts[stock.ActCountLower] != 1 || acts[stock.ActAdjustLower] != 1 {
+		t.Fatalf("guarded acts = %v", acts)
+	}
+
+	if findings, err := app.Stock.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("the verifier found %+v, %v", findings, err)
 	}
 }
 

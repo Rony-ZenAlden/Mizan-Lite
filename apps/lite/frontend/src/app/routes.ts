@@ -3,6 +3,7 @@ import type { MessageKey } from "@/i18n/messages";
 import { HomeScreen } from "@/screens/home/HomeScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
 import { ProductsScreen } from "@/screens/products/ProductsScreen";
+import { StockScreen } from "@/screens/stock/StockScreen";
 
 export interface RouteDef {
   path: string;
@@ -17,6 +18,7 @@ export interface RouteDef {
  */
 export const ROUTES: readonly RouteDef[] = [
   { path: "/products", labelKey: "nav.products", Screen: ProductsScreen },
+  { path: "/stock", labelKey: "nav.stock", Screen: StockScreen },
   { path: "/owner", labelKey: "nav.owner", Screen: OwnerScreen },
   { path: "/", labelKey: "nav.home", Screen: HomeScreen },
 ];

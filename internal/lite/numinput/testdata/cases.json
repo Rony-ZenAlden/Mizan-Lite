@@ -1,5 +1,5 @@
 {
-  "comment": "The ONE contract for typed numbers. Read by internal/lite/numinput (Go) and by apps/lite/frontend/src/i18n/numbers.test.ts (TypeScript). A case added here is enforced on both. `output` is the normalised string; `error` is the code the input is refused with.",
+  "comment": "The ONE contract for typed numbers. Read by internal/lite/numinput (Go) and by apps/lite/frontend/src/i18n/numbers.test.ts (TypeScript). A case added here is enforced on both. `output` is the normalised string; `error` is the code the input is refused with. `quantities` adds a unit's input decimals: Go's stock/domain.ParseQuantity and the frontend's quantityProblem refuse the same inputs with the same code.",
   "normalise": [
     { "input": "3.25", "output": "3.25" },
     { "input": "45000", "output": "45000" },
@@ -30,6 +30,20 @@
     { "input": "abc", "error": "lite.number.invalid" },
     { "input": "$3", "error": "lite.number.invalid" },
     { "input": "123456789012345678901234567890123", "error": "lite.number.invalid" }
+  ],
+  "quantities": [
+    { "input": "12.5", "decimals": 3 },
+    { "input": "١٢٫٥٠٠", "decimals": 3 },
+    { "input": "0.001", "decimals": 3 },
+    { "input": "12.5005", "decimals": 3, "error": "lite.stock.quantity_decimals" },
+    { "input": "3", "decimals": 0 },
+    { "input": "٣", "decimals": 0 },
+    { "input": "1.5", "decimals": 0, "error": "lite.stock.quantity_decimals" },
+    { "input": "3.0", "decimals": 0, "error": "lite.stock.quantity_decimals" },
+    { "input": "3.", "decimals": 0 },
+    { "input": "1,5", "decimals": 3, "error": "lite.number.grouping" },
+    { "input": "-2", "decimals": 3, "error": "lite.number.invalid" },
+    { "input": "", "decimals": 0, "error": "lite.number.invalid" }
   ],
   "latinDigits": [
     { "input": "٦٢٢٣٠٠٠١١٢٣٤٥", "output": "6223000112345" },

@@ -10,6 +10,7 @@ import * as App from "../../wailsjs/go/api/App";
 import * as Catalog from "../../wailsjs/go/api/Catalog";
 import * as Owner from "../../wailsjs/go/api/Owner";
 import * as Settings from "../../wailsjs/go/api/Settings";
+import * as Stock from "../../wailsjs/go/api/Stock";
 import { api } from "../../wailsjs/go/models";
 import { unwrap, type Plain } from "./envelope";
 
@@ -31,6 +32,19 @@ export type OwnerStatus = Plain<api.OwnerStatusDTO>;
 export type OwnerEvent = Plain<api.OwnerEventDTO>;
 export type ChangePINInput = Plain<api.ChangePINInput>;
 export type RecoverInput = Plain<api.RecoverInput>;
+export type SetPackageInput = Plain<api.SetPackageInput>;
+export type StockLevel = Plain<api.StockLevelDTO>;
+export type Valuation = Plain<api.ValuationDTO>;
+export type ValuationLine = Plain<api.ValuationLineDTO>;
+export type Movement = Plain<api.MovementDTO>;
+export type History = Plain<api.HistoryDTO>;
+export type ReceiveInput = Plain<api.ReceiveInput>;
+export type CountInput = Plain<api.CountInput>;
+export type AdjustInput = Plain<api.AdjustInput>;
+export type OpenPackageInput = Plain<api.OpenPackageInput>;
+export type ReverseReceiptInput = Plain<api.ReverseReceiptInput>;
+export type CorrectCostInput = Plain<api.CorrectCostInput>;
+export type Finding = Plain<api.FindingDTO>;
 
 export function createClient() {
   return {
@@ -58,6 +72,23 @@ export function createClient() {
       setActive: (input: SetActiveInput) => unwrap(() => Catalog.SetActive(api.SetActiveInput.createFrom(input))),
       setQuickSlot: (input: SetQuickSlotInput) =>
         unwrap(() => Catalog.SetQuickSlot(api.SetQuickSlotInput.createFrom(input))),
+      setPackage: (input: SetPackageInput) => unwrap(() => Catalog.SetPackage(api.SetPackageInput.createFrom(input))),
+      clearPackage: (productId: string) => unwrap(() => Catalog.ClearPackage(productId)),
+    },
+    stock: {
+      levels: () => unwrap(Stock.Levels),
+      valuation: () => unwrap(Stock.Valuation),
+      movements: (productId: string, limit: number) =>
+        unwrap(() => Stock.Movements(api.MovementsQueryDTO.createFrom({ productId, limit }))),
+      receive: (input: ReceiveInput) => unwrap(() => Stock.Receive(api.ReceiveInput.createFrom(input))),
+      opening: (input: ReceiveInput) => unwrap(() => Stock.Opening(api.ReceiveInput.createFrom(input))),
+      count: (input: CountInput) => unwrap(() => Stock.Count(api.CountInput.createFrom(input))),
+      adjust: (input: AdjustInput) => unwrap(() => Stock.Adjust(api.AdjustInput.createFrom(input))),
+      openPackage: (input: OpenPackageInput) => unwrap(() => Stock.OpenPackage(api.OpenPackageInput.createFrom(input))),
+      reverseReceipt: (input: ReverseReceiptInput) =>
+        unwrap(() => Stock.ReverseReceipt(api.ReverseReceiptInput.createFrom(input))),
+      correctCost: (input: CorrectCostInput) => unwrap(() => Stock.CorrectCost(api.CorrectCostInput.createFrom(input))),
+      verify: () => unwrap(Stock.Verify),
     },
     owner: {
       status: () => unwrap(Owner.Status),

@@ -254,3 +254,58 @@ func TestUnitsAndCurrenciesAreTheSeededOnes(t *testing.T) {
 		t.Fatalf("reference = %+v, %v", ref, err)
 	}
 }
+
+func TestAPackageOpensOneLevelOnly(t *testing.T) {
+	f := newFixture()
+	ctx := context.Background()
+	counted := func(name string) domain.Product {
+		d := draft(name)
+		d.UnitCode = "tin"
+		return f.create(t, d)
+	}
+	carton := counted("كرتونة تنك")
+	tin := counted("تنكة زيت")
+	oil := f.create(t, draft("زيت فرط"))
+
+	link, err := f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: tin.ID, ContentProductID: oil.ID, ContentQuantity: "16"})
+	if err != nil || link.ContentQuantityMicro != 16_000_000 || link.RowVersion != 1 {
+		t.Fatalf("link = %+v, %v", link, err)
+	}
+	again, err := f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: tin.ID, ContentProductID: oil.ID, ContentQuantity: "16.000"})
+	if err != nil || again != link {
+		t.Fatalf("saving the same link wrote a new version: %+v, %v", again, err)
+	}
+	// A carton of tins would open into a product that itself opens.
+	if _, err = f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: carton.ID, ContentProductID: tin.ID, ContentQuantity: "12"}); errs.CodeOf(err) != domain.CodePackageNested {
+		t.Fatalf("a carton of tins: %v", err)
+	}
+	// And a tin may not become the content of something else while it opens.
+	other := counted("صندوق")
+	if _, err = f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: other.ID, ContentProductID: tin.ID, ContentQuantity: "1"}); errs.CodeOf(err) != domain.CodePackageNested {
+		t.Fatalf("a package inside another: %v", err)
+	}
+	if _, err = f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: oil.ID, ContentProductID: other.ID, ContentQuantity: "1"}); errs.CodeOf(err) != domain.CodePackageNotCounted {
+		t.Fatalf("loose oil as a package: %v", err)
+	}
+	relinked, err := f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: tin.ID, ContentProductID: oil.ID, ContentQuantity: "15"})
+	if err != nil || relinked.RowVersion != 2 || relinked.ContentQuantityMicro != 15_000_000 {
+		t.Fatalf("relink = %+v, %v", relinked, err)
+	}
+	if err = f.svc.ClearPackage(ctx, tin.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := f.svc.Package(ctx, tin.ID); found {
+		t.Fatal("the link survived ClearPackage")
+	}
+	// Cleared, the carton may now hold tins.
+	if _, err = f.svc.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: carton.ID, ContentProductID: tin.ID, ContentQuantity: "12"}); err != nil {
+		t.Fatalf("a carton of tins that no longer open: %v", err)
+	}
+	if f.gate.Asked != 0 {
+		t.Fatal("linking packages asked for the owner")
+	}
+	all, err := f.svc.All(ctx)
+	if err != nil || len(all) != 4 {
+		t.Fatalf("All = %d, %v", len(all), err)
+	}
+}

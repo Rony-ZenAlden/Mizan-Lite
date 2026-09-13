@@ -29,7 +29,7 @@ describe("formatInteger", () => {
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { formatCountdown, formatDecimal, latinDigits, normaliseNumber } from "./numbers";
+import { formatCountdown, formatDecimal, latinDigits, normaliseNumber, quantityProblem } from "./numbers";
 
 // The TypeScript half of the contract. Go reads the same file (internal/lite/numinput); a case added there is
 // enforced here, and an implementation that disagrees fails its own suite (L1 §6, D-L1.4).
@@ -37,6 +37,7 @@ const FIXTURE = resolve(process.cwd(), "../../../internal/lite/numinput/testdata
 
 interface Fixture {
   normalise: { input: string; output?: string; error?: string }[];
+  quantities: { input: string; decimals: number; error?: string }[];
   latinDigits: { input: string; output: string }[];
 }
 
@@ -47,6 +48,13 @@ describe("the shared number fixture", () => {
     expect(fixture.normalise.length).toBeGreaterThan(20);
     expect(fixture.latinDigits.length).toBeGreaterThan(2);
   });
+
+  it.each(fixture.quantities.map((c) => [JSON.stringify(c.input), c.decimals, c] as const))(
+    "quantityProblem(%s, %d decimals)",
+    (_, __, c) => {
+      expect(quantityProblem(c.input, c.decimals)).toBe(c.error ?? null);
+    },
+  );
 
   it.each(fixture.normalise.map((c) => [JSON.stringify(c.input), c] as const))("normaliseNumber(%s)", (_, c) => {
     const got = normaliseNumber(c.input);

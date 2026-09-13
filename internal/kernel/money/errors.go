@@ -29,4 +29,11 @@ var (
 	// ErrInvalidWeights is returned when allocation weights are negative or do not
 	// sum to a positive total.
 	ErrInvalidWeights = errors.New("money: allocation weights must sum to a positive total")
+
+	// ErrNonPositiveQuantity is returned when a costing operation is given a quantity that is zero or
+	// negative where only a positive one has a meaning: a receipt of nothing, a total spread over nothing.
+	ErrNonPositiveQuantity = errors.New("money: quantity must be positive")
+
+	// ErrNegativeCost is returned when a costing operation is given a negative unit cost.
+	ErrNegativeCost = errors.New("money: cost must not be negative")
 )

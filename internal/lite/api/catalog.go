@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
+	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
@@ -40,14 +41,52 @@ type ProductDTO struct {
 	QuickSlot     int    `json:"quickSlot"`
 	Active        bool   `json:"active"`
 	RowVersion    int64  `json:"rowVersion"`
+	// PackageContentID is the product this one opens into, or "" — and PackageContentQuantity how much of it one
+	// package holds, in the content's unit decimals (L2 §3.5). Two flat fields rather than a nullable object, so the
+	// DTO stays a plain comparable value on both sides of the boundary.
+	PackageContentID       string `json:"packageContentId"`
+	PackageContentQuantity string `json:"packageContentQuantity"`
 }
 
-func toProductDTO(p domain.Product, ref domain.Reference) ProductDTO {
-	return ProductDTO{
+// catalogueView is the reference data and package links a product is formatted against.
+type catalogueView struct {
+	ref      domain.Reference
+	packages map[id.ID]domain.Package
+	units    map[id.ID]string // content product → its unit, for the content quantity's decimals
+}
+
+func loadCatalogueView(ctx context.Context, app *bootstrap.App) (catalogueView, error) {
+	ref, err := app.Catalog.Reference(ctx)
+	if err != nil {
+		return catalogueView{}, err
+	}
+	links, err := app.Catalog.Packages(ctx)
+	if err != nil {
+		return catalogueView{}, err
+	}
+	v := catalogueView{ref: ref, packages: map[id.ID]domain.Package{}, units: map[id.ID]string{}}
+	for _, link := range links {
+		v.packages[link.PackageProductID] = link
+		content, err := app.Catalog.Get(ctx, link.ContentProductID)
+		if err != nil {
+			return catalogueView{}, err
+		}
+		v.units[content.ID] = content.UnitCode
+	}
+	return v, nil
+}
+
+func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
+	dto := ProductDTO{
 		ID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, Barcode: p.Barcode, UnitCode: p.UnitCode,
-		PriceCurrency: p.PriceCurrency, Price: p.PriceText(ref), QuickSlot: p.QuickSlot, Active: p.Active,
+		PriceCurrency: p.PriceCurrency, Price: p.PriceText(v.ref), QuickSlot: p.QuickSlot, Active: p.Active,
 		RowVersion: p.RowVersion,
 	}
+	if link, ok := v.packages[p.ID]; ok {
+		dto.PackageContentID = link.ContentProductID.String()
+		dto.PackageContentQuantity = domain.FormatMicro(link.ContentQuantityMicro, v.ref.Units[v.units[link.ContentProductID]].InputDecimals)
+	}
+	return dto
 }
 
 // parseProductID reads an id from the frontend. One that does not parse names no product.
@@ -66,11 +105,11 @@ func (c *Catalog) withProduct(method string, fn func(ctx context.Context, app *b
 		if err != nil {
 			return ProductDTO{}, err
 		}
-		ref, err := app.Catalog.Reference(ctx)
+		view, err := loadCatalogueView(ctx, app)
 		if err != nil {
 			return ProductDTO{}, err
 		}
-		return toProductDTO(p, ref), nil
+		return toProductDTO(p, view), nil
 	})
 }
 
@@ -111,13 +150,13 @@ func (c *Catalog) Products(q ProductQueryDTO) envelope.Result[[]ProductDTO] {
 		if err != nil {
 			return nil, err
 		}
-		ref, err := app.Catalog.Reference(ctx)
+		view, err := loadCatalogueView(ctx, app)
 		if err != nil {
 			return nil, err
 		}
 		out := make([]ProductDTO, 0, len(found))
 		for _, p := range found {
-			out = append(out, toProductDTO(p, ref))
+			out = append(out, toProductDTO(p, view))
 		}
 		return out, nil
 	})
@@ -234,5 +273,45 @@ func (c *Catalog) SetQuickSlot(in SetQuickSlotInput) envelope.Result[ProductDTO]
 			slot = -1 // refused by the domain as no such button
 		}
 		return app.Catalog.SetQuickSlot(ctx, parsed, slot)
+	})
+}
+
+// SetPackageInput links a package product to what it opens into.
+type SetPackageInput struct {
+	PackageProductID string `json:"packageProductId"`
+	ContentProductID string `json:"contentProductId"`
+	ContentQuantity  string `json:"contentQuantity"`
+}
+
+// SetPackage links or relinks a package product, one level only, and returns the package product.
+func (c *Catalog) SetPackage(in SetPackageInput) envelope.Result[ProductDTO] {
+	return c.withProduct("Catalog.SetPackage", func(ctx context.Context, app *bootstrap.App) (domain.Product, error) {
+		pkg, err := parseProductID(in.PackageProductID)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		content, err := id.Parse(in.ContentProductID)
+		if err != nil {
+			return domain.Product{}, errs.Validation(domain.CodePackageContentRequired, "choose what the package opens into").
+				WithField(domain.FieldPackageContent, domain.CodePackageContentRequired, "required")
+		}
+		if _, err = app.Catalog.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: pkg, ContentProductID: content, ContentQuantity: in.ContentQuantity}); err != nil {
+			return domain.Product{}, err
+		}
+		return app.Catalog.Get(ctx, pkg)
+	})
+}
+
+// ClearPackage removes a package product's link and returns the product.
+func (c *Catalog) ClearPackage(productID string) envelope.Result[ProductDTO] {
+	return c.withProduct("Catalog.ClearPackage", func(ctx context.Context, app *bootstrap.App) (domain.Product, error) {
+		parsed, err := parseProductID(productID)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		if err = app.Catalog.ClearPackage(ctx, parsed); err != nil {
+			return domain.Product{}, err
+		}
+		return app.Catalog.Get(ctx, parsed)
 	})
 }

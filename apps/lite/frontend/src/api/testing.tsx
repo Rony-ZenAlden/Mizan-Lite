@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Client, Product } from "./client";
+import type { Client, Movement, Product } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -27,6 +27,31 @@ export function aProduct(overrides: Partial<Product> = {}): Product {
     quickSlot: 0,
     active: true,
     rowVersion: 1,
+    packageContentId: "",
+    packageContentQuantity: "",
+    ...overrides,
+  };
+}
+
+/** A stock movement for tests, as Go sends it outside owner mode (no costs), with any field replaceable. */
+export function aMovement(overrides: Partial<Movement> = {}): Movement {
+  return {
+    id: "0190a1b2-0000-7000-8000-00000000m001",
+    kind: "receipt",
+    businessDate: "2026-09-14",
+    occurredAt: "2026-09-13T22:00:00.000Z",
+    quantity: "25.000",
+    onHandAfter: "65.000",
+    reason: "",
+    note: "",
+    reversesId: "",
+    pairId: "",
+    unitCost: "",
+    averageCostBefore: "",
+    averageCostAfter: "",
+    enteredCurrency: "",
+    enteredUnitCost: "",
+    rate: "",
     ...overrides,
   };
 }
@@ -65,6 +90,28 @@ export function fakeClient(overrides: Overrides = {}): Client {
       setPrice: async (input) => aProduct({ id: input.id, priceCurrency: input.priceCurrency, price: input.price, rowVersion: input.rowVersion + 1 }),
       setActive: async (input) => aProduct({ id: input.id, active: input.active, rowVersion: input.rowVersion + 1 }),
       setQuickSlot: async (input) => aProduct({ id: input.id, quickSlot: input.slot }),
+      setPackage: async (input) =>
+        aProduct({ id: input.packageProductId, packageContentId: input.contentProductId, packageContentQuantity: input.contentQuantity }),
+      clearPackage: async (productId) => aProduct({ id: productId }),
+    },
+    stock: {
+      levels: async () => [{ productId: aProduct().id, onHand: "12.500" }],
+      valuation: async () => ({
+        lines: [{ productId: aProduct().id, onHand: "12.500", averageCost: "3.20", value: "40.00" }],
+        total: "40.00",
+      }),
+      movements: async () => ({ movements: [aMovement()], costsVisible: false, reversibleId: "" }),
+      receive: async (input) => ({ productId: input.productId, onHand: "1" }),
+      opening: async (input) => ({ productId: input.productId, onHand: "1" }),
+      count: async (input) => ({ productId: input.productId, onHand: input.counted }),
+      adjust: async (input) => ({ productId: input.productId, onHand: "1" }),
+      openPackage: async (input) => [
+        { productId: input.packageProductId, onHand: "2" },
+        { productId: "content", onHand: "16.000" },
+      ],
+      reverseReceipt: async () => ({ productId: aProduct().id, onHand: "40.000" }),
+      correctCost: async (input) => ({ productId: input.productId, onHand: "12.500" }),
+      verify: async () => [],
     },
     owner: {
       status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 0 }),
@@ -80,6 +127,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
     settings: { ...base.settings, ...overrides.settings },
     catalog: { ...base.catalog, ...overrides.catalog },
     owner: { ...base.owner, ...overrides.owner },
+    stock: { ...base.stock, ...overrides.stock },
   };
 }
 

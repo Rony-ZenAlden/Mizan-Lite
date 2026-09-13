@@ -204,3 +204,35 @@ func TestErrorsAreTyped(t *testing.T) {
 		t.Fatal("not found is a NotFound")
 	}
 }
+
+func TestAPackageLink(t *testing.T) {
+	ref := domain.Reference{
+		Units:      map[string]domain.Unit{"tin": {Code: "tin", Kind: "count"}, "l": {Code: "l", Kind: "volume", InputDecimals: 3}, "kg": {Code: "kg", Kind: "mass", InputDecimals: 3}},
+		Currencies: map[string]domain.Currency{"USD": {Code: "USD", Decimals: 2}},
+	}
+	tin := domain.Product{ID: "00000000-0000-7000-8000-000000000001", UnitCode: "tin"}
+	oil := domain.Product{ID: "00000000-0000-7000-8000-000000000002", UnitCode: "l"}
+	sack := domain.Product{ID: "00000000-0000-7000-8000-000000000003", UnitCode: "kg"}
+
+	p, err := domain.NewPackage(tin, oil, "١٦", ref)
+	if err != nil || p.ContentQuantityMicro != 16_000_000 || p.PackageProductID != tin.ID || p.ContentProductID != oil.ID {
+		t.Fatalf("p = %+v, %v", p, err)
+	}
+	if p.ContentText(oil, ref) != "16.000" {
+		t.Fatalf("content text = %s", p.ContentText(oil, ref))
+	}
+	for name, tc := range map[string]struct {
+		pkg, content domain.Product
+		qty, code    string
+	}{
+		"itself":             {tin, tin, "16", domain.CodePackageItself},
+		"a sack by the kilo": {sack, oil, "16", domain.CodePackageNotCounted},
+		"nothing inside":     {tin, oil, "0", domain.CodePackageContentRequired},
+		"a fourth decimal":   {tin, oil, "16.0005", domain.CodePackageContentDecimals},
+		"not a number":       {tin, oil, "ستة عشر", "lite.number.invalid"},
+	} {
+		if _, err := domain.NewPackage(tc.pkg, tc.content, tc.qty, ref); errs.CodeOf(err) != tc.code {
+			t.Errorf("%s: %v, want %s", name, err, tc.code)
+		}
+	}
+}

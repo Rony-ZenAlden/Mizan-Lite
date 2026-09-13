@@ -8,6 +8,7 @@ import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { SelectField, TextField } from "@/ui/Field";
+import { PackageSection } from "./PackageSection";
 
 /**
  * Create a product, or edit one.
@@ -124,6 +125,9 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
             required
           />
         </div>
+        {product && units.find((u) => u.code === product.unitCode)?.kind === "count" ? (
+          <PackageSection product={product} units={units} />
+        ) : null}
         {formError ? (
           <p role="alert" className="text-sm text-danger">
             {formError}

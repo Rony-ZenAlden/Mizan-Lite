@@ -7,27 +7,67 @@
 // call — first run, the catalogue, and the owner's guard — and a demo database is a database a shop could
 // have produced. It is also an end-to-end run of everything built so far, in the order a shop does it.
 //
-// It grows with every phase (DESIGN §9.4). L1: first run and the catalogue.
+// It grows with every phase (DESIGN §9.4). L1: first run and the catalogue. L2: a package link, opening stock
+// in both currencies, deliveries entered as invoice totals, a count and a write-off through the owner's PIN, one
+// tin opened — and then the stock verifier, which must find nothing (L2 §10).
 package demoseed
 
 import (
 	"context"
 	"embed"
 	"encoding/json"
+	"strconv"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	"github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
+	"github.com/mizan-erp/mizan/internal/lite/stock"
+	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
 )
+
+// CodeStockInconsistent fails a run whose stock the verifier finds anything wrong with: a demo that cannot pass the
+// application's own check is a demo of a defect.
+const CodeStockInconsistent = "lite.demoseed.stock_inconsistent"
 
 // CodeAlreadySetUp refuses an installation that has completed first run. Re-seeding means deleting the data
 // directory — a decision for whoever runs this, not something a seeder should do on their behalf.
 const CodeAlreadySetUp = "lite.demoseed.already_set_up"
 
-//go:embed data/catalogue.json
+//go:embed data/catalogue.json data/stock.json
 var data embed.FS
+
+type costLine struct {
+	Product  string `json:"product"`
+	Quantity string `json:"quantity"`
+	Cost     string `json:"cost"`
+	Currency string `json:"currency"`
+	Rate     string `json:"rate"`
+	Note     string `json:"note"`
+}
+
+type stockData struct {
+	Package struct {
+		Package         string `json:"package"`
+		Content         string `json:"content"`
+		ContentQuantity string `json:"contentQuantity"`
+	} `json:"package"`
+	Openings []costLine `json:"openings"`
+	Receipts []costLine `json:"receipts"`
+	Count    struct {
+		Product string `json:"product"`
+		Counted string `json:"counted"`
+		Note    string `json:"note"`
+	} `json:"count"`
+	WriteOff struct {
+		Product  string `json:"product"`
+		Quantity string `json:"quantity"`
+		Reason   string `json:"reason"`
+		Note     string `json:"note"`
+	} `json:"writeOff"`
+	OpenPackages string `json:"openPackages"`
+}
 
 type catalogue struct {
 	ShopName    string `json:"shopName"`
@@ -61,6 +101,10 @@ type Result struct {
 	RecoveryCode string
 	Products     int
 	QuickSlots   int
+	Openings     int
+	Receipts     int
+	// StockValue is the valuation's total in USD, as the owner's screen shows it.
+	StockValue string
 }
 
 // Run seeds app. It refuses an installation that has completed first run.
@@ -77,11 +121,11 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}
 
 	var cat catalogue
-	raw, err := data.ReadFile("data/catalogue.json")
-	if err != nil {
+	if err = readData("data/catalogue.json", &cat); err != nil {
 		return Result{}, err
 	}
-	if err = json.Unmarshal(raw, &cat); err != nil {
+	var stk stockData
+	if err = readData("data/stock.json", &stk); err != nil {
 		return Result{}, err
 	}
 
@@ -120,8 +164,106 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}); err != nil {
 		return Result{}, err
 	}
+	// The count and the write-off lower stock, so they are the owner's too (Q-L2.3) — seeded in the same owner mode.
+	if err := seedStock(ctx, app, stk, byName, &res); err != nil {
+		return Result{}, err
+	}
 	if _, err := app.Owner.EndElevation(ctx); err != nil {
 		return Result{}, err
 	}
 	return res, nil
+}
+
+// seedStock runs L2's part of the demo in the order a shop adopting Lite would: what opens into what, the stock on
+// the shelves, the week's deliveries, a count, a write-off, and a tin opened for loose sale. Then it checks.
+func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, byName map[string]domain.Product, res *Result) error {
+	product := func(name string) (domain.Product, error) {
+		p, ok := byName[name]
+		if !ok {
+			return domain.Product{}, errs.Internal(CodeStockInconsistent, "the demo stock names a product the catalogue lacks").WithParam("product", name)
+		}
+		return p, nil
+	}
+	tin, err := product(stk.Package.Package)
+	if err != nil {
+		return err
+	}
+	oil, err := product(stk.Package.Content)
+	if err != nil {
+		return err
+	}
+	if _, err = app.Catalog.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: tin.ID, ContentProductID: oil.ID, ContentQuantity: stk.Package.ContentQuantity}); err != nil {
+		return err
+	}
+
+	receive := func(line costLine, act func(context.Context, stock.ReceiveInput) (stockdomain.Movement, error)) error {
+		p, lookupErr := product(line.Product)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		_, actErr := act(ctx, stock.ReceiveInput{
+			ProductID: p.ID, Quantity: line.Quantity, Note: line.Note,
+			Cost: stockdomain.CostInput{Mode: stockdomain.CostTotal, Amount: line.Cost, Currency: line.Currency, Rate: line.Rate},
+		})
+		if actErr != nil {
+			return errs.Wrap(actErr, errs.CategoryInternal, errs.CodeOf(actErr), "seeding stock of "+line.Product)
+		}
+		return nil
+	}
+	for _, line := range stk.Openings {
+		if err = receive(line, app.Stock.Opening); err != nil {
+			return err
+		}
+		res.Openings++
+	}
+	for _, line := range stk.Receipts {
+		if err = receive(line, app.Stock.Receive); err != nil {
+			return err
+		}
+		res.Receipts++
+	}
+
+	counted, err := product(stk.Count.Product)
+	if err != nil {
+		return err
+	}
+	if _, err = app.Stock.Count(ctx, stock.CountInput{ProductID: counted.ID, Counted: stk.Count.Counted, Note: stk.Count.Note}); err != nil {
+		return err
+	}
+	spoiled, err := product(stk.WriteOff.Product)
+	if err != nil {
+		return err
+	}
+	if _, err = app.Stock.Adjust(ctx, stock.AdjustInput{
+		ProductID: spoiled.ID, Direction: stock.DirectionOut, Quantity: stk.WriteOff.Quantity,
+		Reason: stockdomain.Reason(stk.WriteOff.Reason), Note: stk.WriteOff.Note,
+	}); err != nil {
+		return err
+	}
+	if _, err = app.Stock.OpenPackage(ctx, stock.OpenPackageInput{PackageProductID: tin.ID, Packages: stk.OpenPackages}); err != nil {
+		return err
+	}
+
+	findings, err := app.Stock.Verify(ctx)
+	if err != nil {
+		return err
+	}
+	if len(findings) > 0 {
+		return errs.Internal(CodeStockInconsistent, "the stock verifier found problems in the seeded data").
+			WithParam("first", findings[0].Code).WithParam("count", strconv.Itoa(len(findings)))
+	}
+	valuation, err := app.Stock.Valuation(ctx)
+	if err != nil {
+		return err
+	}
+	res.StockValue = stockdomain.FormatMinor(valuation.TotalMinor)
+	return nil
+}
+
+func readData(name string, into any) error {
+	raw, err := data.ReadFile(name)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, into)
 }

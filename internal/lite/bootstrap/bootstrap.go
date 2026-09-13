@@ -16,7 +16,9 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
+	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	catalogdb "github.com/mizan-erp/mizan/internal/lite/catalog/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/locales"
 	"github.com/mizan-erp/mizan/internal/lite/migrations"
@@ -26,6 +28,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/settings"
 	settingsdb "github.com/mizan-erp/mizan/internal/lite/settings/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
+	"github.com/mizan-erp/mizan/internal/lite/stock"
+	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
+	stockdb "github.com/mizan-erp/mizan/internal/lite/stock/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/platform/backup"
 	"github.com/mizan-erp/mizan/internal/platform/crypto"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -77,6 +82,9 @@ type Options struct {
 	PINHasher crypto.Hasher
 	// Random draws recovery codes. Default crypto/rand.Reader.
 	Random io.Reader
+	// Location is the shop's time zone, which decides a movement's business date. Default time.Local — which Go reads
+	// from the operating system on Windows and macOS alike. Never time.LoadLocation: Windows ships no zone database.
+	Location *time.Location
 }
 
 func (o Options) withDefaults() Options {
@@ -98,6 +106,9 @@ func (o Options) withDefaults() Options {
 	if o.Random == nil {
 		o.Random = rand.Reader
 	}
+	if o.Location == nil {
+		o.Location = time.Local
+	}
 	return o
 }
 
@@ -112,6 +123,7 @@ type App struct {
 	Catalog   *catalog.Service
 	Owner     *owner.Service
 	Setup     *setup.Service
+	Stock     *stock.Service
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -169,6 +181,8 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Owner = owner.NewService(db, ownerdb.NewStore(db), opts.PINHasher, opts.Clock, opts.Random, opts.Logger)
 	app.Catalog = catalog.NewService(db, catalogdb.NewStore(db, opts.Clock), ownerGate{owner: app.Owner})
 	app.Setup = setup.NewService(db, app.Settings, app.Owner)
+	app.Stock = stock.NewService(db, stockdb.NewStore(db, opts.Clock), stockCatalogue{catalog: app.Catalog},
+		stockGate{owner: app.Owner}, opts.Clock, opts.Location)
 
 	scheduler, err := jobs.New(db, jobs.Options{Clock: opts.Clock, Logger: opts.Logger})
 	if err != nil {
@@ -339,4 +353,71 @@ func (g ownerGate) Require(ctx context.Context, act catalog.GuardedAct) error {
 	return g.owner.Require(ctx, owner.Act{
 		Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After,
 	})
+}
+
+// stockGate satisfies stock's OwnerGate port with the owner service, as ownerGate does for the catalogue.
+type stockGate struct{ owner *owner.Service }
+
+func (g stockGate) Require(ctx context.Context, act stock.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{
+		Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After,
+	})
+}
+
+func (g stockGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
+
+// stockCatalogue satisfies stock's Catalogue port with the catalogue service: what stock needs to know about a
+// product, and nothing else of it.
+type stockCatalogue struct{ catalog *catalog.Service }
+
+func (c stockCatalogue) Product(ctx context.Context, productID id.ID) (stockdomain.Product, error) {
+	p, err := c.catalog.Get(ctx, productID)
+	if err != nil {
+		return stockdomain.Product{}, err
+	}
+	ref, err := c.catalog.Reference(ctx)
+	if err != nil {
+		return stockdomain.Product{}, err
+	}
+	return stockProduct(p, ref), nil
+}
+
+func (c stockCatalogue) Products(ctx context.Context) ([]stockdomain.Product, error) {
+	all, err := c.catalog.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := c.catalog.Reference(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]stockdomain.Product, 0, len(all))
+	for _, p := range all {
+		out = append(out, stockProduct(p, ref))
+	}
+	return out, nil
+}
+
+func (c stockCatalogue) Package(ctx context.Context, packageProductID id.ID) (stockdomain.Package, bool, error) {
+	link, found, err := c.catalog.Package(ctx, packageProductID)
+	if err != nil || !found {
+		return stockdomain.Package{}, false, err
+	}
+	return stockdomain.Package{ContentProductID: link.ContentProductID, ContentQuantityMicro: link.ContentQuantityMicro}, true, nil
+}
+
+func (c stockCatalogue) Currencies(ctx context.Context) ([]stockdomain.Currency, error) {
+	currencies, err := c.catalog.Currencies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]stockdomain.Currency, 0, len(currencies))
+	for _, cur := range currencies {
+		out = append(out, stockdomain.Currency{Code: cur.Code, Decimals: cur.Decimals})
+	}
+	return out, nil
+}
+
+func stockProduct(p catalogdomain.Product, ref catalogdomain.Reference) stockdomain.Product {
+	return stockdomain.Product{ID: p.ID, UnitDecimals: ref.Units[p.UnitCode].InputDecimals, Active: p.Active}
 }

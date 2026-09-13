@@ -223,6 +223,14 @@ func (s *Service) Events(ctx context.Context, limit int) ([]Event, error) {
 	return s.store.Events(ctx, limit)
 }
 
+// Allowed reports whether the application is in owner mode, recording nothing.
+//
+// For guarded READS — average cost, stock value (L2 §6, D-L2.13). Viewing is not an act, and recording every glance
+// in the owner's history would bury the acts that matter. Require stays the guard for acts.
+func (s *Service) Allowed(context.Context) bool {
+	return s.elevatedFor(s.clk.Now()) > 0
+}
+
 // Require permits an owner-only act in owner mode and records it in the CALLER's transaction — so an act
 // that rolls back leaves no record that it happened. Outside owner mode it refuses with CodeRequired.
 func (s *Service) Require(ctx context.Context, act Act) error {

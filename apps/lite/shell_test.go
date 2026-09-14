@@ -13,6 +13,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	"github.com/mizan-erp/mizan/internal/lite/fx/infra/httpsource"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 	"github.com/mizan-erp/mizan/internal/platform/backup"
@@ -146,4 +147,21 @@ func TestClosingWithACancelledContextStillTakesTheClosingBackup(t *testing.T) {
 		}
 	}
 	t.Fatalf("no close-time snapshot after closing with a cancelled context; backups: %+v", list)
+}
+
+// TestTheShellPassesItsRateSourceToTheGraph: the application's providers reach bootstrap through the shell, and a shell
+// built without them — every test — starts a graph that cannot fetch.
+func TestTheShellPassesItsRateSourceToTheGraph(t *testing.T) {
+	var got bootstrap.Options
+	capture := func(ctx context.Context, opts bootstrap.Options) (*bootstrap.App, error) {
+		got = opts
+		return nil, errs.Internal(bootstrap.CodeStartupFailed, "captured")
+	}
+	s := newShell(api.New("v", litetest.Logger()), testPaths(t), litetest.Logger(), "v", capture)
+	s.rates = httpsource.New("v", nil, nil)
+	s.startup(context.Background())
+	waitBooted(t, s)
+	if got.RateSource != s.rates {
+		t.Fatal("the shell did not pass its rate source to bootstrap")
+	}
 }

@@ -109,7 +109,7 @@ drill lite-settings-isolated "settings may not import another Lite module" \
   internal/lite/settings/zz_drill.go "package settings
 import _ \"$M/internal/lite/owner\""
 
-drill lite-setup-reaches-only-its-ports "setup may reach settings and owner only" \
+drill lite-setup-reaches-only-its-ports "setup may reach other modules only through the ports it declares" \
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/catalog\""
 
@@ -134,12 +134,45 @@ drill lite-settings-forbids-stock "settings may not import another Lite module" 
   internal/lite/settings/zz_drill.go "package settings
 import _ \"$M/internal/lite/stock\""
 
-drill lite-setup-forbids-stock "setup may reach settings and owner only" \
+drill lite-setup-forbids-stock "setup may reach other modules only through the ports it declares" \
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/stock\""
 
 drill lite-bizdate-pure "textkey, numinput and bizdate may import only" \
   internal/lite/bizdate/zz_drill.go "package bizdate
 import _ \"$M/internal/kernel/clock\""
+
+# ── added in L3 ─────────────────────────────────────────────────────────────────────────────────────
+drill lite-fx-isolated "fx may not import another Lite module" \
+  internal/lite/fx/zz_drill.go "package fx
+import _ \"$M/internal/lite/settings\""
+
+drill lite-catalog-forbids-fx "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/fx\""
+
+drill lite-owner-forbids-fx "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/fx\""
+
+drill lite-settings-forbids-fx "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/fx/domain\""
+
+drill lite-stock-forbids-fx "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/fx\""
+
+drill lite-setup-forbids-fx "setup may reach other modules only through the ports it declares" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/fx\""
+
+drill lite-network-only-in-httpsource "only internal/lite/fx/infra/httpsource may open network connections" \
+  internal/lite/fx/zz_drill.go "package fx
+import _ \"net/http\""
+
+drill lite-network-in-demoseed "only internal/lite/fx/infra/httpsource may open network connections" \
+  internal/lite/demoseed/zz_drill.go "package demoseed
+import _ \"net\""
 
 echo "every Lite architecture rule was seen failing"

@@ -7,6 +7,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	"github.com/mizan-erp/mizan/internal/lite/stock/domain"
 )
@@ -29,12 +30,19 @@ type ValuationLineDTO struct {
 	OnHand      string `json:"onHand"`
 	AverageCost string `json:"averageCost"`
 	Value       string `json:"value"`
+	// ValueLocal is the line's value in the local currency at the rate in force, rounded once per line (L3 §5.4), or "".
+	ValueLocal string `json:"valueLocal"`
 }
 
 // ValuationDTO is every product's cost and value, and the total, in USD.
 type ValuationDTO struct {
 	Lines []ValuationLineDTO `json:"lines"`
 	Total string             `json:"total"`
+	// TotalLocal is the sum of the lines' local values; LocalCurrency and Rate say what it was converted at. All three are
+	// empty when there is no rate (Q-L3.6).
+	TotalLocal    string `json:"totalLocal"`
+	LocalCurrency string `json:"localCurrency"`
+	Rate          string `json:"rate"`
 }
 
 // MovementsQueryDTO asks for a product's history.
@@ -151,11 +159,33 @@ func (s *Stock) Valuation() envelope.Result[ValuationDTO] {
 			return ValuationDTO{}, err
 		}
 		out := ValuationDTO{Lines: make([]ValuationLineDTO, 0, len(v.Lines)), Total: domain.FormatMinor(v.TotalMinor)}
+		ref, err := app.Catalog.Reference(ctx)
+		if err != nil {
+			return ValuationDTO{}, err
+		}
+		rate, local, usd, hasRate, err := rateView(ctx, app, ref)
+		if err != nil {
+			return ValuationDTO{}, err
+		}
+		var totalLocal int64
 		for _, l := range v.Lines {
-			out.Lines = append(out.Lines, ValuationLineDTO{
+			line := ValuationLineDTO{
 				ProductID: l.ProductID.String(), OnHand: domain.FormatScaled(l.OnHandMicro, l.UnitDecimals),
 				AverageCost: domain.FormatScaled(l.AvgCostMicro, 2), Value: domain.FormatMinor(l.ValueMinor),
-			})
+			}
+			if hasRate {
+				converted, err := rate.LineInLocal(l.AvgCostMicro, l.OnHandMicro, local, usd)
+				if err != nil {
+					return ValuationDTO{}, err
+				}
+				line.ValueLocal = converted.Text()
+				totalLocal += converted.Minor
+			}
+			out.Lines = append(out.Lines, line)
+		}
+		if hasRate {
+			out.TotalLocal = fxdomain.FormatMinor(totalLocal, local.Decimals)
+			out.LocalCurrency, out.Rate = local.Code, fxdomain.FormatRate(rate.Nano)
 		}
 		return out, nil
 	})

@@ -21,7 +21,7 @@ func firstRun(t *testing.T, set *api.Set) string {
 	if !status.OK || status.Data.Complete {
 		t.Fatalf("FirstRunStatus before first run = %+v", status)
 	}
-	done := set.App.CompleteFirstRun(api.FirstRunInput{ShopName: "بقالية المونة", Locale: "ar", PIN: testPIN})
+	done := set.App.CompleteFirstRun(api.FirstRunInput{ShopName: "بقالية المونة", Locale: "ar", PIN: testPIN, Rate: "15000"})
 	if !done.OK || done.Data.RecoveryCode == "" {
 		t.Fatalf("CompleteFirstRun = %+v", done)
 	}
@@ -37,7 +37,7 @@ func TestFirstRunThroughTheBindings(t *testing.T) {
 	if s := set.Settings.Get(); s.Data.ShopName != "بقالية المونة" {
 		t.Fatalf("shop name = %+v", s.Data)
 	}
-	second := set.App.CompleteFirstRun(api.FirstRunInput{ShopName: "x", Locale: "ar", PIN: "739251"})
+	second := set.App.CompleteFirstRun(api.FirstRunInput{ShopName: "x", Locale: "ar", PIN: "739251", Rate: "15000"})
 	if code := codeOf(t, second); code != setup.CodeAlreadyComplete {
 		t.Fatalf("second first run = %s", code)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	"github.com/mizan-erp/mizan/internal/lite/catalog/domain"
+	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 )
 
 // Catalog is the product catalogue.
@@ -46,6 +47,10 @@ type ProductDTO struct {
 	// DTO stays a plain comparable value on both sides of the boundary.
 	PackageContentID       string `json:"packageContentId"`
 	PackageContentQuantity string `json:"packageContentQuantity"`
+	// ConvertedPrice is the price in the other currency at the rate in force, rounded once in Go (L3 §3.3, Q-L3.5), and
+	// ConvertedCurrency its code — both empty when there is no rate.
+	ConvertedPrice    string `json:"convertedPrice"`
+	ConvertedCurrency string `json:"convertedCurrency"`
 }
 
 // catalogueView is the reference data and package links a product is formatted against.
@@ -53,6 +58,10 @@ type catalogueView struct {
 	ref      domain.Reference
 	packages map[id.ID]domain.Package
 	units    map[id.ID]string // content product → its unit, for the content quantity's decimals
+	rate     fxdomain.Rate
+	hasRate  bool
+	local    fxdomain.Currency
+	usd      fxdomain.Currency
 }
 
 func loadCatalogueView(ctx context.Context, app *bootstrap.App) (catalogueView, error) {
@@ -65,6 +74,9 @@ func loadCatalogueView(ctx context.Context, app *bootstrap.App) (catalogueView, 
 		return catalogueView{}, err
 	}
 	v := catalogueView{ref: ref, packages: map[id.ID]domain.Package{}, units: map[id.ID]string{}}
+	if v.rate, v.local, v.usd, v.hasRate, err = rateView(ctx, app, ref); err != nil {
+		return catalogueView{}, err
+	}
 	for _, link := range links {
 		v.packages[link.PackageProductID] = link
 		content, err := app.Catalog.Get(ctx, link.ContentProductID)
@@ -81,6 +93,11 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 		ID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, Barcode: p.Barcode, UnitCode: p.UnitCode,
 		PriceCurrency: p.PriceCurrency, Price: p.PriceText(v.ref), QuickSlot: p.QuickSlot, Active: p.Active,
 		RowVersion: p.RowVersion,
+	}
+	if v.hasRate {
+		if converted, ok, err := v.rate.PriceInOther(p.PriceCurrency, p.PriceMicro, v.local, v.usd); err == nil && ok {
+			dto.ConvertedPrice, dto.ConvertedCurrency = converted.Text(), converted.Currency.Code
+		}
 	}
 	if link, ok := v.packages[p.ID]; ok {
 		dto.PackageContentID = link.ContentProductID.String()
@@ -274,6 +291,21 @@ func (c *Catalog) SetQuickSlot(in SetQuickSlotInput) envelope.Result[ProductDTO]
 		}
 		return app.Catalog.SetQuickSlot(ctx, parsed, slot)
 	})
+}
+
+// rateView reads the rate in force and the two currencies a conversion lands in. hasRate is false with no rate, or when
+// either currency is missing from the reference data.
+func rateView(ctx context.Context, app *bootstrap.App, ref domain.Reference) (fxdomain.Rate, fxdomain.Currency, fxdomain.Currency, bool, error) {
+	current, err := app.FX.Current(ctx)
+	if err != nil || !current.Found {
+		return fxdomain.Rate{}, fxdomain.Currency{}, fxdomain.Currency{}, false, err
+	}
+	local, okLocal := ref.Currencies[current.Local]
+	usd, okUSD := ref.Currencies[fxdomain.USD]
+	if !okLocal || !okUSD {
+		return fxdomain.Rate{}, fxdomain.Currency{}, fxdomain.Currency{}, false, nil
+	}
+	return current.Rate, fxdomain.Currency{Code: local.Code, Decimals: local.Decimals}, fxdomain.Currency{Code: usd.Code, Decimals: usd.Decimals}, true, nil
 }
 
 // SetPackageInput links a package product to what it opens into.

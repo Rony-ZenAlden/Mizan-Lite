@@ -3,6 +3,7 @@ import { useClient } from "@/api/ClientContext";
 import { BindingError } from "@/api/envelope";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { LOCALES, type Locale } from "@/i18n/messages";
+import { formatDecimal, normaliseNumber } from "@/i18n/numbers";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
@@ -66,10 +67,28 @@ function fieldError(error: unknown, field: string, errorText: (e: unknown) => st
 
 function FirstRunForm({ onComplete }: { onComplete: (recoveryCode: string) => void }) {
   const client = useClient();
-  const { t, errorText, locale, adoptStored } = useLocale();
+  const { t, tDynamic, errorText, locale, adoptStored } = useLocale();
   const [shopName, setShopName] = useState("");
   const [pin, setPin] = useState("");
   const [pinAgain, setPinAgain] = useState("");
+  const [rate, setRate] = useState("");
+  const [fetchedFrom, setFetchedFrom] = useState("");
+  const [fetching, setFetching] = useState(false);
+  const [localCurrency, setLocalCurrency] = useState("SYP");
+
+  // The currency the rate prices is data (DESIGN C8): read from Go, SYP until it answers.
+  useEffect(() => {
+    let cancelled = false;
+    client.fx
+      .current()
+      .then((r) => {
+        if (!cancelled && r.localCurrency) setLocalCurrency(r.localCurrency);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
   const [mismatch, setMismatch] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -84,7 +103,7 @@ function FirstRunForm({ onComplete }: { onComplete: (recoveryCode: string) => vo
     setMismatch(false);
     setBusy(true);
     try {
-      const result = await client.app.completeFirstRun({ shopName, locale, pin });
+      const result = await client.app.completeFirstRun({ shopName, locale, pin, rate });
       onComplete(result.recoveryCode);
     } catch (e) {
       setError(e);
@@ -93,9 +112,30 @@ function FirstRunForm({ onComplete }: { onComplete: (recoveryCode: string) => vo
     }
   };
 
+  // Fetched from the internet only when asked, and only into the field: the owner still confirms it by continuing.
+  const fetchRate = async () => {
+    setFetching(true);
+    setError(null);
+    try {
+      const quote = await client.fx.fetchQuote();
+      setRate(quote.rate);
+      setFetchedFrom(tDynamic(`rates.provider.${quote.provider}`));
+    } catch (e) {
+      setError(e);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const typedRate = normaliseNumber(rate);
+  // Read back without trailing zeros, so "15.000" — fifteen thousand to many shopkeepers — shows as the fifteen Go will
+  // store (L3 H1). Text, not arithmetic.
+  const readback = typedRate.ok && typedRate.value.includes(".") ? typedRate.value.replace(/0+$/, "").replace(/\.$/, "") : typedRate.ok ? typedRate.value : "";
+  const rateError = fieldError(error, "rate", errorText) ?? (rate !== "" && !typedRate.ok ? tDynamic(typedRate.code) : undefined);
   const shopError = fieldError(error, "shopName", errorText);
   const pinError = mismatch ? t("pin.mismatch") : fieldError(error, "pin", errorText);
-  const otherError = error && !shopError && !fieldError(error, "pin", errorText) ? errorText(error) : null;
+  const otherError =
+    error && !shopError && !fieldError(error, "pin", errorText) && !fieldError(error, "rate", errorText) ? errorText(error) : null;
 
   return (
     <main className="flex h-full items-center justify-center overflow-auto p-8">
@@ -127,6 +167,30 @@ function FirstRunForm({ onComplete }: { onComplete: (recoveryCode: string) => vo
 
         <PinField label={t("firstrun.pin")} hint={t("firstrun.pin_hint")} value={pin} onChange={(e) => setPin(e.target.value)} error={pinError} required />
         <PinField label={t("firstrun.pin_confirm")} value={pinAgain} onChange={(e) => setPinAgain(e.target.value)} required />
+
+        <div className="space-y-2">
+          <TextField
+            label={t("firstrun.rate", { currency: tDynamic(`currency.${localCurrency}`) })}
+            value={rate}
+            onChange={(e) => {
+              setRate(e.target.value);
+              setFetchedFrom("");
+            }}
+            error={rateError}
+            hint={fetchedFrom ? t("firstrun.rate_fetched", { provider: fetchedFrom }) : undefined}
+            inputMode="decimal"
+            dir="ltr"
+            required
+          />
+          {typedRate.ok ? (
+            <p className="text-sm font-medium" data-testid="rate-readback">
+              <bdi dir="ltr">{t("firstrun.rate_readback", { rate: formatDecimal(readback, locale), currency: tDynamic(`currency.${localCurrency}`) })}</bdi>
+            </p>
+          ) : null}
+          <Button onClick={() => void fetchRate()} disabled={fetching}>
+            {t("firstrun.rate_fetch")}
+          </Button>
+        </div>
 
         {otherError ? <Alert tone="danger" title={otherError} /> : null}
 

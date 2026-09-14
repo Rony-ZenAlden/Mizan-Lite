@@ -8,6 +8,7 @@
 // struct, so a field renamed in Go is a compile error here.
 import * as App from "../../wailsjs/go/api/App";
 import * as Catalog from "../../wailsjs/go/api/Catalog";
+import * as FX from "../../wailsjs/go/api/FX";
 import * as Owner from "../../wailsjs/go/api/Owner";
 import * as Settings from "../../wailsjs/go/api/Settings";
 import * as Stock from "../../wailsjs/go/api/Stock";
@@ -45,6 +46,11 @@ export type OpenPackageInput = Plain<api.OpenPackageInput>;
 export type ReverseReceiptInput = Plain<api.ReverseReceiptInput>;
 export type CorrectCostInput = Plain<api.CorrectCostInput>;
 export type Finding = Plain<api.FindingDTO>;
+export type RateState = Plain<api.RateDTO>;
+export type RateFetch = Plain<api.FetchDTO>;
+export type RateHistoryRow = Plain<api.RateHistoryDTO>;
+export type SetRateInput = Plain<api.SetRateInput>;
+export type Quote = Plain<api.QuoteDTO>;
 
 export function createClient() {
   return {
@@ -89,6 +95,15 @@ export function createClient() {
         unwrap(() => Stock.ReverseReceipt(api.ReverseReceiptInput.createFrom(input))),
       correctCost: (input: CorrectCostInput) => unwrap(() => Stock.CorrectCost(api.CorrectCostInput.createFrom(input))),
       verify: () => unwrap(Stock.Verify),
+    },
+    fx: {
+      current: () => unwrap(FX.Current),
+      history: (limit: number) => unwrap(() => FX.History(limit)),
+      setRate: (input: SetRateInput) => unwrap(() => FX.SetRate(api.SetRateInput.createFrom(input))),
+      refresh: () => unwrap(FX.Refresh),
+      acceptProposal: (fetchId: string) => unwrap(() => FX.AcceptProposal(fetchId)),
+      setMode: (mode: "automatic" | "manual") => unwrap(() => FX.SetMode(mode)),
+      fetchQuote: () => unwrap(FX.FetchQuote),
     },
     owner: {
       status: () => unwrap(Owner.Status),

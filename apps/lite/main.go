@@ -19,6 +19,7 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	"github.com/mizan-erp/mizan/internal/lite/fx/infra/httpsource"
 	"github.com/mizan-erp/mizan/internal/lite/logging"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 	settingsdb "github.com/mizan-erp/mizan/internal/lite/settings/infra/sqlite"
@@ -51,6 +52,8 @@ func main() {
 
 	set := api.New(version, log)
 	sh := newShell(set, resolved, log, version, bootstrap.Start)
+	// The real rate providers, registered here and nowhere else: automatic mode's primary source (L3 §14.6).
+	sh.rates = httpsource.New(version, httpsource.Providers(), nil)
 
 	if err := wails.Run(appOptions(appConfig{
 		Assets:         assets,

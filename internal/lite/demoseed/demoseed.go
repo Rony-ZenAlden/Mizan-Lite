@@ -9,7 +9,9 @@
 //
 // It grows with every phase (DESIGN §9.4). L1: first run and the catalogue. L2: a package link, opening stock
 // in both currencies, deliveries entered as invoice totals, a count and a write-off through the owner's PIN, one
-// tin opened — and then the stock verifier, which must find nothing (L2 §10).
+// tin opened — and then the stock verifier, which must find nothing (L2 §10). L3: an opening exchange rate at first run,
+// a later rate and a same-day correction, both through the owner's guard (L3 §11.2). The seeder registers no rate
+// provider: it never reaches the internet.
 package demoseed
 
 import (
@@ -22,6 +24,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	"github.com/mizan-erp/mizan/internal/lite/catalog/domain"
+	"github.com/mizan-erp/mizan/internal/lite/fx"
+	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
@@ -35,8 +39,19 @@ const CodeStockInconsistent = "lite.demoseed.stock_inconsistent"
 // directory — a decision for whoever runs this, not something a seeder should do on their behalf.
 const CodeAlreadySetUp = "lite.demoseed.already_set_up"
 
-//go:embed data/catalogue.json data/stock.json
+//go:embed data/catalogue.json data/stock.json data/rates.json
 var data embed.FS
+
+type rateLine struct {
+	Rate string `json:"rate"`
+	Note string `json:"note"`
+}
+
+type ratesData struct {
+	FirstRun   string   `json:"firstRun"`
+	Later      rateLine `json:"later"`
+	Correction rateLine `json:"correction"`
+}
 
 type costLine struct {
 	Product  string `json:"product"`
@@ -105,6 +120,8 @@ type Result struct {
 	Receipts     int
 	// StockValue is the valuation's total in USD, as the owner's screen shows it.
 	StockValue string
+	// Rate is the exchange rate in force after seeding.
+	Rate string
 }
 
 // Run seeds app. It refuses an installation that has completed first run.
@@ -128,9 +145,13 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	if err = readData("data/stock.json", &stk); err != nil {
 		return Result{}, err
 	}
+	var rates ratesData
+	if err = readData("data/rates.json", &rates); err != nil {
+		return Result{}, err
+	}
 
 	res := Result{ShopName: cat.ShopName}
-	if res.RecoveryCode, err = app.Setup.Run(ctx, setup.Input{ShopName: cat.ShopName, Locale: opts.Locale, PIN: opts.PIN}); err != nil {
+	if res.RecoveryCode, err = app.Setup.Run(ctx, setup.Input{ShopName: cat.ShopName, Locale: opts.Locale, PIN: opts.PIN, Rate: rates.FirstRun}); err != nil {
 		return Result{}, err
 	}
 
@@ -165,7 +186,7 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 		return Result{}, err
 	}
 	// The count and the write-off lower stock, so they are the owner's too (Q-L2.3) — seeded in the same owner mode.
-	if err := seedStock(ctx, app, stk, byName, &res); err != nil {
+	if err := seedStock(ctx, app, stk, rates, byName, &res); err != nil {
 		return Result{}, err
 	}
 	if _, err := app.Owner.EndElevation(ctx); err != nil {
@@ -176,7 +197,7 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 
 // seedStock runs L2's part of the demo in the order a shop adopting Lite would: what opens into what, the stock on
 // the shelves, the week's deliveries, a count, a write-off, and a tin opened for loose sale. Then it checks.
-func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, byName map[string]domain.Product, res *Result) error {
+func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, rates ratesData, byName map[string]domain.Product, res *Result) error {
 	product := func(name string) (domain.Product, error) {
 		p, ok := byName[name]
 		if !ok {
@@ -215,6 +236,12 @@ func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, byName ma
 			return err
 		}
 		res.Openings++
+	}
+	// The day's rate, then its correction: the history shows both, and the correction is in force (L3 §11.2).
+	for _, r := range []rateLine{rates.Later, rates.Correction} {
+		if _, err = app.FX.SetRate(ctx, fx.SetRateInput{Rate: r.Rate, Note: r.Note}); err != nil {
+			return err
+		}
 	}
 	for _, line := range stk.Receipts {
 		if err = receive(line, app.Stock.Receive); err != nil {
@@ -257,6 +284,11 @@ func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, byName ma
 		return err
 	}
 	res.StockValue = stockdomain.FormatMinor(valuation.TotalMinor)
+	current, err := app.FX.Current(ctx)
+	if err != nil {
+		return err
+	}
+	res.Rate = fxdomain.FormatRate(current.Rate.Nano)
 	return nil
 }
 

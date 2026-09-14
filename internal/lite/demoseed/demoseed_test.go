@@ -11,6 +11,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/lite/demoseed"
+	"github.com/mizan-erp/mizan/internal/lite/fx"
+	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
@@ -164,6 +166,37 @@ func TestTheSeederStocksTheShop(t *testing.T) {
 	}
 }
 
+func TestTheSeederSetsTheRates(t *testing.T) {
+	ctx := context.Background()
+	app := start(t)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := app.FX.Current(ctx)
+	if err != nil || !current.Found || res.Rate != "15000" || current.Rate.Seq != 3 || current.Rate.Source != fxdomain.SourceManual || current.Stale {
+		t.Fatalf("current = %+v, %v, result %q", current.Rate, err, res.Rate)
+	}
+	history, _ := app.FX.History(ctx, 10)
+	if len(history) != 3 || history[2].Rate.Source != fxdomain.SourceFirstRun || history[2].Rate.Nano != 14_800_000_000_000 ||
+		history[0].Change != "-1.3" || history[0].Rate.Note == "" {
+		t.Fatalf("history = %+v", history)
+	}
+	if app.FX.CanFetch() {
+		t.Fatal("the seeder's graph can reach the internet")
+	}
+	events, _ := app.Owner.Events(ctx, 200)
+	sets := 0
+	for _, e := range events {
+		if e.Kind == ownerdomain.EventGuardedAct && e.Action == fx.ActSetRate {
+			sets++
+		}
+	}
+	if sets != 2 {
+		t.Fatalf("%d rate changes in the owner's history, want 2", sets)
+	}
+}
+
 func TestTheSeederRefusesAnInstallationSomebodySetUp(t *testing.T) {
 	ctx := context.Background()
 	app := start(t)
@@ -197,4 +230,6 @@ func TestAWeakPINFailsTheRunAndSeedsNothing(t *testing.T) {
 	}
 }
 
-func setupInput() setup.Input { return setup.Input{ShopName: "x", Locale: "ar", PIN: "739251"} }
+func setupInput() setup.Input {
+	return setup.Input{ShopName: "x", Locale: "ar", PIN: "739251", Rate: "15000"}
+}

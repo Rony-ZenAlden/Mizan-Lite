@@ -193,6 +193,15 @@ export function StockScreen() {
       {valuation ? (
         <p role="status" className="font-semibold">
           {t("stock.total_value", { value: formatDecimal(valuation.total, locale) })}
+          {valuation.localCurrency ? (
+            <span className="ms-2 font-normal">
+              {t("stock.total_value_local", {
+                value: formatDecimal(valuation.totalLocal, locale),
+                currency: tDynamic(`currency.${valuation.localCurrency}`),
+                rate: formatDecimal(valuation.rate, locale),
+              })}
+            </span>
+          ) : null}
         </p>
       ) : null}
 
@@ -208,6 +217,9 @@ export function StockScreen() {
                 <th className="p-2 text-start">{t("stock.col.on_hand")}</th>
                 {valuation ? <th className="p-2 text-start">{t("stock.col.average_cost")}</th> : null}
                 {valuation ? <th className="p-2 text-start">{t("stock.col.value")}</th> : null}
+                {valuation?.localCurrency ? (
+                  <th className="p-2 text-start">{t("stock.col.value_local", { currency: tDynamic(`currency.${valuation.localCurrency}`) })}</th>
+                ) : null}
                 <th className="p-2 text-start">{t("stock.col.actions")}</th>
               </tr>
             </thead>
@@ -221,6 +233,7 @@ export function StockScreen() {
                     <td className="p-2">{amount(levels.get(p.id) ?? "0")}</td>
                     {valuation ? <td className="p-2">{line ? amount(line.averageCost) : null}</td> : null}
                     {valuation ? <td className="p-2">{line ? amount(line.value) : null}</td> : null}
+                    {valuation?.localCurrency ? <td className="p-2">{line?.valueLocal ? amount(line.valueLocal) : null}</td> : null}
                     <td className="p-2">
                       <div className="flex flex-wrap gap-2">
                         <Button onClick={() => setOpen({ kind: "receive", product: p })} disabled={!p.active}>

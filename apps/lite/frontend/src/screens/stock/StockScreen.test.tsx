@@ -93,9 +93,14 @@ describe("StockScreen — receiving", () => {
     await userEvent.selectOptions(within(dialog).getByLabelText("Currency"), "SYP");
     await userEvent.type(within(dialog).getByLabelText("Quantity (Litre)"), "25");
     await userEvent.type(within(dialog).getByLabelText("Total cost"), "450000");
+    // Pre-filled from the rate in force (D-L3.12), and editable: the rate the shop paid at is the one kept.
+    const rateField = within(dialog).getByLabelText("Exchange rate paid (pounds per dollar)");
+    expect(rateField).toHaveValue("15000");
+    expect(within(dialog).getByText("Rate in force: 15,000")).toBeInTheDocument();
+    await userEvent.clear(rateField);
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
 
-    await userEvent.type(within(dialog).getByLabelText("Exchange rate paid (pounds per dollar)"), "15000");
+    await userEvent.type(rateField, "15000");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await settle();
     expect(receive).toHaveBeenCalledWith({ productId: aProduct().id, quantity: "25", costMode: "total", cost: "450000", currency: "SYP", rate: "15000", note: "" });
@@ -218,7 +223,13 @@ describe("StockScreen — costs are the owner's", () => {
     const valuation = vi.fn(async () => {
       calls += 1;
       if (calls === 1) throw required();
-      return { lines: [{ productId: aProduct().id, onHand: "12.500", averageCost: "3.20", value: "40.00" }], total: "1140.00" };
+      return {
+        lines: [{ productId: aProduct().id, onHand: "12.500", averageCost: "3.20", value: "40.00", valueLocal: "600000" }],
+        total: "1140.00",
+        totalLocal: "17100000",
+        localCurrency: "SYP",
+        rate: "15000",
+      };
     });
     const verify = vi.fn(async () => [{ code: "lite.stock.verify.level_mismatch", productId: aProduct().id, movementId: "" }]);
     renderWithProviders(<StockScreen />, { client: fakeClient({ stock: { valuation, verify }, owner: { elevate: async () => elevated } }), locale: "en" });
@@ -347,5 +358,33 @@ describe("StockScreen — opening a package", () => {
 
     expect(openPackage).toHaveBeenCalledWith({ packageProductId: "tin", packages: "1" });
     expect(within(dialog).getByText("Opened. Now on hand: 2 Tin and 16.000 Litre.")).toBeInTheDocument();
+  });
+});
+
+describe("StockScreen — value in pounds", () => {
+  it("in owner mode shows each line and the total in pounds at the rate Go used", async () => {
+    renderWithProviders(<StockScreen />, { client: fakeClient({ owner: { status: async () => elevated } }), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Show costs" }));
+    await settle();
+    expect(screen.getByRole("columnheader", { name: "Value (Syrian pound at today's rate)" })).toBeInTheDocument();
+    expect(within(oilRow()).getByText("600,000")).toBeInTheDocument();
+    expect(screen.getByText(/≈ 600,000 Syrian pound at 15,000/)).toBeInTheDocument();
+  });
+
+  it("with no rate shows no pound column at all", async () => {
+    const valuation = async () => ({
+      lines: [{ productId: aProduct().id, onHand: "12.500", averageCost: "3.20", value: "40.00", valueLocal: "" }],
+      total: "40.00",
+      totalLocal: "",
+      localCurrency: "",
+      rate: "",
+    });
+    renderWithProviders(<StockScreen />, { client: fakeClient({ stock: { valuation } }), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Show costs" }));
+    await settle();
+    expect(screen.getByRole("columnheader", { name: "Value (USD)" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /today's rate/ })).not.toBeInTheDocument();
   });
 });

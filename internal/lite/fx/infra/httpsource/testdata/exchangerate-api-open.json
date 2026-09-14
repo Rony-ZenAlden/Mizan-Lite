@@ -1,0 +1,17 @@
+{
+  "result": "success",
+  "provider": "https://www.exchangerate-api.com",
+  "documentation": "https://www.exchangerate-api.com/docs/free",
+  "terms_of_use": "https://www.exchangerate-api.com/terms",
+  "time_last_update_unix": 1789257751,
+  "time_last_update_utc": "Sun, 13 Sep 2026 00:02:31 +0000",
+  "time_next_update_unix": 1789346061,
+  "base_code": "USD",
+  "rates": {
+    "USD": 1,
+    "EUR": 0.861838,
+    "GBP": 0.739449,
+    "SYP": 121.957862,
+    "TRY": 48.598129
+  }
+}

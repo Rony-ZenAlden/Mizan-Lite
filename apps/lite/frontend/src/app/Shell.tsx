@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { useClient } from "@/api/ClientContext";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { LOCALES, isLocale } from "@/i18n/messages";
-import { formatCountdown } from "@/i18n/numbers";
+import { formatCountdown, formatDecimal } from "@/i18n/numbers";
+import { formatAge } from "@/i18n/time";
+import { useRate } from "@/rates/RateProvider";
 import { useOwner } from "@/owner/OwnerProvider";
 import { Button } from "@/ui/Button";
 import { Alert } from "@/ui/Alert";
@@ -12,8 +14,9 @@ import { ROUTES } from "./routes";
 /** The application frame: header, navigation, and the routed screen. Mounted only once boot is ready. */
 export function Shell() {
   const client = useClient();
-  const { t, locale, setLocale, adoptStored, saveError, errorText } = useLocale();
+  const { t, tDynamic, locale, setLocale, adoptStored, saveError, errorText } = useLocale();
   const { status, lock } = useOwner();
+  const { rate } = useRate();
   const [shopName, setShopName] = useState("");
 
   // The document was served in the language read from the database before launch. If that read fell
@@ -44,6 +47,23 @@ export function Shell() {
           <p className="text-lg font-semibold">{shopName || t("app.name")}</p>
           {shopName ? <p className="text-xs text-text-muted">{t("app.name")}</p> : null}
         </div>
+        {rate ? (
+          <Link
+            to="/rates"
+            data-testid="header-rate"
+            className={`rounded-md px-3 py-1 text-sm ${!rate.set || rate.stale ? "bg-danger-subtle text-danger" : "hover:bg-surface"}`}
+          >
+            {rate.set ? (
+              <>
+                <bdi dir="ltr">{t("header.rate", { rate: formatDecimal(rate.rate, locale), currency: tDynamic(`currency.${rate.localCurrency}`) })}</bdi>
+                {" · "}
+                {rate.stale ? t("header.rate_stale") : formatAge(rate.ageSeconds, locale, t("age.just_now"))}
+              </>
+            ) : (
+              t("header.no_rate")
+            )}
+          </Link>
+        ) : null}
         {status.elevatedSeconds > 0 ? (
           <div role="status" className="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1">
             <span className="text-sm font-medium text-primary">

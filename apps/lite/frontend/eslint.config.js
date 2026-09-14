@@ -52,6 +52,8 @@ export default [
         console: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
         HTMLElement: "readonly",
         HTMLButtonElement: "readonly",
         HTMLDivElement: "readonly",

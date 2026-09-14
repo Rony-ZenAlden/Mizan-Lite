@@ -6,10 +6,11 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Client, Movement, Product } from "./client";
+import type { Client, Movement, Product, RateState } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
+import { RateProvider } from "@/rates/RateProvider";
 import { FAKE_CLIENT_SENTINEL } from "./sentinel";
 
 type Overrides = { [G in keyof Client]?: Partial<Client[G]> };
@@ -29,6 +30,42 @@ export function aProduct(overrides: Partial<Product> = {}): Product {
     rowVersion: 1,
     packageContentId: "",
     packageContentQuantity: "",
+    convertedPrice: "48750",
+    convertedCurrency: "SYP",
+    ...overrides,
+  };
+}
+
+/** The last internet check, as Go sends it, with any field replaceable. */
+export function aFetch(overrides: Partial<RateState["lastFetch"]> = {}): RateState["lastFetch"] {
+  return {
+    id: "0190a1b2-0000-7000-8000-00000000f001",
+    attemptedAt: "2026-09-14T06:00:00.000Z",
+    ageSeconds: 600,
+    outcome: "held_today",
+    provider: "currency-api-jsdelivr",
+    rate: "13007.5355",
+    errorCode: "",
+    change: "-13.3",
+    acceptable: false,
+    ...overrides,
+  };
+}
+
+/** The rate in force, as Go sends it: set by the owner today, automatic mode, with any field replaceable. */
+export function aRate(overrides: Partial<RateState> = {}): RateState {
+  return {
+    set: true,
+    localCurrency: "SYP",
+    rate: "15000",
+    source: "manual",
+    recordedAt: "2026-09-14T06:00:00.000Z",
+    ageSeconds: 3 * 3600,
+    stale: false,
+    mode: "automatic",
+    canFetch: true,
+    hasFetch: false,
+    lastFetch: aFetch(),
     ...overrides,
   };
 }
@@ -97,8 +134,11 @@ export function fakeClient(overrides: Overrides = {}): Client {
     stock: {
       levels: async () => [{ productId: aProduct().id, onHand: "12.500" }],
       valuation: async () => ({
-        lines: [{ productId: aProduct().id, onHand: "12.500", averageCost: "3.20", value: "40.00" }],
+        lines: [{ productId: aProduct().id, onHand: "12.500", averageCost: "3.20", value: "40.00", valueLocal: "600000" }],
         total: "40.00",
+        totalLocal: "600000",
+        localCurrency: "SYP",
+        rate: "15000",
       }),
       movements: async () => ({ movements: [aMovement()], costsVisible: false, reversibleId: "" }),
       receive: async (input) => ({ productId: input.productId, onHand: "1" }),
@@ -112,6 +152,18 @@ export function fakeClient(overrides: Overrides = {}): Client {
       reverseReceipt: async () => ({ productId: aProduct().id, onHand: "40.000" }),
       correctCost: async (input) => ({ productId: input.productId, onHand: "12.500" }),
       verify: async () => [],
+    },
+    fx: {
+      current: async () => aRate(),
+      history: async () => [
+        { id: "r2", rate: "15000", source: "manual", provider: "", recordedAt: "2026-09-14T07:00:00.000Z", change: "-1.3", note: "تصحيح" },
+        { id: "r1", rate: "15200", source: "manual", provider: "", recordedAt: "2026-09-14T06:00:00.000Z", change: "", note: "" },
+      ],
+      setRate: async (input) => aRate({ rate: input.rate }),
+      refresh: async () => aRate({ hasFetch: true }),
+      acceptProposal: async () => aRate({ source: "fetched", rate: "13007.5355", hasFetch: true }),
+      setMode: async (mode) => aRate({ mode }),
+      fetchQuote: async () => ({ provider: "currency-api-jsdelivr", rate: "13007.5355" }),
     },
     owner: {
       status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 0 }),
@@ -128,6 +180,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
     catalog: { ...base.catalog, ...overrides.catalog },
     owner: { ...base.owner, ...overrides.owner },
     stock: { ...base.stock, ...overrides.stock },
+    fx: { ...base.fx, ...overrides.fx },
   };
 }
 
@@ -140,9 +193,11 @@ export function renderWithProviders(
     <ClientProvider client={client}>
       <LocaleProvider initial={locale}>
         <OwnerProvider>
-          <MemoryRouter initialEntries={[route]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            {ui}
-          </MemoryRouter>
+          <RateProvider>
+            <MemoryRouter initialEntries={[route]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              {ui}
+            </MemoryRouter>
+          </RateProvider>
         </OwnerProvider>
       </LocaleProvider>
     </ClientProvider>,

@@ -11,6 +11,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	"github.com/mizan-erp/mizan/internal/lite/fx"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 )
 
@@ -25,6 +26,9 @@ type shell struct {
 	log     *slog.Logger
 	version string
 	start   startFunc
+	// rates fetches the exchange rate from the internet. Set by main to the real providers; nil in tests, so no test
+	// of the shell reaches the network (L3 D-L3.26).
+	rates fx.Source
 
 	mu      sync.Mutex
 	ctx     context.Context
@@ -56,6 +60,7 @@ func (s *shell) boot(ctx context.Context) {
 		AppVersion:     s.version,
 		StartScheduler: true,
 		Progress:       s.set.Progress,
+		RateSource:     s.rates,
 	})
 	if err != nil {
 		s.set.Fail(err)

@@ -23,7 +23,7 @@ func ImportBoundary(cfg *config.Config) (*analysis.Analyzer, bool) {
 		Run: func(pass *analysis.Pass) (any, error) {
 			pkgPath := pass.Pkg.Path()
 			for _, b := range r.Boundaries {
-				if !match.Any(b.AppliesTo, pkgPath) {
+				if !match.Any(b.AppliesTo, pkgPath) || match.Any(b.Except, pkgPath) {
 					continue
 				}
 				for _, f := range pass.Files {

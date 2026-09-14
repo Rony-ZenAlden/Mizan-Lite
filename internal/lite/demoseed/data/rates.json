@@ -1,0 +1,6 @@
+{
+  "comment": "Demo exchange rates for lite-demoseed (L3 §11.2): illustrative market figures in old pounds per US dollar, not real data.",
+  "firstRun": "14800",
+  "later": { "rate": "15200", "note": "سعر السوق صباحاً" },
+  "correction": { "rate": "15000", "note": "تصحيح — كتبت خطأ" }
+}

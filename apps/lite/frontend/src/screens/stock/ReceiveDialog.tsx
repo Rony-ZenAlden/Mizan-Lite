@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { Currency, Product, StockLevel, Unit } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { formatDecimal } from "@/i18n/numbers";
+import { useRate } from "@/rates/RateProvider";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { SelectField, TextField } from "@/ui/Field";
@@ -34,7 +36,8 @@ export function ReceiveDialog({
   onClose: () => void;
 }) {
   const client = useClient();
-  const { t, tDynamic, errorText } = useLocale();
+  const { t, tDynamic, errorText, locale } = useLocale();
+  const { rate: inForce } = useRate();
   const [kind, setKind] = useState<"receipt" | "opening">(firstMovement ? "opening" : "receipt");
   const [quantity, setQuantity] = useState("");
   const [costMode, setCostMode] = useState<"total" | "unit">("total");
@@ -91,7 +94,17 @@ export function ReceiveDialog({
             <option value="total">{t("stock.cost_mode_total")}</option>
             <option value="unit">{t("stock.cost_mode_unit")}</option>
           </SelectField>
-          <SelectField label={t("stock.currency")} value={currency} onChange={(e) => setCurrency(e.target.value)} error={errors.field("currency")}>
+          <SelectField
+            label={t("stock.currency")}
+            value={currency}
+            onChange={(e) => {
+              const next = e.target.value;
+              setCurrency(next);
+              // Pre-filled from the rate in force (Q-L2.1, D-L3.12), still editable: the rate the shop paid at is the one kept.
+              if (next !== COST_CURRENCY && rate === "" && inForce?.set && inForce.localCurrency === next) setRate(inForce.rate);
+            }}
+            error={errors.field("currency")}
+          >
             {currencies.map((c) => (
               <option key={c.code} value={c.code}>
                 {tDynamic(`currency.${c.code}`)}
@@ -114,6 +127,11 @@ export function ReceiveDialog({
             value={rate}
             onChange={(e) => setRate(e.target.value)}
             error={hint(rateCode) ?? errors.field("rate")}
+            hint={
+              inForce?.set
+                ? t(inForce.stale ? "stock.rate_in_force_stale" : "stock.rate_in_force", { rate: formatDecimal(inForce.rate, locale) })
+                : undefined
+            }
             inputMode="decimal"
             dir="ltr"
             required

@@ -100,7 +100,7 @@ func TestStockThroughTheBindings(t *testing.T) {
 		t.Fatalf("owner-mode movement = %+v", newest)
 	}
 	valuation := set.Stock.Valuation()
-	if !valuation.OK || valuation.Data.Total != "78.00" || valuation.Data.Lines[0] != (api.ValuationLineDTO{ProductID: bulgur.ID, OnHand: "65.000", AverageCost: "1.20", Value: "78.00"}) {
+	if !valuation.OK || valuation.Data.Total != "78.00" || valuation.Data.Lines[0] != (api.ValuationLineDTO{ProductID: bulgur.ID, OnHand: "65.000", AverageCost: "1.20", Value: "78.00", ValueLocal: "1170000"}) {
 		t.Fatalf("Valuation = %+v", valuation)
 	}
 	if r := set.Stock.Count(lower); !r.OK || r.Data.OnHand != "63.500" {

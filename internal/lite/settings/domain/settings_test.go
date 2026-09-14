@@ -157,3 +157,27 @@ func TestShopNameIsStoredAndApplied(t *testing.T) {
 		t.Fatalf("clearing the shop name = %v", err)
 	}
 }
+
+func TestRateModeAndLocalCurrency(t *testing.T) {
+	d := domain.Defaults()
+	if d.RateMode != domain.RateManual || d.LocalCurrency != "SYP" {
+		t.Fatalf("defaults = %+v", d)
+	}
+	got, problems := domain.FromStored(map[string]string{domain.KeyRateMode: "automatic", domain.KeyLocalCurrency: "SYP"})
+	if got.RateMode != domain.RateAutomatic || got.LocalCurrency != "SYP" || len(problems) != 0 {
+		t.Fatalf("stored = %+v, %v", got, problems)
+	}
+	got, problems = domain.FromStored(map[string]string{domain.KeyRateMode: "sometimes", domain.KeyLocalCurrency: "syp"})
+	if got.RateMode != domain.RateManual || got.LocalCurrency != "SYP" || len(problems) != 2 {
+		t.Fatalf("damaged values were used: %+v, %v", got, problems)
+	}
+	automatic := "automatic"
+	next, changes, err := d.Apply(domain.Update{RateMode: &automatic})
+	if err != nil || next.RateMode != domain.RateAutomatic || len(changes) != 1 || changes[0] != (domain.Change{Key: domain.KeyRateMode, Value: "automatic"}) {
+		t.Fatalf("Apply = %+v %v %v", next, changes, err)
+	}
+	bad := "auto"
+	if _, _, err := d.Apply(domain.Update{RateMode: &bad}); errs.CodeOf(err) != domain.CodeInvalidRateMode {
+		t.Fatalf("bad mode: %v", err)
+	}
+}

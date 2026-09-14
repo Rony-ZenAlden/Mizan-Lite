@@ -7,10 +7,11 @@ import { FirstRunGate } from "./FirstRun";
 
 const shell = <p>the shell</p>;
 
-async function fill(shop: string, pin: string, again: string) {
+async function fill(shop: string, pin: string, again: string, rate = "15000") {
   await userEvent.type(await screen.findByLabelText("Shop name"), shop);
   await userEvent.type(screen.getByLabelText("Owner PIN"), pin);
   await userEvent.type(screen.getByLabelText("Owner PIN again"), again);
+  await userEvent.type(screen.getByLabelText("Today's exchange rate (Syrian pound per 1 USD)"), rate);
 }
 
 describe("FirstRunGate", () => {
@@ -30,7 +31,7 @@ describe("FirstRunGate", () => {
     await fill("بقالية المونة", "246813", "246813");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(completeFirstRun).toHaveBeenCalledWith({ shopName: "بقالية المونة", locale: "en", pin: "246813" });
+    expect(completeFirstRun).toHaveBeenCalledWith({ shopName: "بقالية المونة", locale: "en", pin: "246813", rate: "15000" });
     expect(await screen.findByTestId("recovery-code")).toHaveTextContent("ABCD-EFGH-JKMN-PQRS");
     expect(screen.queryByText("the shell")).not.toBeInTheDocument();
 
@@ -77,5 +78,48 @@ describe("FirstRunGate", () => {
     await userEvent.click(screen.getByRole("button", { name: "English" }));
     expect(document.documentElement).toHaveAttribute("dir", "ltr");
     expect(screen.getByRole("heading", { name: "Set up your shop" })).toBeInTheDocument();
+  });
+
+  it("reads the typed rate back, so 15.000 is seen to mean fifteen", async () => {
+    const client = fakeClient({ app: { firstRunStatus: async () => ({ complete: false }) } });
+    renderWithProviders(<FirstRunGate>{shell}</FirstRunGate>, { client, locale: "en" });
+    const field = await screen.findByLabelText("Today's exchange rate (Syrian pound per 1 USD)");
+    await userEvent.type(field, "15.000");
+    expect(screen.getByTestId("rate-readback")).toHaveTextContent("1 USD = 15 Syrian pound");
+    await userEvent.clear(field);
+    await userEvent.type(field, "١٥٠٠٠");
+    expect(screen.getByTestId("rate-readback")).toHaveTextContent("1 USD = 15,000 Syrian pound");
+  });
+
+  it("fetches a rate from the internet into the field, names where it came from, and still sends what the field holds", async () => {
+    const fetchQuote = vi.fn(async () => ({ provider: "currency-api-jsdelivr", rate: "13007.5355" }));
+    const completeFirstRun = vi.fn(async () => ({ recoveryCode: "ABCD-EFGH-JKMN-PQRS" }));
+    const client = fakeClient({ app: { firstRunStatus: async () => ({ complete: false }), completeFirstRun }, fx: { fetchQuote } });
+    renderWithProviders(<FirstRunGate>{shell}</FirstRunGate>, { client, locale: "en" });
+
+    await userEvent.type(await screen.findByLabelText("Shop name"), "المونة");
+    await userEvent.type(screen.getByLabelText("Owner PIN"), "246813");
+    await userEvent.type(screen.getByLabelText("Owner PIN again"), "246813");
+    await userEvent.click(screen.getByRole("button", { name: "Fetch from the internet" }));
+    const field = screen.getByLabelText("Today's exchange rate (Syrian pound per 1 USD)");
+    await vi.waitFor(() => expect(field).toHaveValue("13007.5355"));
+    expect(screen.getByText(/Fetched from Currency API. Check it against the market rate/)).toBeInTheDocument();
+
+    // The owner corrects it to the market rate before continuing: what is sent is what the field holds.
+    await userEvent.clear(field);
+    await userEvent.type(field, "15000");
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(completeFirstRun).toHaveBeenCalledWith({ shopName: "المونة", locale: "en", pin: "246813", rate: "15000" });
+  });
+
+  it("offline, the fetch says so and the rate can still be typed", async () => {
+    const fetchQuote = vi.fn(async () => {
+      throw new BindingError({ code: "lite.fx.fetch_offline", messageKey: "lite.fx.fetch_offline" });
+    });
+    const client = fakeClient({ app: { firstRunStatus: async () => ({ complete: false }) }, fx: { fetchQuote } });
+    renderWithProviders(<FirstRunGate>{shell}</FirstRunGate>, { client, locale: "en" });
+    await userEvent.click(await screen.findByRole("button", { name: "Fetch from the internet" }));
+    expect(await screen.findByText(/No internet connection/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Today's exchange rate (Syrian pound per 1 USD)")).toBeEnabled();
   });
 });

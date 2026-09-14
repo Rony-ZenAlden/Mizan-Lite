@@ -142,3 +142,50 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L2.i12 | `bizdate` joins `lite-pure-text` | approved | [L2 §14](phases/L2_STOCK.md) |
 | D-L2.i13 | The product form's package section saves on its own | approved | [L2 §14](phases/L2_STOCK.md) |
 | D-L2.i14 | Guarded stock acts record quantities (and averages) before → after | approved | [L2 §14](phases/L2_STOCK.md) |
+
+## L3 — approved 2026-09-14, with the owner's dual-mode requirement
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L3.1 | `fx` owns `fx_rates`; insert-only; local per USD at 10⁻⁹; inverse never stored | approved | [L3 §6](phases/L3_RATES.md) |
+| D-L3.2 | Rate in force = newest place (`seq`), not latest timestamp; no scheduled or back-dated rates (amends DESIGN §4.3, §5) | approved | [L3 §2.3](phases/L3_RATES.md) |
+| D-L3.3 | No `source`, `fetch_log_id` or `fx_fetch_log` in v1 (Q1) | **superseded** at approval by the dual-mode requirement (D-L3.15–26) | [L3 §2.3](phases/L3_RATES.md) |
+| D-L3.4 | Kernel `LineExtensionMulRate`, `LineExtensionDivRate`, `Money.DivRate` replace D6's `LineExtensionConverted` | approved | [L3 §5](phases/L3_RATES.md) |
+| D-L3.5 | A rate: positive, at most four decimals | approved | [L3 §4.1](phases/L3_RATES.md) |
+| D-L3.6 | A change beyond the threshold refused in Go unless confirmed | approved | [L3 §4.2](phases/L3_RATES.md) |
+| D-L3.7 | Every read carries age and staleness; stale warns, never refuses | approved | [L3 §4.3](phases/L3_RATES.md) |
+| D-L3.8 | "No rate" is a state; nothing converts at 1 | approved | [L3 §4.4](phases/L3_RATES.md) |
+| D-L3.9 | Setting a rate needs the owner PIN, recorded in its transaction; the same figure may be recorded again | approved | [L3 §8](phases/L3_RATES.md) |
+| D-L3.10 | `currency.local` declared (default `SYP`), not editable on screen in v1 | approved | [L3 §3.2](phases/L3_RATES.md) |
+| D-L3.11 | Conversions only as Go-computed strings; stock value in pounds summed per line | approved | [L3 §5.4](phases/L3_RATES.md) |
+| D-L3.12 | Receipt form pre-fills the rate in force; the receipt keeps the rate typed on it | approved | [L3 §3.3](phases/L3_RATES.md) |
+| D-L3.13 | Everyone sees the rate and its age in the header | approved | [L3 §10](phases/L3_RATES.md) |
+| D-L3.14 | `lite-fx-isolated`; every other isolation rule forbids `fx`; setup reaches it through a port | approved | [L3 §11.1](phases/L3_RATES.md) |
+| Q-L3.1 | Out of date when not updated today; prompt internet refresh or owner re-confirmation | approved | [L3 §14.2](phases/L3_RATES.md) |
+| Q-L3.2 | 20%; a fetched or typed shift beyond it needs the owner PIN and confirmation | approved | [L3 §14.2](phases/L3_RATES.md) |
+| Q-L3.3 | Rate required at first run, fetched or typed | approved | [L3 §14.2](phases/L3_RATES.md) |
+| Q-L3.4 | Code SYP; market thousands, ~15,000 per USD | approved | [L3 §14.2](phases/L3_RATES.md) |
+| Q-L3.5 | Prices in both currencies on Products | approved | [L3 §14.2](phases/L3_RATES.md) |
+| Q-L3.6 | Stock value in SYP beside USD in owner mode | approved | [L3 §14.2](phases/L3_RATES.md) |
+| Q-L3.7 | A rate takes effect immediately, fetched or typed | approved | [L3 §14.2](phases/L3_RATES.md) |
+| R-L3 | **Owner's requirement:** dual rate modes — automatic internet fetch (primary), manual owner rate with PIN (fallback, override) | approved | [L3 §14.1](phases/L3_RATES.md) |
+| D-L3.15 | Modes `automatic` / `manual` in `fx.mode`; switching needs the owner PIN — **manual is the default** (owner, at commit) | approved | [L3 §14.4](phases/L3_RATES.md) |
+| D-L3.16 | The fetch decision (manual mode → held; no rate → proposal; manual today → held; >20% → proposal; same today → unchanged; else applied) | approved | [L3 §14.5](phases/L3_RATES.md) |
+| D-L3.17 | The first rate is always a person's | approved | [L3 §14.5](phases/L3_RATES.md) |
+| D-L3.18 | A manual rate holds for the rest of its business day in automatic mode | approved | [L3 §14.3](phases/L3_RATES.md) |
+| D-L3.19 | A fetch beyond 20% is a proposal, accepted with the PIN only while newest and still compared against the rate in force | approved | [L3 §14.5](phases/L3_RATES.md) |
+| D-L3.20 | Every attempt logged in `fx_fetches` with a code; fetched rates name their fetch | approved | [L3 §14.7](phases/L3_RATES.md) |
+| D-L3.21 | The network call never runs inside a transaction | approved | [L3 §14.5](phases/L3_RATES.md) |
+| D-L3.22 | Three providers in order, explicitly scaled; exact decimal parsing; fetched rates rounded to 4 decimals | approved | [L3 §14.6](phases/L3_RATES.md) |
+| D-L3.23 | `net/http` only in `fx/infra/httpsource`; no test reaches the internet; one opt-in live test | approved | [L3 §14.6](phases/L3_RATES.md) |
+| D-L3.24 | Refresh open to everyone, one attempt a minute; accepting a proposal and switching mode are the owner's | approved | [L3 §14.8](phases/L3_RATES.md) |
+| D-L3.25 | First run can fetch a quote into the rate field; the owner confirms it | approved | [L3 §14.2](phases/L3_RATES.md) |
+| D-L3.26 | Providers registered by `apps/lite` only; seeder and tests offline by construction | approved | [L3 §14.6](phases/L3_RATES.md) |
+| D-L3.i1 | archlint import boundaries gain an `except` list (shared tool) | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i2 | The last fetch's age is measured in Go | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i3 | `Refresh` split: last attempt → network → one-transaction record | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i4 | First run reads the local currency from Go | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i5 | A typed rate is read back without trailing zeros | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i6 | Provider names are catalog strings; ExchangeRate-API attributed | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i7 | An offline or unchanged fetch is not a failed job | approved | [L3 §16](phases/L3_RATES.md) |
+| D-L3.i8 | Update now disabled, with a reason, when no provider exists | approved | [L3 §16](phases/L3_RATES.md) |

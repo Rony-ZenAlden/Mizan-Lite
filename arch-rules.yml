@@ -136,6 +136,7 @@ rules:
         description: The catalogue imports no other Lite module.
         applies_to: ["self/internal/lite/catalog/**"]
         forbid:
+          - "self/internal/lite/fx/**"
           - "self/internal/lite/stock/**"
           - "self/internal/lite/owner/**"
           - "self/internal/lite/settings/**"
@@ -149,6 +150,7 @@ rules:
         description: The owner module imports no other Lite module.
         applies_to: ["self/internal/lite/owner/**"]
         forbid:
+          - "self/internal/lite/fx/**"
           - "self/internal/lite/stock/**"
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/settings/**"
@@ -162,6 +164,7 @@ rules:
         description: The settings module imports no other Lite module.
         applies_to: ["self/internal/lite/settings/**"]
         forbid:
+          - "self/internal/lite/fx/**"
           - "self/internal/lite/stock/**"
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/owner/**"
@@ -175,17 +178,19 @@ rules:
         description: First run orchestrates settings and owner, and nothing it has no reason to know.
         applies_to: ["self/internal/lite/setup/**"]
         forbid:
+          - "self/internal/lite/fx/**"
           - "self/internal/lite/stock/**"
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
-        message: "setup may reach settings and owner only"
+        message: "setup may reach other modules only through the ports it declares"
 
       - name: lite-stock-isolated
         description: Stock imports no other Lite module; it reaches products and the owner through ports it declares.
         applies_to: ["self/internal/lite/stock/**"]
         forbid:
+          - "self/internal/lite/fx/**"
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/owner/**"
           - "self/internal/lite/settings/**"
@@ -194,6 +199,29 @@ rules:
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
         message: "stock may not import another Lite module — declare a port (see stock.Catalogue and stock.OwnerGate)"
+
+      - name: lite-fx-isolated
+        description: The exchange-rate module imports no other Lite module; it reaches settings and the owner through ports.
+        applies_to: ["self/internal/lite/fx/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "fx may not import another Lite module — declare a port (see fx.Settings and fx.OwnerGate)"
+
+      - name: lite-network-only-in-httpsource
+        description: >
+          One package reaches the internet: fx/infra/httpsource, the exchange-rate providers (L3 §14.6). Anything else in
+          Lite that opens a connection is a feature nobody reviewed as one — and a test that could reach the network.
+        applies_to: ["self/internal/lite/**", "self/cmd/lite-demoseed/**"]
+        except: ["self/internal/lite/fx/infra/httpsource"]
+        forbid: ["net", "net/http", "net/http/**", "net/rpc", "net/smtp"]
+        message: "only internal/lite/fx/infra/httpsource may open network connections"
 
   # ── Forbidden calls, scoped by location ─────────────────────────────────────
   forbid-call:

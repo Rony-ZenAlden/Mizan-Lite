@@ -20,12 +20,16 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	catalogdb "github.com/mizan-erp/mizan/internal/lite/catalog/infra/sqlite"
+	"github.com/mizan-erp/mizan/internal/lite/fx"
+	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	fxdb "github.com/mizan-erp/mizan/internal/lite/fx/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/locales"
 	"github.com/mizan-erp/mizan/internal/lite/migrations"
 	"github.com/mizan-erp/mizan/internal/lite/owner"
 	ownerdb "github.com/mizan-erp/mizan/internal/lite/owner/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 	"github.com/mizan-erp/mizan/internal/lite/settings"
+	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	settingsdb "github.com/mizan-erp/mizan/internal/lite/settings/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
@@ -48,6 +52,9 @@ const (
 // KeyScheduledBackup is the daily snapshot's job key.
 const KeyScheduledBackup = "lite.scheduled_backup"
 
+// KeyRateRefresh is the exchange-rate fetch's job key (L3 §14.8).
+const KeyRateRefresh = "lite.fx.refresh"
+
 const (
 	defaultBackupInterval = 24 * time.Hour
 	// closeBackupMinAge is the data-loss window at close: a snapshot is taken as the window closes
@@ -56,6 +63,8 @@ const (
 	// defaultShutdownStep bounds each shutdown step. An ERP that will not close is a worse defect
 	// than a skipped close-time snapshot; the daily one still covers the shop.
 	defaultShutdownStep = 10 * time.Second
+	// defaultRateRefresh is how often the rate is fetched in the background (L3 §14.4).
+	defaultRateRefresh = time.Hour
 )
 
 // Options configures the composition root.
@@ -82,6 +91,12 @@ type Options struct {
 	PINHasher crypto.Hasher
 	// Random draws recovery codes. Default crypto/rand.Reader.
 	Random io.Reader
+	// RateSource fetches the exchange rate from the internet. nil — the default — registers no provider and no fetch
+	// job: tests and the demo seeder are offline by construction, and only apps/lite passes the real providers
+	// (D-L3.26).
+	RateSource fx.Source
+	// RateRefreshEvery is how often the background job fetches the rate. Default 1h.
+	RateRefreshEvery time.Duration
 	// Location is the shop's time zone, which decides a movement's business date. Default time.Local — which Go reads
 	// from the operating system on Windows and macOS alike. Never time.LoadLocation: Windows ships no zone database.
 	Location *time.Location
@@ -109,6 +124,9 @@ func (o Options) withDefaults() Options {
 	if o.Location == nil {
 		o.Location = time.Local
 	}
+	if o.RateRefreshEvery <= 0 {
+		o.RateRefreshEvery = defaultRateRefresh
+	}
 	return o
 }
 
@@ -124,6 +142,7 @@ type App struct {
 	Owner     *owner.Service
 	Setup     *setup.Service
 	Stock     *stock.Service
+	FX        *fx.Service
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -180,7 +199,9 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 
 	app.Owner = owner.NewService(db, ownerdb.NewStore(db), opts.PINHasher, opts.Clock, opts.Random, opts.Logger)
 	app.Catalog = catalog.NewService(db, catalogdb.NewStore(db, opts.Clock), ownerGate{owner: app.Owner})
-	app.Setup = setup.NewService(db, app.Settings, app.Owner)
+	app.FX = fx.NewService(db, fxdb.NewStore(db), fxSettings{settings: app.Settings}, fxGate{owner: app.Owner},
+		opts.RateSource, opts.Clock, opts.Location)
+	app.Setup = setup.NewService(db, app.Settings, app.Owner, setupRates{fx: app.FX})
 	app.Stock = stock.NewService(db, stockdb.NewStore(db, opts.Clock), stockCatalogue{catalog: app.Catalog},
 		stockGate{owner: app.Owner}, opts.Clock, opts.Location)
 
@@ -196,6 +217,10 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	if err = app.registerBackupJob(); err != nil {
 		_ = db.Close()
 		return nil, wrapKeepingParams(err, CodeStartupFailed, "declaring the backup job")
+	}
+	if err = app.registerRateJob(); err != nil {
+		_ = db.Close()
+		return nil, wrapKeepingParams(err, CodeStartupFailed, "declaring the rate job")
 	}
 
 	if opts.StartScheduler {
@@ -266,6 +291,32 @@ func (a *App) registerBackupJob() error {
 			a.log.WarnContext(ctx, "the scheduled backup was taken but old ones were not pruned",
 				slog.Any("error", err))
 		}
+		return nil
+	})
+}
+
+// registerRateJob fetches the exchange rate in the background: at launch (RunOnce catch-up — a laptop opened in the
+// morning fetches once, not once per missed hour) and hourly after. Registered only when a provider is. A failed fetch is
+// logged in fx_fetches and is not a failed job: being offline is ordinary, and the header already says so.
+func (a *App) registerRateJob() error {
+	if !a.FX.CanFetch() {
+		return nil
+	}
+	return a.Scheduler.Registry().Register(jobs.Def{
+		Key:         KeyRateRefresh,
+		Schedule:    jobs.Every(a.opts.RateRefreshEvery),
+		Timeout:     time.Minute,
+		MaxAttempts: 1,
+		CatchUp:     jobs.RunOnce,
+		Description: "lite.jobs.rate_refresh",
+	}, func(ctx context.Context, _ jobs.RunContext) error {
+		fetch, err := a.FX.Refresh(ctx)
+		if err != nil {
+			return err
+		}
+		a.log.InfoContext(ctx, "exchange rate fetched",
+			slog.String("outcome", string(fetch.Outcome)), slog.String("provider", fetch.Provider),
+			slog.String("error_code", fetch.ErrorCode))
 		return nil
 	})
 }
@@ -420,4 +471,41 @@ func (c stockCatalogue) Currencies(ctx context.Context) ([]stockdomain.Currency,
 
 func stockProduct(p catalogdomain.Product, ref catalogdomain.Reference) stockdomain.Product {
 	return stockdomain.Product{ID: p.ID, UnitDecimals: ref.Units[p.UnitCode].InputDecimals, Active: p.Active}
+}
+
+// fxGate satisfies fx's OwnerGate port with the owner service.
+type fxGate struct{ owner *owner.Service }
+
+func (g fxGate) Require(ctx context.Context, act fx.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After})
+}
+
+// fxSettings satisfies fx's Settings port with the settings service: the mode and the local currency.
+type fxSettings struct{ settings *settings.Service }
+
+func (s fxSettings) RateMode(ctx context.Context) (fxdomain.Mode, error) {
+	current, err := s.settings.Get(ctx)
+	if err != nil {
+		return "", err
+	}
+	return fxdomain.ParseMode(string(current.RateMode))
+}
+
+func (s fxSettings) SetRateMode(ctx context.Context, mode fxdomain.Mode) error {
+	value := string(mode)
+	_, err := s.settings.Update(ctx, settingsdomain.Update{RateMode: &value})
+	return err
+}
+
+func (s fxSettings) LocalCurrency(ctx context.Context) (string, error) {
+	current, err := s.settings.Get(ctx)
+	return current.LocalCurrency, err
+}
+
+// setupRates satisfies first run's Rates port with the fx service.
+type setupRates struct{ fx *fx.Service }
+
+func (r setupRates) RecordFirstRun(ctx context.Context, rate string) error {
+	_, err := r.fx.RecordFirstRun(ctx, rate)
+	return err
 }

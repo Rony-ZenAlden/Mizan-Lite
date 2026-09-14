@@ -9,9 +9,13 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
+	"github.com/mizan-erp/mizan/internal/lite/fx"
+	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/fx/fxtest"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
+	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
@@ -26,7 +30,7 @@ func startFast(t *testing.T) (*bootstrap.App, catalogdomain.Product) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Shutdown(ctx) })
-	if _, err = app.Setup.Run(ctx, setup.Input{ShopName: "المونة", Locale: "ar", PIN: "246813"}); err != nil {
+	if _, err = app.Setup.Run(ctx, setup.Input{ShopName: "المونة", Locale: "ar", PIN: "246813", Rate: "15000"}); err != nil {
 		t.Fatal(err)
 	}
 	p, err := app.Catalog.Create(ctx, catalogdomain.Draft{NameAR: "زيت زيتون", UnitCode: "l", PriceCurrency: "USD", Price: "3.25"})
@@ -170,5 +174,70 @@ func TestStockReachesTheRealOwnerAndCatalogue(t *testing.T) {
 	if _, err := app.Stock.Receive(ctx, stock.ReceiveInput{ProductID: p.ID, Quantity: "1",
 		Cost: stockdomain.CostInput{Amount: "1", Currency: "USD"}}); errs.CodeOf(err) != stockdomain.CodeInactiveProduct {
 		t.Fatalf("a receipt into a deactivated product: %v", err)
+	}
+}
+
+// TestRatesReachTheRealOwnerAndSettings proves fx's two adapters: setting the rate and switching the mode ask the real
+// owner, and the mode is stored in the settings table.
+func TestRatesReachTheRealOwnerAndSettings(t *testing.T) {
+	ctx := context.Background()
+	app, _ := startFast(t)
+	current, err := app.FX.Current(ctx)
+	if err != nil || !current.Found || current.Rate.Source != fxdomain.SourceFirstRun || current.Local != "SYP" || current.Mode != fxdomain.ModeManual {
+		t.Fatalf("after first run: %+v, %v", current, err)
+	}
+	if _, err := app.FX.SetRate(ctx, fx.SetRateInput{Rate: "15200"}); errs.CodeOf(err) != ownerdomain.CodeRequired {
+		t.Fatalf("a rate outside owner mode: %v", err)
+	}
+	if _, err := app.FX.SetMode(ctx, "automatic"); errs.CodeOf(err) != ownerdomain.CodeRequired {
+		t.Fatalf("a mode switch outside owner mode: %v", err)
+	}
+	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.FX.SetRate(ctx, fx.SetRateInput{Rate: "15200"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.FX.SetMode(ctx, "automatic"); err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := app.Settings.Get(ctx)
+	if stored.RateMode != settingsdomain.RateAutomatic {
+		t.Fatalf("the mode was not stored: %+v", stored)
+	}
+	if guardedActs(t, app) != 2 {
+		t.Fatal("the rate and the mode switch are not both in the owner's history")
+	}
+	if app.FX.CanFetch() {
+		t.Fatal("a graph built with no rate source can fetch")
+	}
+	for _, key := range app.Scheduler.Registry().Keys() {
+		if key == bootstrap.KeyRateRefresh {
+			t.Fatal("the rate job was registered with no provider")
+		}
+	}
+}
+
+// TestTheRateJobFetchesWhenAProviderIsRegistered drives the job directly with a scripted source: the graph offline by
+// construction until a source is passed, and the job logging an attempt when one is.
+func TestTheRateJobFetchesWhenAProviderIsRegistered(t *testing.T) {
+	ctx := context.Background()
+	source := &fxtest.Source{}
+	source.Answer("currency-api-jsdelivr", 15_100_000_000_000)
+	app, err := bootstrap.Start(ctx, bootstrap.Options{Paths: dataDir(t), Logger: litetest.Logger(), PINHasher: ownertest.Hasher(), RateSource: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = app.Shutdown(ctx) })
+	if _, err = app.Setup.Run(ctx, setup.Input{ShopName: "المونة", Locale: "ar", PIN: "246813", Rate: "15000"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Scheduler.RunNow(ctx, bootstrap.KeyRateRefresh); err != nil {
+		t.Fatalf("RunNow: %v", err)
+	}
+	// Manual by default (the owner's decision): the job fetches for reference and applies nothing.
+	current, _ := app.FX.Current(ctx)
+	if source.Calls != 1 || !current.Fetched || current.Fetch.Outcome != fxdomain.OutcomeHeldMode || current.Rate.Nano != 15_000_000_000_000 {
+		t.Fatalf("after the job: %d calls, %+v", source.Calls, current)
 	}
 }

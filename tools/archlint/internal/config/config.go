@@ -40,9 +40,12 @@ type Boundary struct {
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
 	AppliesTo   []string `yaml:"applies_to"`
-	AllowOnly   []string `yaml:"allow_only"`
-	Forbid      []string `yaml:"forbid"`
-	Message     string   `yaml:"message"`
+	// Except removes packages from AppliesTo: the one package a boundary exists to permit (added for Mizan Lite L3,
+	// where only fx/infra/httpsource may import net/http).
+	Except    []string `yaml:"except"`
+	AllowOnly []string `yaml:"allow_only"`
+	Forbid    []string `yaml:"forbid"`
+	Message   string   `yaml:"message"`
 }
 
 // ForbidCallRule forbids specific function calls in specific locations.
@@ -124,6 +127,7 @@ func (c *Config) expand() {
 	for i := range c.Rules.ImportBoundary.Boundaries {
 		b := &c.Rules.ImportBoundary.Boundaries[i]
 		rep(b.AppliesTo)
+		rep(b.Except)
 		rep(b.AllowOnly)
 		rep(b.Forbid)
 	}

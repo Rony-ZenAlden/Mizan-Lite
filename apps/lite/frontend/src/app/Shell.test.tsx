@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { fakeClient, renderWithProviders } from "@/api/testing";
+import { aRate, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import { ROUTES } from "./routes";
 import { Shell } from "./Shell";
@@ -114,5 +114,34 @@ describe("Shell header", () => {
     renderWithProviders(<Shell />, { client, locale: "en" });
     await settled("en");
     expect(screen.queryByRole("button", { name: "Lock" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Shell — the exchange rate in the header", () => {
+  it("shows the rate and its age to everyone, linking to the rate screen", async () => {
+    renderWithProviders(<Shell />, { client: fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr" }) } }), locale: "en" });
+    await settled("en");
+    const chip = await screen.findByTestId("header-rate");
+    expect(chip).toHaveTextContent("1 USD = 15,000 Syrian pound · 3 hours ago");
+    expect(chip).toHaveAttribute("href", "/rates");
+  });
+
+  it("marks a rate not updated today, and says when there is none", async () => {
+    const stale = fakeClient({
+      settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr" }) },
+      fx: { current: async () => aRate({ stale: true }) },
+    });
+    const { unmount } = renderWithProviders(<Shell />, { client: stale, locale: "en" });
+    await settled("en");
+    expect(await screen.findByTestId("header-rate")).toHaveTextContent("not updated today");
+    unmount();
+
+    const none = fakeClient({
+      settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr" }) },
+      fx: { current: async () => aRate({ set: false, rate: "" }) },
+    });
+    renderWithProviders(<Shell />, { client: none, locale: "en" });
+    await settled("en");
+    expect(await screen.findByTestId("header-rate")).toHaveTextContent("No exchange rate");
   });
 });

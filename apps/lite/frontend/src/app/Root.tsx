@@ -3,6 +3,7 @@ import { ClientProvider } from "@/api/ClientContext";
 import type { Client } from "@/api/client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import { OwnerProvider } from "@/owner/OwnerProvider";
+import { RateProvider } from "@/rates/RateProvider";
 import { Boot } from "./Boot";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { FirstRunGate } from "./FirstRun";
@@ -20,9 +21,11 @@ export function Root({ client }: { client: Client }) {
           <Boot>
             <FirstRunGate>
               <OwnerProvider>
-                <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                  <Shell />
-                </HashRouter>
+                <RateProvider>
+                  <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                    <Shell />
+                  </HashRouter>
+                </RateProvider>
               </OwnerProvider>
             </FirstRunGate>
           </Boot>

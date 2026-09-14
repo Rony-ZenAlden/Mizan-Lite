@@ -15,7 +15,7 @@ async function settle() {
 
 describe("ProductsScreen", () => {
   it("lists products with translated units, grouped Latin-digit prices and currency names", async () => {
-    const products = vi.fn(async () => [aProduct({ nameAr: "دبس رمان", unitCode: "jar", priceCurrency: "SYP", price: "45000" })]);
+    const products = vi.fn(async () => [aProduct({ nameAr: "دبس رمان", unitCode: "jar", priceCurrency: "SYP", price: "45000", convertedPrice: "3.00", convertedCurrency: "USD" })]);
     renderWithProviders(<ProductsScreen />, { client: fakeClient({ catalog: { products } }), locale: "ar" });
     await settle();
 
@@ -23,6 +23,9 @@ describe("ProductsScreen", () => {
     expect(within(row).getByText("مرطبان")).toBeInTheDocument();
     expect(within(row).getByText("45,000")).toBeInTheDocument();
     expect(within(row).getByText(/ليرة سورية/)).toBeInTheDocument();
+    // The price in the other currency, as Go computed it at the rate in force (Q-L3.5).
+    expect(within(row).getByText("≈ 3.00")).toBeInTheDocument();
+    expect(within(row).getByText(/دولار أمريكي/)).toBeInTheDocument();
     expect(products).toHaveBeenCalledWith({ text: "", includeInactive: false });
   });
 

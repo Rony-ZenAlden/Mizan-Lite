@@ -100,6 +100,8 @@ type FirstRunInput struct {
 	ShopName string `json:"shopName"`
 	Locale   string `json:"locale"`
 	PIN      string `json:"pin"`
+	// Rate is today's exchange rate, local currency per US dollar (Q-L3.3).
+	Rate string `json:"rate"`
 }
 
 // FirstRunResultDTO carries the recovery code — returned exactly once, and stored nowhere readable.
@@ -107,10 +109,10 @@ type FirstRunResultDTO struct {
 	RecoveryCode string `json:"recoveryCode"`
 }
 
-// CompleteFirstRun sets the shop name, the language and the owner PIN together.
+// CompleteFirstRun sets the shop name, the language, the owner PIN and today's exchange rate together.
 func (a *App) CompleteFirstRun(in FirstRunInput) envelope.Result[FirstRunResultDTO] {
 	return call(a.core, "App.CompleteFirstRun", func(ctx context.Context, app *bootstrap.App) (FirstRunResultDTO, error) {
-		code, err := app.Setup.Run(ctx, setup.Input{ShopName: in.ShopName, Locale: in.Locale, PIN: in.PIN})
+		code, err := app.Setup.Run(ctx, setup.Input{ShopName: in.ShopName, Locale: in.Locale, PIN: in.PIN, Rate: in.Rate})
 		return FirstRunResultDTO{RecoveryCode: code}, err
 	})
 }

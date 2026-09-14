@@ -86,6 +86,7 @@ export function ProductsScreen() {
                 <th className="p-2 text-start">{t("products.col.name")}</th>
                 <th className="p-2 text-start">{t("products.col.unit")}</th>
                 <th className="p-2 text-start">{t("products.col.price")}</th>
+                <th className="p-2 text-start">{t("products.col.converted")}</th>
                 <th className="p-2 text-start">{t("products.col.slot")}</th>
                 <th className="p-2 text-start">{t("products.col.status")}</th>
                 <th className="p-2 text-start">{t("products.col.actions")}</th>
@@ -98,6 +99,15 @@ export function ProductsScreen() {
                   <td className="p-2">{tDynamic(`uom.${p.unitCode}`)}</td>
                   <td className="p-2">
                     <bdi dir="ltr">{formatDecimal(p.price, locale)}</bdi> {tDynamic(`currency.${p.priceCurrency}`)}
+                  </td>
+                  <td className="p-2 text-text-muted">
+                    {p.convertedPrice ? (
+                      <>
+                        <bdi dir="ltr">≈ {formatDecimal(p.convertedPrice, locale)}</bdi> {tDynamic(`currency.${p.convertedCurrency}`)}
+                      </>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="p-2">
                     <select

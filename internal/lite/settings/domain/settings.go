@@ -20,6 +20,43 @@ const KeyLocale = "ui.locale"
 // KeyShopName is the stored key for the shop's name (L1 §8): the header now, the receipt from L7.
 const KeyShopName = "shop.name"
 
+// KeyRateMode is the stored key for how the exchange rate is kept (L3 §14.4). Written only through the fx module,
+// because changing it needs the owner.
+const KeyRateMode = "fx.mode"
+
+// KeyLocalCurrency is the stored key for the currency the exchange rate prices (L3 §3.2). Not editable in v1: nothing
+// writes it, and a stored value must name a currency code.
+const KeyLocalCurrency = "currency.local"
+
+// CodeInvalidRateMode is returned when a rate mode is not one Lite has.
+const CodeInvalidRateMode = "lite.settings.invalid_rate_mode"
+
+// RateMode is how the exchange rate is kept.
+type RateMode string
+
+// The rate modes. Manual is the default, by the owner's decision at L3's approval: the internet's rate is official-style
+// and below the market rate the shop trades at (L3 §14.3 F2), so a fresh installation prices from the owner's rate and
+// shows the internet's for reference. Automatic is one PIN away.
+const (
+	RateAutomatic RateMode = "automatic"
+	RateManual    RateMode = "manual"
+)
+
+// ParseRateMode accepts exactly a rate mode.
+func ParseRateMode(raw string) (RateMode, error) {
+	switch RateMode(strings.TrimSpace(raw)) {
+	case RateAutomatic:
+		return RateAutomatic, nil
+	case RateManual:
+		return RateManual, nil
+	default:
+		return "", errs.Validation(CodeInvalidRateMode, "unknown rate mode").WithParam("value", raw)
+	}
+}
+
+// DefaultLocalCurrency is the local currency of a fresh installation (Q-L3.4).
+const DefaultLocalCurrency = "SYP"
+
 // Shop name codes and bound.
 const (
 	CodeShopNameRequired = "lite.settings.shop_name_required"
@@ -93,11 +130,15 @@ type Settings struct {
 	Locale Locale
 	// ShopName is empty until first run sets it.
 	ShopName string
+	// RateMode is how the exchange rate is kept (L3).
+	RateMode RateMode
+	// LocalCurrency is the code the exchange rate prices (L3).
+	LocalCurrency string
 }
 
 // Defaults is what a fresh installation uses.
 func Defaults() Settings {
-	return Settings{Locale: Arabic}
+	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency}
 }
 
 // ProblemKind says what was wrong with a stored row.
@@ -143,6 +184,19 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.ShopName = name
+		case KeyRateMode:
+			mode, err := ParseRateMode(value)
+			if err != nil {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.RateMode = mode
+		case KeyLocalCurrency:
+			if !isCurrencyCode(value) {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.LocalCurrency = value
 		default:
 			problems = append(problems, Problem{Key: key, Value: value, Kind: UnknownKey})
 		}
@@ -160,6 +214,7 @@ type Change struct {
 type Update struct {
 	Locale   *string
 	ShopName *string
+	RateMode *string
 }
 
 // Apply validates an update against the current settings and returns the result and the rows that
@@ -187,5 +242,28 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 			changes = append(changes, Change{Key: KeyShopName, Value: name})
 		}
 	}
+	if u.RateMode != nil {
+		mode, err := ParseRateMode(*u.RateMode)
+		if err != nil {
+			return s, nil, err
+		}
+		if mode != s.RateMode {
+			next.RateMode = mode
+			changes = append(changes, Change{Key: KeyRateMode, Value: string(mode)})
+		}
+	}
 	return next, changes, nil
+}
+
+// isCurrencyCode reports three upper-case ASCII letters — a code's shape; whether it exists is the database's to say.
+func isCurrencyCode(v string) bool {
+	if len(v) != 3 {
+		return false
+	}
+	for _, r := range v {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
 }

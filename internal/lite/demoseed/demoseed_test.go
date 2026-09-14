@@ -17,6 +17,8 @@ import (
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
+	"github.com/mizan-erp/mizan/internal/lite/sales"
+	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
@@ -232,4 +234,88 @@ func TestAWeakPINFailsTheRunAndSeedsNothing(t *testing.T) {
 
 func setupInput() setup.Input {
 	return setup.Input{ShopName: "x", Locale: "ar", PIN: "739251", Rate: "15000"}
+}
+
+func TestTheSeederRingsUpADayAtTheTill(t *testing.T) {
+	ctx := context.Background()
+	app := start(t)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ten sales, one voided: 38,000 + 30,000 + 135,000 + 487,500 + 243,000 + 89,500 + 120,000 + 36,000 pounds still posted,
+	// 1,179,000 in all, and $16.25.
+	if res.Sales != 10 || res.Voids != 1 || res.Takings["SYP"] != "1179000" || res.Takings["USD"] != "16.25" {
+		t.Fatalf("result = %+v", res)
+	}
+
+	day, err := app.Sales.Day(ctx, "")
+	if err != nil || len(day.Sales) != 10 {
+		t.Fatalf("day = %d sales, %v", len(day.Sales), err)
+	}
+	byReceipt := map[int64]salesdomain.Sale{}
+	for _, s := range day.Sales {
+		byReceipt[s.ReceiptNo] = s
+	}
+	for no, want := range map[int64]struct {
+		settlement, tender, change string
+		total, rounding, tendered  int64
+		changeMinor                int64
+	}{
+		2:  {"SYP", "SYP", "SYP", 30_000, 250, 30_000, 0},     // weighed, rounded up to the note
+		3:  {"SYP", "USD", "SYP", 135_000, 0, 2_000, 165_000}, // a $20 note for pounds, change in pounds
+		4:  {"USD", "USD", "USD", 1_625, 0, 2_000, 375},       // a dollar sale, dollar change
+		7:  {"SYP", "SYP", "SYP", 89_500, -200, 89_500, 0},    // rounded down to the note
+		10: {"SYP", "SYP", "SYP", 36_000, 0, 50_000, 14_000},  // change in pounds
+	} {
+		s := byReceipt[no]
+		if s.SettlementCurrency != want.settlement || s.TenderedCurrency != want.tender || s.ChangeCurrency != want.change ||
+			s.TotalMinor != want.total || s.RoundingMinor != want.rounding || s.TenderedMinor != want.tendered || s.ChangeMinor != want.changeMinor {
+			t.Errorf("receipt %d = %+v", no, s)
+		}
+	}
+	if v := byReceipt[8]; v.Status != salesdomain.StatusVoided || v.VoidReason == "" {
+		t.Fatalf("receipt 8 = %+v", v)
+	}
+	if d := byReceipt[6]; d.Lines[0].DiscountPercentMicro != 100_000 || d.TotalMinor != 243_000 {
+		t.Fatalf("the discounted ghee = %+v", d)
+	}
+	if d := byReceipt[9]; d.DiscountLocalMinor != 2_000 || d.TotalMinor != 120_000 {
+		t.Fatalf("the sale discount = %+v", d)
+	}
+
+	// The cheese went below zero, and the voided coffee came back.
+	levels, _ := app.Stock.Levels(ctx)
+	products, _ := app.Catalog.Search(ctx, "", true)
+	onHand := map[string]int64{}
+	for _, l := range levels {
+		for _, p := range products {
+			if p.ID == l.ProductID {
+				onHand[p.NameEN] = l.OnHandMicro
+			}
+		}
+	}
+	if onHand["White cheese"] != -250_000 || onHand["Coffee with cardamom"] != 20_000_000 || onHand["Coarse bulgur"] != 18_250_000 {
+		t.Fatalf("on hand = cheese %d, coffee %d, bulgur %d", onHand["White cheese"], onHand["Coffee with cardamom"], onHand["Coarse bulgur"])
+	}
+
+	events, _ := app.Owner.Events(ctx, 500)
+	acts := map[string]int{}
+	for _, e := range events {
+		if e.Kind == ownerdomain.EventGuardedAct {
+			acts[e.Action]++
+		}
+	}
+	if acts[sales.ActDiscount] != 2 || acts[sales.ActVoid] != 1 {
+		t.Fatalf("guarded acts = %v", acts)
+	}
+	if status, _ := app.Owner.Status(ctx); status.ElevatedFor != 0 {
+		t.Fatal("the seeder left the installation in owner mode")
+	}
+	if _, err := app.Sales.Verify(ctx); errs.CodeOf(err) != sales.CodeOwnerRequired {
+		t.Fatal("the sales verifier answered outside owner mode")
+	}
+	if findings, err := app.Sales.VerifyUnguarded(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("the sales verifier found %+v, %v", findings, err)
+	}
 }

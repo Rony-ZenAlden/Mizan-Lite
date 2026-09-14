@@ -524,7 +524,7 @@ func TestAUSDCostCorrectionFigure(t *testing.T) {
 
 func TestEveryKindAndReasonMatchesTheSchema(t *testing.T) {
 	// The schema's lists, as 0003_stock.sql spells them; the store test proves the database accepts each.
-	kinds := "opening receipt receipt_reversal count adjustment package_out content_in cost_correction"
+	kinds := "opening receipt receipt_reversal count adjustment package_out content_in cost_correction sale sale_void"
 	got := ""
 	for i, k := range domain.Kinds {
 		if i > 0 {
@@ -565,5 +565,81 @@ func TestQuantitiesFollowTheSharedFixture(t *testing.T) {
 		if code(err) != c.Error {
 			t.Errorf("ParseQuantity(%q, %d) = %v, want %q", c.Input, c.Decimals, err, c.Error)
 		}
+	}
+}
+
+// L4: the till's movements.
+
+func TestASaleMayTakeStockBelowZero(t *testing.T) {
+	before := stocked(t, 2*u, 17*u)
+	saleID, lineID := newID(t), newID(t)
+	m, after, err := domain.Sale(before, stamp(t), 5*u, saleID, lineID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkChain(t, before, m, after)
+	if m.Kind != domain.KindSale || m.QuantityMicro != -5*u || after.OnHandMicro != -3*u || m.SaleID != saleID || m.SaleLineID != lineID {
+		t.Fatalf("m = %+v", m)
+	}
+	if _, _, err := domain.Sale(before, stamp(t), 0, saleID, lineID); code(err) != domain.CodeQuantityRequired {
+		t.Fatalf("a sale of nothing: %v", err)
+	}
+}
+
+func TestASaleNeverMovesTheAverage(t *testing.T) {
+	before := stocked(t, 10*u, 17*u)
+	m, after, _ := domain.Sale(before, stamp(t), 3*u, newID(t), newID(t))
+	if after.AvgCostMicro != 17*u || m.UnitCostMicro != 17*u || m.AvgCostAfterMicro != 17*u {
+		t.Fatalf("m = %+v", m)
+	}
+}
+
+func TestANeverReceivedProductSellsWithItsCostUnknown(t *testing.T) {
+	never := domain.Level{ProductID: newID(t)}
+	if never.CostKnown() {
+		t.Fatal("a product that never moved has a known cost")
+	}
+	m, after, err := domain.Sale(never, stamp(t), u, newID(t), newID(t))
+	if err != nil || m.UnitCostMicro != 0 || after.OnHandMicro != -u || after.AvgCostMicro != 0 {
+		t.Fatalf("m = %+v, %v", m, err)
+	}
+	if !stocked(t, u, 0).CostKnown() {
+		t.Fatal("stock received at no cost has an unknown cost; it is known to be zero")
+	}
+	soldOut := domain.Level{ProductID: newID(t), AvgCostMicro: 17 * u, LastSeq: 2, LastMovementID: newID(t)}
+	if !soldOut.CostKnown() {
+		t.Fatal("a sold-out product has lost its average")
+	}
+}
+
+func TestAVoidAveragesInAtTheCostTheGoodsLeftAt(t *testing.T) {
+	l := stocked(t, 10*u, 10*u)
+	sale, l, _ := domain.Sale(l, stamp(t), 4*u, newID(t), newID(t))
+	// A delivery at a higher cost arrives before the void: 6 at 10 and 6 at 16 average 13.
+	_, l, _ = domain.Receive(l, stamp(t), 6*u, usd(16*u), "")
+	if l.AvgCostMicro != 13*u {
+		t.Fatalf("avg = %d", l.AvgCostMicro)
+	}
+	before := l
+	void, after, err := domain.SaleVoid(l, sale, stamp(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkChain(t, before, void, after)
+	// 12 at 13 and 4 back at 10: (156 + 40) ÷ 16 = 12.25 — not today's 13, not the sale-day 10.
+	if void.Kind != domain.KindSaleVoid || void.QuantityMicro != 4*u || void.UnitCostMicro != 10*u || after.AvgCostMicro != 12_250_000 ||
+		void.ReversesID != sale.ID || void.SaleLineID != sale.SaleLineID || void.SaleID != sale.SaleID {
+		t.Fatalf("void = %+v, after %+v", void, after)
+	}
+	// Into negative stock the goods take the cost they left at.
+	neg := stocked(t, u, 10*u)
+	sale, neg, _ = domain.Sale(neg, stamp(t), 3*u, newID(t), newID(t))
+	neg.AvgCostMicro = 99 * u // a phantom average, as in Mizan's −759 case
+	_, back, _ := domain.SaleVoid(neg, sale, stamp(t))
+	if back.AvgCostMicro != 10*u || back.OnHandMicro != u {
+		t.Fatalf("void into negative stock = %+v", back)
+	}
+	if _, _, err := domain.SaleVoid(neg, domain.Movement{Kind: domain.KindReceipt, ProductID: neg.ProductID}, stamp(t)); code(err) != domain.CodeNotReversible {
+		t.Fatalf("voiding a receipt: %v", err)
 	}
 }

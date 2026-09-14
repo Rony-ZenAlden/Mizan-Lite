@@ -1,0 +1,39 @@
+{
+  "comment": "A day at the till for lite-demoseed (L4 §11): believable, not real. Lines name a product by barcode (scanned) or by its Arabic name (a quick button or a search). Totals are Go's; the comments beside each sale are what the tests expect.",
+  "sales": [
+    { "comment": "one jar scanned, exact money: 38,000", "lines": [{ "barcode": "6290001000042", "quantity": "1" }] },
+    { "comment": "weighed: 1.750 kg coarse bulgur = 29,750, rounded to 30,000", "lines": [{ "product": "برغل خشن", "quantity": "1.750" }] },
+    {
+      "comment": "a pounds total of 135,000 paid with a $20 note: change 165,000 pounds",
+      "lines": [{ "barcode": "6290001000059", "quantity": "2" }, { "product": "زيتون أخضر", "quantity": "1" }],
+      "tenderCurrency": "USD", "tendered": "20"
+    },
+    {
+      "comment": "a dollar customer: $16.25 settled in dollars from $20, change $3.75",
+      "lines": [{ "barcode": "6290001000141", "quantity": "1" }, { "barcode": "6290001000103", "quantity": "1" }],
+      "settlement": "USD", "tenderCurrency": "USD", "tendered": "20"
+    },
+    { "comment": "a whole cheese: 6.5 kg against 6.25 on the shelf — the warning, and a level below zero", "lines": [{ "product": "جبنة بيضاء", "quantity": "6.5" }] },
+    {
+      "comment": "10% off a tin of ghee with the owner's PIN: 270,000 less 27,000",
+      "lines": [{ "barcode": "6290001000066", "quantity": "1", "discountPercent": "10" }],
+      "owner": true
+    },
+    {
+      "comment": "three jars scanned and 350 g of freekeh: 89,700, rounded to 89,500",
+      "lines": [{ "barcode": "6290001000080", "quantity": "3" }, { "product": "فريكة", "quantity": "0.350" }]
+    },
+    {
+      "comment": "dollar-priced coffee and tea charged in pounds: 150,000 from 200,000 — voided below",
+      "lines": [{ "barcode": "6290001000226", "quantity": "2" }, { "barcode": "6290001000233", "quantity": "1" }],
+      "tenderCurrency": "SYP", "tendered": "200000"
+    },
+    {
+      "comment": "2,000 off the sale with the owner's PIN: 122,000 less 2,000",
+      "lines": [{ "product": "سكر", "quantity": "3" }, { "product": "رز مصري", "quantity": "5" }],
+      "saleDiscount": "2000", "owner": true
+    },
+    { "comment": "two bottles, 50,000 handed over: change 14,000", "lines": [{ "barcode": "6290001000196", "quantity": "2" }], "tendered": "50000" }
+  ],
+  "void": { "sale": 8, "reason": "أعاد الزبون البضاعة" }
+}

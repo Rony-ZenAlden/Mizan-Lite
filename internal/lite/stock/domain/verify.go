@@ -33,8 +33,10 @@ type Verifier struct {
 	previous Movement
 	started  bool
 	receipts map[id.ID]Movement
-	// reversals are checked once every receipt has been seen: a reversal and its receipt share a product, so the
-	// receipt comes first in ledger order — but a reversal pointing at another product's row would not.
+	sales    map[id.ID]Movement
+	// reversals (of receipts and of sales) are checked once every movement has been seen: a reversal and what it
+	// reverses share a product, so the original comes first in ledger order — but one pointing at another product's
+	// row would not.
 	reversals []Movement
 	pairs     map[id.ID][]Movement
 	findings  []Finding
@@ -43,7 +45,8 @@ type Verifier struct {
 // NewVerifier starts a check of levels.
 func NewVerifier(levels []Level) *Verifier {
 	v := &Verifier{
-		levels: map[id.ID]Level{}, seen: map[id.ID]bool{}, receipts: map[id.ID]Movement{}, pairs: map[id.ID][]Movement{},
+		levels: map[id.ID]Level{}, seen: map[id.ID]bool{}, receipts: map[id.ID]Movement{}, sales: map[id.ID]Movement{},
+		pairs: map[id.ID][]Movement{},
 	}
 	for _, l := range levels {
 		v.levels[l.ProductID] = l
@@ -69,7 +72,9 @@ func (v *Verifier) Add(m Movement) {
 	switch m.Kind {
 	case KindReceipt:
 		v.receipts[m.ID] = m
-	case KindReceiptReversal:
+	case KindSale:
+		v.sales[m.ID] = m
+	case KindReceiptReversal, KindSaleVoid:
 		v.reversals = append(v.reversals, m)
 	case KindPackageOut, KindContentIn:
 		v.pairs[m.PairID] = append(v.pairs[m.PairID], m)
@@ -102,8 +107,12 @@ func (v *Verifier) Findings() []Finding {
 		}
 	}
 	for _, r := range v.reversals {
-		receipt, ok := v.receipts[r.ReversesID]
-		if !ok || receipt.ProductID != r.ProductID || receipt.QuantityMicro != -r.QuantityMicro {
+		reversed, ok := v.receipts[r.ReversesID]
+		if r.Kind == KindSaleVoid {
+			reversed, ok = v.sales[r.ReversesID]
+			ok = ok && reversed.SaleLineID == r.SaleLineID
+		}
+		if !ok || reversed.ProductID != r.ProductID || reversed.QuantityMicro != -r.QuantityMicro {
 			v.find(FindingBadReversal, r.ProductID, r.ID)
 		}
 	}

@@ -129,8 +129,8 @@ rules:
         message: "cmd/lite-demoseed may import only the standard library and internal/lite"
 
       # ── Lite module isolation (DESIGN §13.3 A10, L1 §11) ──────────────────────
-      # Modules import none of each other. Only the orchestrators — bootstrap, api, setup, demoseed (and pos
-      # from L4) — reach several, and a module reaches another only through a port it declares itself
+      # Modules import none of each other. Only the orchestrators — bootstrap, api, setup, demoseed — and the
+      # till, sales (L4), through its own ports — reach several, and a module reaches another only through a port it declares itself
       # (catalog.OwnerGate). Written in L1 because it needed two modules to plant a violation between.
       - name: lite-catalog-isolated
         description: The catalogue imports no other Lite module.
@@ -141,6 +141,7 @@ rules:
           - "self/internal/lite/owner/**"
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -155,6 +156,7 @@ rules:
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -169,6 +171,7 @@ rules:
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/owner/**"
           - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -181,6 +184,7 @@ rules:
           - "self/internal/lite/fx/**"
           - "self/internal/lite/stock/**"
           - "self/internal/lite/catalog/**"
+          - "self/internal/lite/sales/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -195,6 +199,7 @@ rules:
           - "self/internal/lite/owner/**"
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -209,10 +214,28 @@ rules:
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/stock/**"
+          - "self/internal/lite/sales/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
         message: "fx may not import another Lite module — declare a port (see fx.Settings and fx.OwnerGate)"
+
+      - name: lite-sales-isolated
+        description: >
+          The till imports no other Lite module. It reaches products, stock, the rate, settings and the owner through the
+          five ports it declares (L4 §9.1) — the module that touches the most modules is the one most tempted to import them.
+        applies_to: ["self/internal/lite/sales/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "sales may not import another Lite module — declare a port (see sales.Catalogue, sales.Stock, sales.Rates)"
 
       - name: lite-network-only-in-httpsource
         description: >

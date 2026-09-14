@@ -351,3 +351,74 @@ func TestVerifyFindsWhatTheStoreHolds(t *testing.T) {
 		t.Fatal("the verifier repaired what it found")
 	}
 }
+
+// TestASaleAndItsVoidMoveStockAtTheSnapshottedCost: a sale takes goods out at the average of the moment and leaves the
+// average alone; its void brings them back at THAT cost, averaged in — not at the average of the day of the void, which a
+// delivery in between has moved (L4 §5). Neither asks the owner here: the till's void is guarded as a whole.
+func TestASaleAndItsVoidMoveStockAtTheSnapshottedCost(t *testing.T) {
+	f := newFixture()
+	p := f.opened(t) // 12 kg at $17
+	saleID, _ := id.New()
+	lineID, _ := id.New()
+
+	sold, err := f.svc.RecordSale(ctx, stock.SaleInput{ProductID: p, QuantityMicro: 4 * u, SaleID: saleID, SaleLineID: lineID})
+	if err != nil || !sold.CostKnown || sold.Movement.UnitCostMicro != 17*u || sold.Movement.QuantityMicro != -4*u {
+		t.Fatalf("sold = %+v, %v", sold, err)
+	}
+	if l := f.level(t, p); l.OnHandMicro != 8*u || l.AvgCostMicro != 17*u {
+		t.Fatalf("after the sale = %+v", l)
+	}
+	if _, err = f.svc.Receive(ctx, stock.ReceiveInput{ProductID: p, Quantity: "8", Cost: dollars("200")}); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.level(t, p); l.OnHandMicro != 16*u || l.AvgCostMicro != 21*u {
+		t.Fatalf("after the delivery = %+v", l)
+	}
+
+	back, err := f.svc.RecordSaleVoid(ctx, lineID)
+	if err != nil || back.Kind != domain.KindSaleVoid || back.ReversesID != sold.Movement.ID || back.UnitCostMicro != 17*u || back.QuantityMicro != 4*u {
+		t.Fatalf("void = %+v, %v", back, err)
+	}
+	// (16 × 21 + 4 × 17) ÷ 20 = 20.2 — at today's average it would have stayed 21.
+	stocked, err := f.svc.Stocked(ctx, p)
+	if err != nil || stocked.OnHandMicro != 20*u || stocked.AvgCostMicro != 20_200_000 || !stocked.CostKnown {
+		t.Fatalf("after the void = %+v, %v", stocked, err)
+	}
+	if _, err = f.svc.RecordSaleVoid(ctx, lineID); errs.CodeOf(err) != domain.CodeNotReversible {
+		t.Fatalf("a line's stock returned twice: %v", err)
+	}
+	missing, _ := id.New()
+	if _, err = f.svc.RecordSaleVoid(ctx, missing); errs.CodeOf(err) != domain.CodeMovementNotFound {
+		t.Fatalf("a void of a line never sold: %v", err)
+	}
+	if len(f.gate.Acts) != 0 {
+		t.Fatalf("the stock module asked the owner itself: %+v", f.gate.Acts)
+	}
+
+	var seen []domain.Kind
+	if err = f.svc.EachSaleMovement(ctx, func(m domain.Movement) error { seen = append(seen, m.Kind); return nil }); err != nil ||
+		len(seen) != 2 || seen[0] != domain.KindSale || seen[1] != domain.KindSaleVoid {
+		t.Fatalf("sale movements = %v, %v", seen, err)
+	}
+}
+
+// TestANeverReceivedProductSellsBelowZeroWithItsCostUnknown is Q4 and Q-L4.8 through the service.
+func TestANeverReceivedProductSellsBelowZeroWithItsCostUnknown(t *testing.T) {
+	f := newFixture()
+	p := f.catalogue.Add(t, 0, true)
+	saleID, _ := id.New()
+	lineID, _ := id.New()
+	sold, err := f.svc.RecordSale(ctx, stock.SaleInput{ProductID: p, QuantityMicro: 2 * u, SaleID: saleID, SaleLineID: lineID})
+	if err != nil || sold.CostKnown || sold.Movement.UnitCostMicro != 0 {
+		t.Fatalf("sold = %+v, %v", sold, err)
+	}
+	if st, _ := f.svc.Stocked(ctx, p); st.OnHandMicro != -2*u || st.CostKnown {
+		t.Fatalf("stocked = %+v", st)
+	}
+	if _, err = f.svc.RecordSaleVoid(ctx, lineID); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := f.svc.Stocked(ctx, p); st.OnHandMicro != 0 || st.CostKnown {
+		t.Fatalf("after the void = %+v", st)
+	}
+}

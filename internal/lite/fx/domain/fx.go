@@ -258,22 +258,5 @@ func FormatRate(n int64) string { return formatFixed(n, 9, 0) }
 func FormatMinor(minor int64, decimals int) string { return formatFixed(minor, decimals, decimals) }
 
 func formatFixed(v int64, scale, decimals int) string {
-	sign := ""
-	magnitude := uint64(v) //nolint:gosec // reinterpreted below for negative values
-	if v < 0 {
-		sign = "-"
-		magnitude = -magnitude
-	}
-	text := strconv.FormatUint(magnitude, 10)
-	if len(text) <= scale {
-		text = strings.Repeat("0", scale-len(text)+1) + text
-	}
-	whole, frac := text[:len(text)-scale], strings.TrimRight(text[len(text)-scale:], "0")
-	if len(frac) < decimals {
-		frac += strings.Repeat("0", decimals-len(frac))
-	}
-	if frac == "" {
-		return sign + whole
-	}
-	return sign + whole + "." + frac
+	return numinput.FormatFixed(v, scale, decimals)
 }

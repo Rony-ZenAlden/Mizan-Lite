@@ -1,4 +1,4 @@
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 
 interface FieldShell {
   label: string;
@@ -30,12 +30,19 @@ function Shell({ id, label, hint, error, children }: FieldShell & { id: string; 
 const inputClass =
   "block w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 aria-[invalid=true]:border-danger";
 
-/** A labelled input. The label, hint and error are passed in already translated. */
-export function TextField({ label, hint, error, ...input }: FieldShell & InputHTMLAttributes<HTMLInputElement>) {
+/**
+ * A labelled input. The label, hint and error are passed in already translated. The ref reaches the input, so a screen
+ * can hold focus on it (the till's scan field).
+ */
+export const TextField = forwardRef<HTMLInputElement, FieldShell & InputHTMLAttributes<HTMLInputElement>>(function TextField(
+  { label, hint, error, ...input },
+  ref,
+) {
   const id = useId();
   return (
     <Shell id={id} label={label} hint={hint} error={error}>
       <input
+        ref={ref}
         id={id}
         className={inputClass}
         aria-invalid={error ? true : undefined}
@@ -43,6 +50,27 @@ export function TextField({ label, hint, error, ...input }: FieldShell & InputHT
         {...input}
       />
     </Shell>
+  );
+});
+
+/** An input inside a table cell: named for assistive technology by its aria-label, its error shown beneath it. */
+export function CellInput({ error, ...input }: { error?: string } & InputHTMLAttributes<HTMLInputElement>) {
+  const id = useId();
+  return (
+    <div className="space-y-1">
+      <input
+        id={id}
+        className={inputClass}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        {...input}
+      />
+      {error ? (
+        <p id={`${id}-error`} role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

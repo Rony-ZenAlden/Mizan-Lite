@@ -175,4 +175,41 @@ drill lite-network-in-demoseed "only internal/lite/fx/infra/httpsource may open 
   internal/lite/demoseed/zz_drill.go "package demoseed
 import _ \"net\""
 
+# ── added in L4 ─────────────────────────────────────────────────────────────────────────────────────
+drill lite-sales-isolated "sales may not import another Lite module" \
+  internal/lite/sales/zz_drill.go "package sales
+import _ \"$M/internal/lite/stock\""
+
+drill lite-sales-domain-isolated "sales may not import another Lite module" \
+  internal/lite/sales/domain/zz_drill.go "package domain
+import _ \"$M/internal/lite/catalog/domain\""
+
+drill lite-sales-isolated-from-fx "sales may not import another Lite module" \
+  internal/lite/sales/infra/sqlite/zz_drill.go "package sqlite
+import _ \"$M/internal/lite/fx/domain\""
+
+drill lite-catalog-forbids-sales "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/sales\""
+
+drill lite-owner-forbids-sales "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/sales\""
+
+drill lite-settings-forbids-sales "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/sales\""
+
+drill lite-stock-forbids-sales "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/sales\""
+
+drill lite-fx-forbids-sales "fx may not import another Lite module" \
+  internal/lite/fx/zz_drill.go "package fx
+import _ \"$M/internal/lite/sales\""
+
+drill lite-setup-forbids-sales "setup may reach other modules only through the ports it declares" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/sales\""
+
 echo "every Lite architecture rule was seen failing"

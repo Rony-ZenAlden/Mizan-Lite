@@ -155,3 +155,41 @@ describe("RatesScreen", () => {
     expect(screen.getByRole("button", { name: "Switch to automatic" })).toBeInTheDocument();
   });
 });
+
+describe("RatesScreen — cash rounding", () => {
+  it("shows the smallest note and changes it with the owner's PIN", async () => {
+    const setCashNote = vi
+      .fn(async (note: string) => ({ currency: "SYP", note: note === "١٠٠٠" ? "1000" : note }))
+      .mockImplementationOnce(async () => {
+        throw required();
+      });
+    renderWithProviders(<RatesScreen />, { client: fakeClient({ till: { setCashNote }, owner: { elevate: async () => elevated } }), locale: "en" });
+    await settle();
+    const section = screen.getByTestId("cash-note");
+    expect(section).toHaveTextContent("Totals in Syrian pound are rounded to the nearest 500.");
+    await userEvent.type(within(section).getByLabelText("Smallest note"), "١٠٠٠");
+    await userEvent.click(within(section).getByRole("button", { name: "Save note" }));
+    await enterPin();
+    expect(setCashNote).toHaveBeenCalledTimes(2);
+    expect(setCashNote).toHaveBeenLastCalledWith("١٠٠٠");
+    expect(section).toHaveTextContent("Totals in Syrian pound are rounded to the nearest 1,000.");
+    expect(within(section).getByText("Smallest note saved.")).toBeInTheDocument();
+  });
+
+  it("Go's refusal of a note is shown under the field", async () => {
+    const setCashNote = vi.fn(async () => {
+      throw new BindingError({
+        code: "lite.settings.invalid_cash_note",
+        messageKey: "lite.settings.invalid_cash_note",
+        params: { max: "1000000" },
+        fields: [{ field: "cashNote", code: "lite.settings.invalid_cash_note", messageKey: "lite.settings.invalid_cash_note" }],
+      });
+    });
+    renderWithProviders(<RatesScreen />, { client: fakeClient({ till: { setCashNote } }), locale: "en" });
+    await settle();
+    const section = screen.getByTestId("cash-note");
+    await userEvent.type(within(section).getByLabelText("Smallest note"), "0");
+    await userEvent.click(within(section).getByRole("button", { name: "Save note" }));
+    expect(await within(section).findByText("The smallest note is a whole number from 1 to 1000000.")).toBeInTheDocument();
+  });
+});

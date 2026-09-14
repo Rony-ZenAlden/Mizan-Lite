@@ -47,6 +47,8 @@ type Set struct {
 	Owner    *Owner
 	Stock    *Stock
 	FX       *FX
+	Till     *Till
+	Sales    *Sales
 
 	core *core
 }
@@ -61,6 +63,8 @@ func New(version string, log *slog.Logger) *Set {
 		Owner:    &Owner{core: c},
 		Stock:    &Stock{core: c},
 		FX:       &FX{core: c},
+		Till:     &Till{core: c},
+		Sales:    &Sales{core: c},
 		core:     c,
 	}
 }
@@ -70,7 +74,7 @@ func New(version string, log *slog.Logger) *Set {
 // generate no TypeScript and therefore slip past every gate that reads the generated files — fails
 // a Go test instead.
 func (s *Set) Bindings() []any {
-	return []any{s.App, s.Settings, s.Catalog, s.Owner, s.Stock, s.FX}
+	return []any{s.App, s.Settings, s.Catalog, s.Owner, s.Stock, s.FX, s.Till, s.Sales}
 }
 
 // SetContext installs the context the window's lifetime runs under. Every call derives from it, so

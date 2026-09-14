@@ -11,6 +11,7 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { TextField } from "@/ui/Field";
+import { CashNoteSection } from "./CashNoteSection";
 
 /** How many past rates the history shows. */
 export const RATE_HISTORY_LIMIT = 100;
@@ -202,6 +203,8 @@ export function RatesScreen() {
           </Button>
         </div>
       </form>
+
+      <CashNoteSection />
 
       <div className="space-y-2">
         <h3 className="font-semibold">{t("rates.history_title")}</h3>

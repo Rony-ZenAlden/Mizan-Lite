@@ -9,7 +9,7 @@ import (
 )
 
 // ledger is a consistent history built through the domain: oil opened into loose oil, ghee received and one
-// receipt reversed, labneh written off, and a cost corrected.
+// receipt reversed, labneh sold and the sale voided, labneh written off, and a cost corrected.
 type ledger struct {
 	levels    map[string]domain.Level
 	movements []domain.Movement
@@ -52,6 +52,10 @@ func buildLedger(t *testing.T) *ledger {
 
 	labneh, labnehLevel := must(domain.Opening(domain.Level{ProductID: newID(t)}, stamp(t), 10*u, usd(2*u), ""))
 	l.record("labneh", labneh, labnehLevel)
+	sold, afterSale := must(domain.Sale(l.levels["labneh"], stamp(t), 3*u, newID(t), newID(t)))
+	l.record("labneh", sold, afterSale)
+	voided, afterVoid := must(domain.SaleVoid(l.levels["labneh"], sold, stamp(t)))
+	l.record("labneh", voided, afterVoid)
 	spoiled, afterSpoil := must(domain.Adjust(l.levels["labneh"], stamp(t), -2*u, domain.ReasonExpired, ""))
 	l.record("labneh", spoiled, afterSpoil)
 	corrected, afterCorrection := must(domain.CorrectCost(l.levels["labneh"], stamp(t), 2_500_000, "السعر الصحيح"))
@@ -219,4 +223,17 @@ func TestTheVerifierFindsOrphans(t *testing.T) {
 	l = buildLedger(t)
 	l.levels["ghost"] = domain.Level{ProductID: newID(t), OnHandMicro: u, LastSeq: 1, LastMovementID: newID(t)}
 	expectOnly(t, l.verify(), domain.FindingNoMovements)
+}
+
+func TestTheVerifierFindsAVoidOfTheWrongThing(t *testing.T) {
+	l := buildLedger(t)
+	void := l.index(t, domain.KindSaleVoid)
+	// Point the void at the opening instead of its sale.
+	l.movements[void].ReversesID = l.movements[l.index(t, domain.KindOpening)].ID
+	expectOnly(t, l.verify(), domain.FindingBadReversal)
+
+	l = buildLedger(t)
+	void = l.index(t, domain.KindSaleVoid)
+	l.movements[void].SaleLineID = newID(t) // a void of another line's sale
+	expectOnly(t, l.verify(), domain.FindingBadReversal)
 }

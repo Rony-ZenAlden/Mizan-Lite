@@ -309,3 +309,19 @@ func TestAPackageOpensOneLevelOnly(t *testing.T) {
 		t.Fatalf("All = %d, %v", len(all), err)
 	}
 }
+
+func TestAScanFindsTheProductWhateverTheKeyboardLayout(t *testing.T) {
+	f := newFixture()
+	d := draft("زيت")
+	d.Barcode = "6223000112345"
+	p := f.create(t, d)
+	for _, scanned := range []string{"6223000112345", "٦٢٢٣٠٠٠١١٢٣٤٥", " ۶۲۲۳۰۰۰۱۱۲۳۴۵ "} {
+		got, found, err := f.svc.ByBarcode(context.Background(), scanned)
+		if err != nil || !found || got.ID != p.ID {
+			t.Errorf("%q: %+v %v %v", scanned, got.ID, found, err)
+		}
+	}
+	if _, found, _ := f.svc.ByBarcode(context.Background(), ""); found {
+		t.Error("an empty scan found a product")
+	}
+}

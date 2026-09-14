@@ -112,18 +112,19 @@ func (s *Store) SaveLevel(ctx context.Context, l domain.Level) (domain.Level, er
 
 const movementColumns = `id, product_id, seq, business_date, occurred_at, kind, quantity_micro, unit_cost_usd_micro,
 	on_hand_before_micro, avg_cost_before_usd_micro, on_hand_after_micro, avg_cost_after_usd_micro,
-	entered_currency, entered_unit_cost_micro, local_per_usd_nano, reason_code, note, reverses_id, pair_id`
+	entered_currency, entered_unit_cost_micro, local_per_usd_nano, reason_code, note, reverses_id, pair_id, sale_id, sale_line_id`
 
 func scanMovement(row scanner) (domain.Movement, error) {
 	var (
 		m                                   domain.Movement
 		rawID, rawProduct, occurred, kind   string
 		currency, reason, note, rev, pairID sql.NullString
+		saleID, saleLineID                  sql.NullString
 		enteredCost, rate                   sql.NullInt64
 	)
 	if err := row.Scan(&rawID, &rawProduct, &m.Seq, &m.BusinessDate, &occurred, &kind, &m.QuantityMicro, &m.UnitCostMicro,
 		&m.OnHandBeforeMicro, &m.AvgCostBeforeMicro, &m.OnHandAfterMicro, &m.AvgCostAfterMicro,
-		&currency, &enteredCost, &rate, &reason, &note, &rev, &pairID); err != nil {
+		&currency, &enteredCost, &rate, &reason, &note, &rev, &pairID, &saleID, &saleLineID); err != nil {
 		return domain.Movement{}, err
 	}
 	var (
@@ -143,6 +144,12 @@ func scanMovement(row scanner) (domain.Movement, error) {
 		return domain.Movement{}, corrupt(err)
 	}
 	if m.PairID, err = optionalID(pairID); err != nil {
+		return domain.Movement{}, corrupt(err)
+	}
+	if m.SaleID, err = optionalID(saleID); err != nil {
+		return domain.Movement{}, corrupt(err)
+	}
+	if m.SaleLineID, err = optionalID(saleLineID); err != nil {
 		return domain.Movement{}, corrupt(err)
 	}
 	m.Kind = domain.Kind(kind)
@@ -171,6 +178,24 @@ func (s *Store) Movements(ctx context.Context, productID id.ID, limit int) ([]do
 	return out, err
 }
 
+// SaleMovement returns the movement of a kind (sale or sale_void) for a sale line, or found=false.
+func (s *Store) SaleMovement(ctx context.Context, saleLineID id.ID, kind domain.Kind) (domain.Movement, bool, error) {
+	m, err := scanMovement(s.db.Reader(ctx).QueryRowContext(ctx,
+		`SELECT `+movementColumns+` FROM stock_ledger WHERE sale_line_id = ? AND kind = ?`, saleLineID.String(), string(kind)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Movement{}, false, nil
+	}
+	if err != nil {
+		return domain.Movement{}, false, s.db.Dialect().TranslateError(err)
+	}
+	return m, true, nil
+}
+
+// EachSaleMovement streams every sale and sale-void movement — the sales verifier's walk.
+func (s *Store) EachSaleMovement(ctx context.Context, fn func(domain.Movement) error) error {
+	return s.each(ctx, `SELECT `+movementColumns+` FROM stock_ledger WHERE sale_id IS NOT NULL ORDER BY product_id, seq`, fn)
+}
+
 // EachMovement streams the ledger in the verifier's order without holding it in memory.
 func (s *Store) EachMovement(ctx context.Context, fn func(domain.Movement) error) error {
 	return s.each(ctx, `SELECT `+movementColumns+` FROM stock_ledger ORDER BY product_id, seq`, fn)
@@ -197,13 +222,13 @@ func (s *Store) each(ctx context.Context, q string, fn func(domain.Movement) err
 func (s *Store) Append(ctx context.Context, m domain.Movement) error {
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `
 		INSERT INTO stock_ledger (`+movementColumns+`, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID.String(), m.ProductID.String(), m.Seq, m.BusinessDate, clock.Format(m.OccurredAt), string(m.Kind),
 		m.QuantityMicro, m.UnitCostMicro, m.OnHandBeforeMicro, m.AvgCostBeforeMicro, m.OnHandAfterMicro,
 		m.AvgCostAfterMicro, nullableText(m.Entered.Currency), nullableInt(m.Entered.Currency != "", m.Entered.UnitCostMicro),
 		nullableInt(m.Entered.LocalPerUSDNano != 0, m.Entered.LocalPerUSDNano), nullableText(string(m.Reason)),
 		nullableText(m.Note), nullableText(m.ReversesID.String()), nullableText(m.PairID.String()),
-		clock.Format(s.clk.Now()))
+		nullableText(m.SaleID.String()), nullableText(m.SaleLineID.String()), clock.Format(s.clk.Now()))
 	return s.db.Dialect().TranslateError(err)
 }
 

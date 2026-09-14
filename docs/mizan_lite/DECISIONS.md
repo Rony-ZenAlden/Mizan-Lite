@@ -32,7 +32,7 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | Q2 | Debts in USD or SYP, chosen per sale | approved | [DESIGN §13.1](DESIGN.md) |
 | Q3 | Expected = potential profit of stock on the shelf; actual = profit at the price charged | approved | [DESIGN §13.1](DESIGN.md) |
 | Q4 | Sell beyond stock, with a visible warning | approved | [DESIGN §13.1](DESIGN.md) |
-| Q5 | SYP cash rounding to the nearest paper denomination | approved; value confirmed in L4 | [DESIGN §13.1](DESIGN.md) |
+| Q5 | SYP cash rounding to the nearest paper denomination | approved; value confirmed in L4: 500 pounds, nearest (Q-L4.1) | [DESIGN §13.1](DESIGN.md) |
 | Q6 | Latin digits 0–9 in both languages | approved (confirmed by owner) | [DESIGN §13.1](DESIGN.md) |
 | Q7 | Owner PIN for void, exchange-rate change, profit reports | approved; mechanism proposed in L1 | [phases/L1_CATALOGUE.md §7](phases/L1_CATALOGUE.md) |
 | Q8 | Open packages and sell loose | approved; lands in L2 | [DESIGN §13.1](DESIGN.md) |
@@ -189,3 +189,49 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L3.i6 | Provider names are catalog strings; ExchangeRate-API attributed | approved | [L3 §16](phases/L3_RATES.md) |
 | D-L3.i7 | An offline or unchanged fetch is not a failed job | approved | [L3 §16](phases/L3_RATES.md) |
 | D-L3.i8 | Update now disabled, with a reason, when no provider exists | approved | [L3 §16](phases/L3_RATES.md) |
+
+## L4 — approved 2026-09-14, with the owner's answers (discounts with the PIN)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L4.1 | A `sales` module owns `sales` and `sale_lines`, reaching other modules through ports | approved | [L4 §9](phases/L4_TILL.md) |
+| D-L4.2 | Lines priced in both currencies from one exact product; printed lines add up exactly | approved | [L4 §3.1](phases/L4_TILL.md) |
+| D-L4.3 | Cash rounding to a note, half up, recorded; dollars not cash-rounded; `total = lines + rounding` CHECK | approved | [L4 §3.2](phases/L4_TILL.md) |
+| D-L4.4 | Tender in either currency; change in pounds unless total and tender are both dollars; change rounded to the note | approved | [L4 §3.3](phases/L4_TILL.md) |
+| D-L4.5 | A quote token; checkout refuses a stale quote, writing nothing | approved | [L4 §4](phases/L4_TILL.md) |
+| D-L4.6 | No rate, no sale | approved | [L4 §4](phases/L4_TILL.md) |
+| D-L4.7 | Selling beyond stock with a warning; never-received products sell with `cost_known = 0` | approved | [L4 §5](phases/L4_TILL.md) |
+| D-L4.8 | Cost snapshotted per line at the sale's rate; voids return stock at that cost | approved | [L4 §5](phases/L4_TILL.md) |
+| D-L4.9 | Ledger rebuild in dependency order, `stock_levels` rebuilt too (amends A-L2.3's plan) | approved | [L4 §6.2](phases/L4_TILL.md) |
+| D-L4.10 | `payment` allows `credit` now, refused until L5; the customer lives on L5's debt entry | approved | [L4 §2.4](phases/L4_TILL.md) |
+| D-L4.11 | One price per line (Q3 reading b) | approved | [L4 §2.4](phases/L4_TILL.md) |
+| D-L4.12 | One continuous receipt sequence in the checkout transaction; voids keep numbers | approved | [L4 §7.1](phases/L4_TILL.md) |
+| D-L4.13 | The receipt is the stored, fully snapshotted sale | approved | [L4 §7.2](phases/L4_TILL.md) |
+| D-L4.14 | Whole-sale void with PIN and reason, recorded on its own day | approved | [L4 §8.1](phases/L4_TILL.md) |
+| D-L4.15 | A sales verifier that reports, never repairs; the seeder fails on a finding | approved | [L4 §8.3](phases/L4_TILL.md) |
+| D-L4.16 | `lite-sales-isolated`; other isolation rules forbid `sales` | approved | [L4 §9.2](phases/L4_TILL.md) |
+| Q-L4.1 | 500 pounds, rounded to the nearest 500 (half up); changeable with the PIN | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.2 | Change in pounds unless the customer asks for dollars | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.3 | Whole sales in dollars allowed; change strictly in dollars when paid in dollars | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.4 | Any past sale may be voided, with the PIN and a required reason | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.5 | No partial returns in v1 — void and re-ring | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.6 | **Item and total discounts, only with the owner PIN** (changed from the recommendation) | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.7 | Receipts on screen in L4; printing in L7 | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.8 | Sell never-received / out-of-stock products with a clear warning, cost unknown | approved | [L4 §14](phases/L4_TILL.md) |
+| Q-L4.9 | 80 mm thermal receipt printer | approved | [L4 §14](phases/L4_TILL.md) |
+
+### L4 — decisions made while building (approved 2026-09-14)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L4.i1 | A day's sales stay as rung up; a void counts on the day it is made (takings = charged − refunded) | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i2 | Discounts: percent per line, amount on the sale in its settlement currency, one guarded act at checkout | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i3 | `changeCurrency` on the cart (default pounds; dollars for all-dollar sales); empty tender = exact money | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i4 | The cash note is a setting (1 … 1,000,000), set with the PIN on the rate screen | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i5 | Till and sales DTOs carry no cost (held by a test) | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i6 | `Till.Scan` answers `found: false` for an unknown code; the till searches by name | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i7 | A counted product increments its line (whole counts, BigInt); each weighing is its own line | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i8 | Gate: every `Act*` has an `owner.action.*` label in both catalogs | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i9 | `TextField` forwards its ref; `CellInput` for table cells | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i10 | `bootstrap.TillWithStock`, a test-only export to fail a real transaction after a stock movement | approved | [L4 §16](phases/L4_TILL.md) |
+| D-L4.i11 | The seeder's beyond-stock sale is white cheese, not labneh | approved | [L4 §16](phases/L4_TILL.md) |

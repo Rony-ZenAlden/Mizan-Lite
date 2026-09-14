@@ -1283,7 +1283,7 @@ changed.
 
 | Q | Answer | What it changes | Lands in |
 |---|---|---|---|
-| Q1 | Manual exchange rate for v1 | The fetcher (§6.7, D5) is **not built in v1**; `fx_fetch_log` and `httpsource` leave L7's scope | L3 (manual rates only) |
+| Q1 | Manual exchange rate for v1 | The fetcher (§6.7, D5) is **not built in v1**; `fx_fetch_log` and `httpsource` leave L7's scope. **Superseded 2026-09-14** by the owner's dual-mode requirement (§13.4) | L3 |
 | Q2 | Debts in USD **or** SYP, chosen per sale | A credit sale carries its debt currency; the §5 ledger already keys by currency | L5 |
 | Q3 | Expected = potential profit of the stock on the shelf; actual = profit at the price charged | Reading (b). "Expected" is a stock report (on hand × (list price − average cost)), not a column on a sale line; `list_price_micro` on `sale_items` is re-examined in L4 | L6 |
 | Q4 | Sell beyond stock, with a visible warning | `stock.allow_negative` is not a setting; the till warns and proceeds. §4.6's `on_hand ≤ 0` branch applies | L2, L4 |
@@ -1352,3 +1352,16 @@ other cannot be seen failing while only one module exists. It is written, and pl
 module does.
 
 **A11 — primitives are built when a screen needs them**, not copied as a set (D7 amended; L0 D-L0.7).
+
+### 13.4 Amendments made in later phases — where they are recorded
+
+From L1 on, each phase records its amendments to this design in its own note, beside the reasoning, and the register
+[DECISIONS.md](DECISIONS.md) lists their approval. This index says where to look; the sections above are not edited.
+
+| Phase | Amendments | Changes to this design |
+|---|---|---|
+| L1 | [L1 §14–§20](phases/L1_CATALOGUE.md) | the owner PIN mechanism (Q7), nine units, 24 quick buttons, shop name required |
+| L2 | [L2 §2.3](phases/L2_STOCK.md) A-L2.1–3 | stock in its own tables; movements record before and after; the till's ledger columns deferred to L4 |
+| L3 | [L3 §2.3, §14](phases/L3_RATES.md) A-L3.1–3, R-L3 | the rate in force is the newest recorded (`seq`); **dual rate modes — internet fetch and the owner's manual rate, manual by default — supersede Q1**; D6's conversion split into `LineExtensionMulRate`/`DivRate` |
+| L4 | [L4 §2.4, §14, §16](phases/L4_TILL.md) A-L4.1–6 | the ledger rebuild in dependency order; no `customer_id` on `sales` (`credit` refused until L5); one price per line; tender and change replace `cash_local`/`cash_usd`; no `products.on_hand_micro`; receipts printed in L7; **Q5's value: 500 pounds, to the nearest**; **discounts with the owner PIN** (item percent, sale amount); a void counts on the day it is made |
+

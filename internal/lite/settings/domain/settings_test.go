@@ -181,3 +181,26 @@ func TestRateModeAndLocalCurrency(t *testing.T) {
 		t.Fatalf("bad mode: %v", err)
 	}
 }
+
+func TestTheCashNote(t *testing.T) {
+	if domain.Defaults().CashNote != 500 {
+		t.Fatalf("default cash note = %d, want 500 (Q-L4.1)", domain.Defaults().CashNote)
+	}
+	got, problems := domain.FromStored(map[string]string{domain.KeyCashNote: "1000"})
+	if got.CashNote != 1000 || len(problems) != 0 {
+		t.Fatalf("stored = %+v %v", got, problems)
+	}
+	for _, bad := range []string{"0", "-500", "500.5", "abc", "1000001"} {
+		if got, problems := domain.FromStored(map[string]string{domain.KeyCashNote: bad}); got.CashNote != 500 || len(problems) != 1 {
+			t.Errorf("%q used: %+v", bad, got)
+		}
+		if _, _, err := domain.Defaults().Apply(domain.Update{CashNote: &bad}); errs.CodeOf(err) != domain.CodeInvalidCashNote {
+			t.Errorf("%q applied: %v", bad, err)
+		}
+	}
+	thousand := " 1000 "
+	next, changes, err := domain.Defaults().Apply(domain.Update{CashNote: &thousand})
+	if err != nil || next.CashNote != 1000 || len(changes) != 1 || changes[0] != (domain.Change{Key: domain.KeyCashNote, Value: "1000"}) {
+		t.Fatalf("Apply = %+v %v %v", next, changes, err)
+	}
+}

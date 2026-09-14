@@ -88,11 +88,14 @@ const (
 	KindPackageOut      Kind = "package_out"
 	KindContentIn       Kind = "content_in"
 	KindCostCorrection  Kind = "cost_correction"
+	// KindSale and KindSaleVoid are the till's (L4): stock sold, and stock returned by voiding the sale.
+	KindSale     Kind = "sale"
+	KindSaleVoid Kind = "sale_void"
 )
 
 // Kinds lists every kind, in the schema's order.
 var Kinds = []Kind{KindOpening, KindReceipt, KindReceiptReversal, KindCount, KindAdjustment, KindPackageOut,
-	KindContentIn, KindCostCorrection}
+	KindContentIn, KindCostCorrection, KindSale, KindSaleVoid}
 
 // Reason says why a count or adjustment happened (Q-L2.6).
 type Reason string
@@ -188,6 +191,9 @@ type Movement struct {
 	Note               string
 	ReversesID         id.ID
 	PairID             id.ID
+	// SaleID and SaleLineID name the sale line a sale or sale-void movement belongs to (L4); zero otherwise.
+	SaleID     id.ID
+	SaleLineID id.ID
 }
 
 // after is the level the movement leaves.
@@ -314,6 +320,59 @@ func Adjust(l Level, st Stamp, quantityMicro int64, reason Reason, note string) 
 	m.OnHandAfterMicro = onHandAfter
 	m.Reason = reason
 	m.Note = trimmed
+	return m, m.after(l), nil
+}
+
+// CostKnown reports whether the level has a cost a sale can snapshot: the D-L2.i2 condition. A product never received,
+// or received and reversed back to nothing, sells with its cost unknown (L4 Q-L4.8).
+func (l Level) CostKnown() bool { return l.Moved() && l.hasCost() }
+
+// Sale takes sold stock out (L4 §5). Unlike every other act that lowers stock, it is allowed below zero — a customer is
+// waiting (Q4) — and it never moves the average. The movement carries the average as its unit cost, or zero when the
+// cost is unknown.
+func Sale(l Level, st Stamp, quantityMicro int64, saleID, saleLineID id.ID) (Movement, Level, error) {
+	if quantityMicro <= 0 {
+		return Movement{}, l, quantityRequired()
+	}
+	onHandAfter, ok := sub(l.OnHandMicro, quantityMicro)
+	if !ok {
+		return Movement{}, l, quantityTooLarge()
+	}
+	m := movement(l, st, KindSale)
+	m.QuantityMicro = -quantityMicro
+	if l.CostKnown() {
+		m.UnitCostMicro = l.AvgCostMicro
+	}
+	m.OnHandAfterMicro = onHandAfter
+	m.SaleID, m.SaleLineID = saleID, saleLineID
+	return m, m.after(l), nil
+}
+
+// SaleVoid returns the stock of a voided sale line (L4 §5): the sale's quantity back in, at the unit cost the goods left
+// at, averaged in like a receipt — into zero or negative stock it takes that cost (H2).
+func SaleVoid(l Level, sale Movement, st Stamp) (Movement, Level, error) {
+	if sale.Kind != KindSale || sale.ProductID != l.ProductID {
+		return Movement{}, l, errs.Conflict(CodeNotReversible, "only a sale movement can be voided")
+	}
+	quantity := -sale.QuantityMicro
+	onHandAfter, ok := add(l.OnHandMicro, quantity)
+	if !ok {
+		return Movement{}, l, quantityTooLarge()
+	}
+	avg := l.AvgCostMicro
+	if sale.UnitCostMicro > 0 || !l.hasCost() {
+		var err error
+		if avg, err = money.WeightedAverageUnit(l.OnHandMicro, l.AvgCostMicro, quantity, sale.UnitCostMicro, costRounding); err != nil {
+			return Movement{}, l, costTooLarge(err)
+		}
+	}
+	m := movement(l, st, KindSaleVoid)
+	m.QuantityMicro = quantity
+	m.UnitCostMicro = sale.UnitCostMicro
+	m.OnHandAfterMicro = onHandAfter
+	m.AvgCostAfterMicro = avg
+	m.ReversesID = sale.ID
+	m.SaleID, m.SaleLineID = sale.SaleID, sale.SaleLineID
 	return m, m.after(l), nil
 }
 

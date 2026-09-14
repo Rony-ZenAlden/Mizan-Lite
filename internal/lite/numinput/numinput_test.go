@@ -105,3 +105,19 @@ func TestDecimals(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatFixed(t *testing.T) {
+	for _, c := range []struct {
+		v                  int64
+		scale, minDecimals int
+		want               string
+	}{
+		{12_500_000, 6, 3, "12.500"}, {3_000_000, 6, 0, "3"}, {5_937_500, 6, 2, "5.9375"}, {-2_500_000, 6, 3, "-2.500"},
+		{97_500, 0, 0, "97500"}, {120, 2, 2, "1.20"}, {-5, 3, 3, "-0.005"}, {13_007_535_500_000, 9, 0, "13007.5355"},
+		{0, 2, 2, "0.00"}, {-9_223_372_036_854_775_808, 0, 0, "-9223372036854775808"},
+	} {
+		if got := numinput.FormatFixed(c.v, c.scale, c.minDecimals); got != c.want {
+			t.Errorf("FormatFixed(%d, %d, %d) = %s, want %s", c.v, c.scale, c.minDecimals, got, c.want)
+		}
+	}
+}

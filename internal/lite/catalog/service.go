@@ -138,6 +138,11 @@ func (s *Service) Search(ctx context.Context, text string, includeInactive bool)
 	})
 }
 
+// ByBarcode returns the product with a barcode as a scanner typed it — digits in any script (L1 H2) — or found=false.
+func (s *Service) ByBarcode(ctx context.Context, raw string) (domain.Product, bool, error) {
+	return s.store.ByBarcode(ctx, numinput.LatinDigits(raw))
+}
+
 // Get returns one product.
 func (s *Service) Get(ctx context.Context, productID id.ID) (domain.Product, error) {
 	return s.store.Get(ctx, productID)

@@ -134,7 +134,7 @@ func TestACheckRefusesAnImpossibleRow(t *testing.T) {
 		changes    row
 		constraint string
 	}{
-		{"an unknown kind", row{"kind": "sale"}, "kind IN"},
+		{"an unknown kind", row{"kind": "transfer"}, "kind IN"},
 		{"a receipt of nothing", row{"quantity_micro": 0, "on_hand_after_micro": 0}, "ck_ledger_quantity_by_kind"},
 		{"a reversal that adds", reversal.with(row{"quantity_micro": 5_000_000, "on_hand_after_micro": 10_000_000}), "ck_ledger_quantity_by_kind"},
 		{"an adjustment of nothing", adjustment.with(row{"quantity_micro": 0, "on_hand_after_micro": 5_000_000}), "ck_ledger_quantity_by_kind"},

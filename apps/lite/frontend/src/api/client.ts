@@ -10,8 +10,10 @@ import * as App from "../../wailsjs/go/api/App";
 import * as Catalog from "../../wailsjs/go/api/Catalog";
 import * as FX from "../../wailsjs/go/api/FX";
 import * as Owner from "../../wailsjs/go/api/Owner";
+import * as Sales from "../../wailsjs/go/api/Sales";
 import * as Settings from "../../wailsjs/go/api/Settings";
 import * as Stock from "../../wailsjs/go/api/Stock";
+import * as Till from "../../wailsjs/go/api/Till";
 import { api } from "../../wailsjs/go/models";
 import { unwrap, type Plain } from "./envelope";
 
@@ -51,6 +53,19 @@ export type RateFetch = Plain<api.FetchDTO>;
 export type RateHistoryRow = Plain<api.RateHistoryDTO>;
 export type SetRateInput = Plain<api.SetRateInput>;
 export type Quote = Plain<api.QuoteDTO>;
+export type CartLineInput = Plain<api.CartLineInput>;
+export type CartInput = Plain<api.CartInput>;
+export type CheckoutInput = Plain<api.CheckoutInput>;
+export type CartLine = Plain<api.CartLineDTO>;
+export type CartQuote = Plain<api.CartQuoteDTO>;
+export type Scan = Plain<api.ScanDTO>;
+export type CashNote = Plain<api.CashNoteDTO>;
+export type Sale = Plain<api.SaleDTO>;
+export type SaleLine = Plain<api.SaleLineDTO>;
+export type Day = Plain<api.DayDTO>;
+export type DayTotals = Plain<api.DayTotalsDTO>;
+export type VoidInput = Plain<api.VoidInput>;
+export type SaleFinding = Plain<api.SaleFindingDTO>;
 
 export function createClient() {
   return {
@@ -104,6 +119,19 @@ export function createClient() {
       acceptProposal: (fetchId: string) => unwrap(() => FX.AcceptProposal(fetchId)),
       setMode: (mode: "automatic" | "manual") => unwrap(() => FX.SetMode(mode)),
       fetchQuote: () => unwrap(FX.FetchQuote),
+    },
+    till: {
+      scan: (code: string) => unwrap(() => Till.Scan(code)),
+      quote: (input: CartInput) => unwrap(() => Till.Quote(api.CartInput.createFrom(input))),
+      checkout: (input: CheckoutInput) => unwrap(() => Till.Checkout(api.CheckoutInput.createFrom(input))),
+      cashNote: () => unwrap(Till.CashNote),
+      setCashNote: (note: string) => unwrap(() => Till.SetCashNote(note)),
+    },
+    sales: {
+      list: (businessDate: string) => unwrap(() => Sales.List(businessDate)),
+      receipt: (saleId: string) => unwrap(() => Sales.Receipt(saleId)),
+      void: (input: VoidInput) => unwrap(() => Sales.Void(api.VoidInput.createFrom(input))),
+      verify: () => unwrap(Sales.Verify),
     },
     owner: {
       status: () => unwrap(Owner.Status),

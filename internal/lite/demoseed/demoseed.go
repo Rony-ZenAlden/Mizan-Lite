@@ -11,7 +11,9 @@
 // in both currencies, deliveries entered as invoice totals, a count and a write-off through the owner's PIN, one
 // tin opened — and then the stock verifier, which must find nothing (L2 §10). L3: an opening exchange rate at first run,
 // a later rate and a same-day correction, both through the owner's guard (L3 §11.2). The seeder registers no rate
-// provider: it never reaches the internet.
+// provider: it never reaches the internet. L4: a day at the till — scanned barcodes and quick products, weighed goods,
+// a pounds total paid in dollars, a dollar sale, a sale beyond the shelf, two discounts and a void through the owner's PIN —
+// and then the stock verifier and the sales verifier, both of which must find nothing (L4 §11).
 package demoseed
 
 import (
@@ -26,6 +28,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/sales"
+	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
@@ -35,11 +39,14 @@ import (
 // application's own check is a demo of a defect.
 const CodeStockInconsistent = "lite.demoseed.stock_inconsistent"
 
+// CodeSalesInconsistent fails a run whose sales the sales verifier finds anything wrong with.
+const CodeSalesInconsistent = "lite.demoseed.sales_inconsistent"
+
 // CodeAlreadySetUp refuses an installation that has completed first run. Re-seeding means deleting the data
 // directory — a decision for whoever runs this, not something a seeder should do on their behalf.
 const CodeAlreadySetUp = "lite.demoseed.already_set_up"
 
-//go:embed data/catalogue.json data/stock.json data/rates.json
+//go:embed data/catalogue.json data/stock.json data/rates.json data/sales.json
 var data embed.FS
 
 type rateLine struct {
@@ -84,6 +91,29 @@ type stockData struct {
 	OpenPackages string `json:"openPackages"`
 }
 
+type saleLine struct {
+	Product         string `json:"product"`
+	Barcode         string `json:"barcode"`
+	Quantity        string `json:"quantity"`
+	DiscountPercent string `json:"discountPercent"`
+}
+
+type salesData struct {
+	Sales []struct {
+		Lines          []saleLine `json:"lines"`
+		Settlement     string     `json:"settlement"`
+		SaleDiscount   string     `json:"saleDiscount"`
+		TenderCurrency string     `json:"tenderCurrency"`
+		Tendered       string     `json:"tendered"`
+		// Owner is true for a sale with a discount: the owner enters the PIN at the till for it, and leaves.
+		Owner bool `json:"owner"`
+	} `json:"sales"`
+	Void struct {
+		Sale   int    `json:"sale"`
+		Reason string `json:"reason"`
+	} `json:"void"`
+}
+
 type catalogue struct {
 	ShopName    string `json:"shopName"`
 	PriceChange struct {
@@ -122,6 +152,11 @@ type Result struct {
 	StockValue string
 	// Rate is the exchange rate in force after seeding.
 	Rate string
+	// Sales and Voids are the day at the till; Takings is what was charged less what was refunded, per currency, as Go
+	// formats it.
+	Sales   int
+	Voids   int
+	Takings map[string]string
 }
 
 // Run seeds app. It refuses an installation that has completed first run.
@@ -147,6 +182,10 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}
 	var rates ratesData
 	if err = readData("data/rates.json", &rates); err != nil {
+		return Result{}, err
+	}
+	var day salesData
+	if err = readData("data/sales.json", &day); err != nil {
 		return Result{}, err
 	}
 
@@ -192,7 +231,124 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	if _, err := app.Owner.EndElevation(ctx); err != nil {
 		return Result{}, err
 	}
+	if err := seedSales(ctx, app, day, opts.PIN, byName, &res); err != nil {
+		return Result{}, err
+	}
+	if err := check(ctx, app, opts.PIN, &res); err != nil {
+		return Result{}, err
+	}
 	return res, nil
+}
+
+// seedSales rings up a day at the till the way a cashier does: each cart quoted, then paid with that quote's token. A
+// discount is the owner's, so the owner comes to the till for it and leaves (Q-L4.6); so is the void (Q-L4.4).
+func seedSales(ctx context.Context, app *bootstrap.App, day salesData, pin string, byName map[string]domain.Product, res *Result) error {
+	receipts := map[int]salesdomain.Sale{}
+	for i, s := range day.Sales {
+		cart := salesdomain.CartInput{Settlement: s.Settlement, SaleDiscount: s.SaleDiscount, TenderCurrency: s.TenderCurrency, Tendered: s.Tendered}
+		for _, l := range s.Lines {
+			productID := byName[l.Product].ID
+			if l.Barcode != "" {
+				scanned, found, err := app.Sales.Scan(ctx, l.Barcode)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return errs.Internal(CodeSalesInconsistent, "a demo barcode scans nothing").WithParam("barcode", l.Barcode)
+				}
+				productID = scanned.Product.ID
+			}
+			if productID == "" {
+				return errs.Internal(CodeSalesInconsistent, "a demo sale names a product the catalogue lacks").WithParam("product", l.Product)
+			}
+			cart.Lines = append(cart.Lines, salesdomain.LineInput{ProductID: productID, Quantity: l.Quantity, DiscountPercent: l.DiscountPercent})
+		}
+		q, err := app.Sales.Quote(ctx, cart)
+		if err != nil {
+			return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "quoting demo sale "+strconv.Itoa(i+1))
+		}
+		if s.Owner {
+			if _, err = app.Owner.Elevate(ctx, pin); err != nil {
+				return err
+			}
+		}
+		sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: cart, Token: q.Token, Payment: salesdomain.PaymentCash})
+		if err != nil {
+			return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "ringing up demo sale "+strconv.Itoa(i+1))
+		}
+		if s.Owner {
+			if _, err = app.Owner.EndElevation(ctx); err != nil {
+				return err
+			}
+		}
+		receipts[i+1] = sale
+		res.Sales++
+	}
+
+	voided, ok := receipts[day.Void.Sale]
+	if !ok {
+		return errs.Internal(CodeSalesInconsistent, "the demo void names no demo sale").WithParam("sale", strconv.Itoa(day.Void.Sale))
+	}
+	if _, err := app.Owner.Elevate(ctx, pin); err != nil {
+		return err
+	}
+	if _, err := app.Sales.Void(ctx, sales.VoidInput{SaleID: voided.ID, Reason: day.Void.Reason}); err != nil {
+		return err
+	}
+	res.Voids++
+	_, err := app.Owner.EndElevation(ctx)
+	return err
+}
+
+// check runs both verifiers over everything seeded, in owner mode, and records the figures the command prints. A demo
+// that fails the application's own checks is a demo of a defect.
+func check(ctx context.Context, app *bootstrap.App, pin string, res *Result) error {
+	if _, err := app.Owner.Elevate(ctx, pin); err != nil {
+		return err
+	}
+	stockFindings, err := app.Stock.Verify(ctx)
+	if err != nil {
+		return err
+	}
+	if len(stockFindings) > 0 {
+		return errs.Internal(CodeStockInconsistent, "the stock verifier found problems in the seeded data").
+			WithParam("first", stockFindings[0].Code).WithParam("count", strconv.Itoa(len(stockFindings)))
+	}
+	salesFindings, err := app.Sales.Verify(ctx)
+	if err != nil {
+		return err
+	}
+	if len(salesFindings) > 0 {
+		return errs.Internal(CodeSalesInconsistent, "the sales verifier found problems in the seeded data").
+			WithParam("first", salesFindings[0].Code).WithParam("count", strconv.Itoa(len(salesFindings)))
+	}
+	valuation, err := app.Stock.Valuation(ctx)
+	if err != nil {
+		return err
+	}
+	res.StockValue = stockdomain.FormatMinor(valuation.TotalMinor)
+	current, err := app.FX.Current(ctx)
+	if err != nil {
+		return err
+	}
+	res.Rate = fxdomain.FormatRate(current.Rate.Nano)
+
+	day, err := app.Sales.Day(ctx, "")
+	if err != nil {
+		return err
+	}
+	currencies, err := app.Catalog.Currencies(ctx)
+	if err != nil {
+		return err
+	}
+	res.Takings = map[string]string{}
+	for _, c := range currencies {
+		if t, ok := day.Totals[c.Code]; ok {
+			res.Takings[c.Code] = fxdomain.FormatMinor(t.ChargedMinor-t.RefundedMinor, c.Decimals)
+		}
+	}
+	_, err = app.Owner.EndElevation(ctx)
+	return err
 }
 
 // seedStock runs L2's part of the demo in the order a shop adopting Lite would: what opens into what, the stock on
@@ -270,25 +426,6 @@ func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, rates rat
 	if _, err = app.Stock.OpenPackage(ctx, stock.OpenPackageInput{PackageProductID: tin.ID, Packages: stk.OpenPackages}); err != nil {
 		return err
 	}
-
-	findings, err := app.Stock.Verify(ctx)
-	if err != nil {
-		return err
-	}
-	if len(findings) > 0 {
-		return errs.Internal(CodeStockInconsistent, "the stock verifier found problems in the seeded data").
-			WithParam("first", findings[0].Code).WithParam("count", strconv.Itoa(len(findings)))
-	}
-	valuation, err := app.Stock.Valuation(ctx)
-	if err != nil {
-		return err
-	}
-	res.StockValue = stockdomain.FormatMinor(valuation.TotalMinor)
-	current, err := app.FX.Current(ctx)
-	if err != nil {
-		return err
-	}
-	res.Rate = fxdomain.FormatRate(current.Rate.Nano)
 	return nil
 }
 

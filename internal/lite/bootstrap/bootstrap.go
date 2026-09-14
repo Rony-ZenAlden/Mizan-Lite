@@ -28,6 +28,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/owner"
 	ownerdb "github.com/mizan-erp/mizan/internal/lite/owner/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
+	"github.com/mizan-erp/mizan/internal/lite/sales"
+	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
+	salesdb "github.com/mizan-erp/mizan/internal/lite/sales/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/settings"
 	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	settingsdb "github.com/mizan-erp/mizan/internal/lite/settings/infra/sqlite"
@@ -143,6 +146,7 @@ type App struct {
 	Setup     *setup.Service
 	Stock     *stock.Service
 	FX        *fx.Service
+	Sales     *sales.Service
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -204,6 +208,9 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Setup = setup.NewService(db, app.Settings, app.Owner, setupRates{fx: app.FX})
 	app.Stock = stock.NewService(db, stockdb.NewStore(db, opts.Clock), stockCatalogue{catalog: app.Catalog},
 		stockGate{owner: app.Owner}, opts.Clock, opts.Location)
+	// The till is built last: its adapters hold the services above, so each must already exist.
+	app.Sales = sales.NewService(db, salesdb.NewStore(db, opts.Clock), salesCatalogue{catalog: app.Catalog}, salesStock{stock: app.Stock},
+		salesRates{fx: app.FX}, salesSettings{settings: app.Settings}, salesGate{owner: app.Owner}, opts.Clock, opts.Location)
 
 	scheduler, err := jobs.New(db, jobs.Options{Clock: opts.Clock, Logger: opts.Logger})
 	if err != nil {
@@ -508,4 +515,106 @@ type setupRates struct{ fx *fx.Service }
 func (r setupRates) RecordFirstRun(ctx context.Context, rate string) error {
 	_, err := r.fx.RecordFirstRun(ctx, rate)
 	return err
+}
+
+// salesGate satisfies the till's OwnerGate port with the owner service.
+type salesGate struct{ owner *owner.Service }
+
+func (g salesGate) Require(ctx context.Context, act sales.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After})
+}
+
+func (g salesGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
+
+// salesCatalogue satisfies the till's Catalogue port: what a till line needs of a product, and nothing else.
+type salesCatalogue struct{ catalog *catalog.Service }
+
+func (c salesCatalogue) product(ctx context.Context, p catalogdomain.Product) (salesdomain.Product, error) {
+	ref, err := c.catalog.Reference(ctx)
+	if err != nil {
+		return salesdomain.Product{}, err
+	}
+	return salesdomain.Product{
+		ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode, UnitDecimals: ref.Units[p.UnitCode].InputDecimals,
+		PriceCurrency: p.PriceCurrency, PriceMicro: p.PriceMicro, Active: p.Active, RowVersion: p.RowVersion,
+	}, nil
+}
+
+func (c salesCatalogue) Product(ctx context.Context, productID id.ID) (salesdomain.Product, error) {
+	p, err := c.catalog.Get(ctx, productID)
+	if err != nil {
+		return salesdomain.Product{}, err
+	}
+	return c.product(ctx, p)
+}
+
+func (c salesCatalogue) ByBarcode(ctx context.Context, code string) (salesdomain.Product, bool, error) {
+	p, found, err := c.catalog.ByBarcode(ctx, code)
+	if err != nil || !found {
+		return salesdomain.Product{}, false, err
+	}
+	out, err := c.product(ctx, p)
+	return out, err == nil, err
+}
+
+func (c salesCatalogue) Currencies(ctx context.Context) ([]salesdomain.Currency, error) {
+	currencies, err := c.catalog.Currencies(ctx)
+	out := make([]salesdomain.Currency, 0, len(currencies))
+	for _, cur := range currencies {
+		out = append(out, salesdomain.Currency{Code: cur.Code, Decimals: cur.Decimals})
+	}
+	return out, err
+}
+
+// salesStock satisfies the till's Stock port with the stock service.
+type salesStock struct{ stock *stock.Service }
+
+func (s salesStock) Stocked(ctx context.Context, productID id.ID) (salesdomain.Stocked, error) {
+	st, err := s.stock.Stocked(ctx, productID)
+	return salesdomain.Stocked{OnHandMicro: st.OnHandMicro, CostKnown: st.CostKnown, AvgCostMicro: st.AvgCostMicro}, err
+}
+
+func (s salesStock) RecordSale(ctx context.Context, line sales.StockLine) error {
+	_, err := s.stock.RecordSale(ctx, stock.SaleInput{ProductID: line.ProductID, QuantityMicro: line.QuantityMicro, SaleID: line.SaleID, SaleLineID: line.SaleLineID})
+	return err
+}
+
+func (s salesStock) RecordSaleVoid(ctx context.Context, saleLineID id.ID) error {
+	_, err := s.stock.RecordSaleVoid(ctx, saleLineID)
+	return err
+}
+
+func (s salesStock) EachSaleMovement(ctx context.Context, fn func(salesdomain.StockMovement) error) error {
+	return s.stock.EachSaleMovement(ctx, func(m stockdomain.Movement) error {
+		return fn(salesdomain.StockMovement{Kind: string(m.Kind), ProductID: m.ProductID, QuantityMicro: m.QuantityMicro, SaleID: m.SaleID, SaleLineID: m.SaleLineID})
+	})
+}
+
+// salesRates satisfies the till's Rates port with the fx service.
+type salesRates struct{ fx *fx.Service }
+
+func (r salesRates) InForce(ctx context.Context) (salesdomain.Rate, string, bool, error) {
+	c, err := r.fx.Current(ctx)
+	if err != nil || !c.Found {
+		return salesdomain.Rate{}, c.Local, false, err
+	}
+	return salesdomain.Rate{ID: c.Rate.ID, Nano: c.Rate.Nano, RecordedAt: c.Rate.RecordedAt, Stale: c.Stale}, c.Local, true, nil
+}
+
+// salesSettings satisfies the till's Settings port with the settings service.
+type salesSettings struct{ settings *settings.Service }
+
+func (s salesSettings) ShopName(ctx context.Context) (string, error) {
+	current, err := s.settings.Get(ctx)
+	return current.ShopName, err
+}
+
+func (s salesSettings) CashNote(ctx context.Context) (int64, error) {
+	current, err := s.settings.Get(ctx)
+	return current.CashNote, err
+}
+
+func (s salesSettings) SetCashNote(ctx context.Context, raw string) (int64, error) {
+	next, err := s.settings.Update(ctx, settingsdomain.Update{CashNote: &raw})
+	return next.CashNote, err
 }

@@ -95,6 +95,26 @@ func (f *Fake) Movements(_ context.Context, productID id.ID, limit int) ([]domai
 	return out, nil
 }
 
+func (f *Fake) SaleMovement(_ context.Context, saleLineID id.ID, kind domain.Kind) (domain.Movement, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, m := range f.movements {
+		if m.SaleLineID == saleLineID && m.Kind == kind {
+			return m, true, nil
+		}
+	}
+	return domain.Movement{}, false, nil
+}
+
+func (f *Fake) EachSaleMovement(ctx context.Context, fn func(domain.Movement) error) error {
+	return f.EachMovement(ctx, func(m domain.Movement) error {
+		if m.SaleID == "" {
+			return nil
+		}
+		return fn(m)
+	})
+}
+
 func (f *Fake) EachMovement(_ context.Context, fn func(domain.Movement) error) error {
 	f.mu.Lock()
 	ordered := append([]domain.Movement(nil), f.movements...)
@@ -118,11 +138,13 @@ func (f *Fake) Append(_ context.Context, m domain.Movement) error {
 	defer f.mu.Unlock()
 	for _, other := range f.movements {
 		if other.ID == m.ID || (other.ProductID == m.ProductID && other.Seq == m.Seq) ||
-			(m.ReversesID != "" && other.ReversesID == m.ReversesID) {
+			(m.ReversesID != "" && other.ReversesID == m.ReversesID) ||
+			(m.SaleLineID != "" && other.SaleLineID == m.SaleLineID && other.Kind == m.Kind) {
 			return errs.Conflict("database.duplicate", "unique constraint")
 		}
 	}
-	if m.OnHandAfterMicro != m.OnHandBeforeMicro+m.QuantityMicro || m.Seq < 1 {
+	isSale := m.Kind == domain.KindSale || m.Kind == domain.KindSaleVoid
+	if m.OnHandAfterMicro != m.OnHandBeforeMicro+m.QuantityMicro || m.Seq < 1 || isSale != (m.SaleID != "") || (m.SaleID == "") != (m.SaleLineID == "") {
 		return errs.Validation("database.constraint_violation", "check constraint")
 	}
 	f.movements = append(f.movements, m)

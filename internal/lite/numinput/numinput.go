@@ -16,6 +16,7 @@
 package numinput
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -111,4 +112,28 @@ func LatinDigits(raw string) string {
 
 func invalid(raw string) error {
 	return errs.Validation(CodeInvalid, "not a number").WithParam("value", raw)
+}
+
+// FormatFixed is the other direction: a signed integer scaled by 10^scale, written with at least minDecimals decimals and
+// every significant digit beyond them — never rounded for display. "12.500" kg (scale 6, 3), "97500" pounds (0, 0),
+// "5.9375" dollars (6, 2), "13007.5355" (9, 0). Latin digits and a '.' always: display localisation is the screen's.
+func FormatFixed(v int64, scale, minDecimals int) string {
+	sign := ""
+	magnitude := uint64(v) //nolint:gosec // reinterpreted below for negative values
+	if v < 0 {
+		sign = "-"
+		magnitude = -magnitude // two's complement: the magnitude of every int64, MinInt64 included
+	}
+	text := strconv.FormatUint(magnitude, 10)
+	if len(text) <= scale {
+		text = strings.Repeat("0", scale-len(text)+1) + text
+	}
+	whole, frac := text[:len(text)-scale], strings.TrimRight(text[len(text)-scale:], "0")
+	if len(frac) < minDecimals {
+		frac += strings.Repeat("0", minDecimals-len(frac))
+	}
+	if frac == "" {
+		return sign + whole
+	}
+	return sign + whole + "." + frac
 }

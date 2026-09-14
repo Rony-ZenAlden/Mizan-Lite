@@ -18,6 +18,8 @@ const unit = int64(1_000_000)
 type Subject struct {
 	Store      stock.Store
 	NewProduct func(t *testing.T) id.ID
+	// NewSaleLine returns a sale and a line of it that stock movements may name — real rows on SQLite (L4).
+	NewSaleLine func(t *testing.T, productID id.ID) (saleID, saleLineID id.ID)
 }
 
 // StoreContract is the behaviour every stock.Store must have.
@@ -156,6 +158,47 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 		history, _ := s.Movements(ctx, p, 10)
 		if len(history) != 2 || history[0].Seq != 2 {
 			t.Fatalf("history ordered by the clock: %+v", history)
+		}
+	})
+
+	t.Run("sale movements read back with their sale, one sale and one void per line", func(t *testing.T) {
+		sub := newSubject(t)
+		s := sub.Store
+		p := sub.NewProduct(t)
+		l := write(t, s)(must(t)(domain.Opening(domain.Level{ProductID: p}, stampFor(t), 2*unit, dollar, "")))
+		saleID, lineID := sub.NewSaleLine(t, p)
+		sale, sold := must(t)(domain.Sale(l, stampFor(t), 5*unit, saleID, lineID)) // below zero: allowed
+		l = write(t, s)(sale, sold)
+		if l.OnHandMicro != -3*unit {
+			t.Fatalf("on hand = %d", l.OnHandMicro)
+		}
+		got, found, err := s.SaleMovement(ctx, lineID, domain.KindSale)
+		if err != nil || !found || !sameMovement(got, sale) {
+			t.Fatalf("SaleMovement = %+v %v %v\nwant %+v", got, found, err, sale)
+		}
+		if _, found, _ := s.SaleMovement(ctx, lineID, domain.KindSaleVoid); found {
+			t.Fatal("a void found before one was written")
+		}
+		again, _, _ := domain.Sale(l, stampFor(t), unit, saleID, lineID)
+		if err := s.Append(ctx, again); err == nil {
+			t.Error("a second sale movement for one line was stored")
+		}
+		void, returned := must(t)(domain.SaleVoid(l, sale, stampFor(t)))
+		write(t, s)(void, returned)
+		if got, found, _ := s.SaleMovement(ctx, lineID, domain.KindSaleVoid); !found || !sameMovement(got, void) {
+			t.Fatalf("void = %+v", got)
+		}
+		var walked []domain.Movement
+		if err := s.EachSaleMovement(ctx, func(m domain.Movement) error { walked = append(walked, m); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if len(walked) != 2 || walked[0].Kind != domain.KindSale || walked[1].Kind != domain.KindSaleVoid {
+			t.Fatalf("EachSaleMovement = %+v", walked)
+		}
+		noSale, _, _ := domain.Receive(returned, stampFor(t), unit, dollar, "")
+		noSale.SaleID = saleID
+		if err := s.Append(ctx, noSale); err == nil {
+			t.Error("a receipt naming a sale was stored")
 		}
 	})
 

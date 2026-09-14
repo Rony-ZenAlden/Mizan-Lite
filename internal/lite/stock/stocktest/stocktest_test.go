@@ -15,6 +15,10 @@ func TestTheFakeMeetsTheStoreContract(t *testing.T) {
 				t.Fatal(err)
 			}
 			return productID
+		}, NewSaleLine: func(t *testing.T, _ id.ID) (id.ID, id.ID) {
+			saleID, _ := id.New()
+			lineID, _ := id.New()
+			return saleID, lineID
 		}}
 	})
 }

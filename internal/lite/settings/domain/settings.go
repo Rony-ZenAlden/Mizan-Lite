@@ -54,6 +54,28 @@ func ParseRateMode(raw string) (RateMode, error) {
 	}
 }
 
+// KeyCashNote is the stored key for the smallest local-currency note the shop hands over: totals in the local
+// currency round to it (L4 §3.2, Q-L4.1). Written only through the sales module, because changing it needs the owner.
+const KeyCashNote = "currency.local_cash_note"
+
+// Cash note bounds and codes.
+const (
+	// DefaultCashNote is 500 pounds (Q-L4.1).
+	DefaultCashNote     = int64(500)
+	MaxCashNote         = int64(1_000_000)
+	CodeInvalidCashNote = "lite.settings.invalid_cash_note"
+)
+
+// ParseCashNote reads a note in whole local minor units: a positive integer up to MaxCashNote.
+func ParseCashNote(raw string) (int64, error) {
+	v, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || v < 1 || v > MaxCashNote {
+		return 0, errs.Validation(CodeInvalidCashNote, "the cash note must be a whole amount from 1 to 1,000,000").
+			WithField("cashNote", CodeInvalidCashNote, "invalid").WithParam("max", strconv.FormatInt(MaxCashNote, 10))
+	}
+	return v, nil
+}
+
 // DefaultLocalCurrency is the local currency of a fresh installation (Q-L3.4).
 const DefaultLocalCurrency = "SYP"
 
@@ -134,11 +156,13 @@ type Settings struct {
 	RateMode RateMode
 	// LocalCurrency is the code the exchange rate prices (L3).
 	LocalCurrency string
+	// CashNote is the smallest local note, in local minor units, that local totals round to (L4).
+	CashNote int64
 }
 
 // Defaults is what a fresh installation uses.
 func Defaults() Settings {
-	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency}
+	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote}
 }
 
 // ProblemKind says what was wrong with a stored row.
@@ -197,6 +221,13 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.LocalCurrency = value
+		case KeyCashNote:
+			note, err := ParseCashNote(value)
+			if err != nil {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.CashNote = note
 		default:
 			problems = append(problems, Problem{Key: key, Value: value, Kind: UnknownKey})
 		}
@@ -215,6 +246,7 @@ type Update struct {
 	Locale   *string
 	ShopName *string
 	RateMode *string
+	CashNote *string
 }
 
 // Apply validates an update against the current settings and returns the result and the rows that
@@ -250,6 +282,16 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 		if mode != s.RateMode {
 			next.RateMode = mode
 			changes = append(changes, Change{Key: KeyRateMode, Value: string(mode)})
+		}
+	}
+	if u.CashNote != nil {
+		note, err := ParseCashNote(*u.CashNote)
+		if err != nil {
+			return s, nil, err
+		}
+		if note != s.CashNote {
+			next.CashNote = note
+			changes = append(changes, Change{Key: KeyCashNote, Value: strconv.FormatInt(note, 10)})
 		}
 	}
 	return next, changes, nil

@@ -41,7 +41,7 @@ func TestEveryReachableErrorCodeIsTranslated(t *testing.T) {
 	root := filepath.Join("..", "..", "..")
 	codes := map[string]string{envelope.CodeInternal: "internal/api/envelope"}
 	for _, dir := range reachable {
-		for code, where := range declaredCodes(t, filepath.Join(root, dir)) {
+		for code, where := range declaredCodes(t, filepath.Join(root, dir), isCodeName) {
 			codes[code] = where
 		}
 	}
@@ -67,8 +67,34 @@ func TestEveryReachableErrorCodeIsTranslated(t *testing.T) {
 	}
 }
 
-// declaredCodes returns every string constant named Code* or Finding* in the non-test Go files under dir.
-func declaredCodes(t *testing.T, dir string) map[string]string {
+// isCodeName is an error code (Code*) or a verifier finding (Finding*), which a screen shows the same way.
+func isCodeName(name string) bool {
+	return strings.HasPrefix(name, "Code") || strings.HasPrefix(name, "Finding")
+}
+
+// TestEveryGuardedActIsNamedInTheOwnersHistory holds each module's owner-only acts (Act* constants) to a label in the
+// owner's history, where OwnerScreen shows them as owner.action.<act>. Added in L4, when the till's three acts would
+// otherwise have shown as raw keys.
+func TestEveryGuardedActIsNamedInTheOwnersHistory(t *testing.T) {
+	acts := declaredCodes(t, filepath.Join("..", "..", "..", "internal", "lite"), func(name string) bool { return strings.HasPrefix(name, "Act") })
+	if len(acts) < 12 {
+		t.Fatalf("found only %d acts; the scan is not matching", len(acts))
+	}
+	catalog, err := i18n.LoadFS(locales.FS())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for act, where := range acts {
+		for _, l := range []locale.Locale{"ar", "en"} {
+			if !catalog.Has(l, "owner.action."+act) {
+				t.Errorf("%s: owner.action.%s has no label (declared in %s)", l, act, where)
+			}
+		}
+	}
+}
+
+// declaredCodes returns every string constant whose name matches in the non-test Go files under dir.
+func declaredCodes(t *testing.T, dir string, match func(string) bool) map[string]string {
 	t.Helper()
 	out := map[string]string{}
 	fset := token.NewFileSet()
@@ -94,8 +120,7 @@ func declaredCodes(t *testing.T, dir string) map[string]string {
 					continue
 				}
 				for i, name := range vs.Names {
-					// Code* is an error code; Finding* is a stock verifier finding, which a screen shows the same way.
-					if !(strings.HasPrefix(name.Name, "Code") || strings.HasPrefix(name.Name, "Finding")) || i >= len(vs.Values) {
+					if !match(name.Name) || i >= len(vs.Values) {
 						continue
 					}
 					lit, ok := vs.Values[i].(*ast.BasicLit)

@@ -40,6 +40,10 @@ type Store interface {
 	Movements(ctx context.Context, productID id.ID, limit int) ([]domain.Movement, error)
 	// EachMovement calls fn with every movement ordered by product, then place — the verifier's walk.
 	EachMovement(ctx context.Context, fn func(domain.Movement) error) error
+	// SaleMovement returns a sale line's movement of kind sale or sale_void, or found=false (L4).
+	SaleMovement(ctx context.Context, saleLineID id.ID, kind domain.Kind) (domain.Movement, bool, error)
+	// EachSaleMovement calls fn with every sale and sale-void movement.
+	EachSaleMovement(ctx context.Context, fn func(domain.Movement) error) error
 	// Append inserts a movement. The ledger is insert-only.
 	Append(ctx context.Context, m domain.Movement) error
 	// SaveLevel inserts a level whose RowVersion is 0, or updates one still at its RowVersion, and returns it at
@@ -373,6 +377,94 @@ func (s *Service) CorrectCost(ctx context.Context, in CorrectCostInput) (domain.
 		return s.write(ctx, m, after)
 	})
 	return out, err
+}
+
+// SaleInput is one sold line's stock, recorded by the till (L4).
+type SaleInput struct {
+	ProductID     id.ID
+	QuantityMicro int64
+	SaleID        id.ID
+	SaleLineID    id.ID
+}
+
+// Sold is what a sale did to stock: its movement, and whether the cost it carried is known (L4 Q-L4.8).
+type Sold struct {
+	Movement  domain.Movement
+	CostKnown bool
+}
+
+// RecordSale takes sold stock out, in the caller's transaction (L4 §5). No owner guard and no refusal below zero:
+// the till decided to sell, warned (Q4).
+func (s *Service) RecordSale(ctx context.Context, in SaleInput) (Sold, error) {
+	var out Sold
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		level, st, err := s.begin(ctx, in.ProductID)
+		if err != nil {
+			return err
+		}
+		m, after, err := domain.Sale(level, st, in.QuantityMicro, in.SaleID, in.SaleLineID)
+		if err != nil {
+			return err
+		}
+		out = Sold{Movement: m, CostKnown: level.CostKnown()}
+		return s.write(ctx, m, after)
+	})
+	return out, err
+}
+
+// RecordSaleVoid returns a voided sale line's stock, in the caller's transaction (L4 §5). The owner's guard is the
+// till's, on the void as a whole.
+func (s *Service) RecordSaleVoid(ctx context.Context, saleLineID id.ID) (domain.Movement, error) {
+	var out domain.Movement
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		sale, found, err := s.store.SaleMovement(ctx, saleLineID, domain.KindSale)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.ErrMovementNotFound()
+		}
+		var voided bool
+		if _, voided, err = s.store.SaleMovement(ctx, saleLineID, domain.KindSaleVoid); err != nil {
+			return err
+		}
+		if voided {
+			return errs.Conflict(domain.CodeNotReversible, "this sale line's stock was already returned")
+		}
+		level, st, err := s.begin(ctx, sale.ProductID)
+		if err != nil {
+			return err
+		}
+		m, after, err := domain.SaleVoid(level, sale, st)
+		if err != nil {
+			return err
+		}
+		out = m
+		return s.write(ctx, m, after)
+	})
+	return out, err
+}
+
+// Stocked is what the till needs about a product's stock before it sells: how much is on hand and whether its cost is
+// known. Quantities only — no cost figure crosses to the till.
+type Stocked struct {
+	OnHandMicro  int64
+	CostKnown    bool
+	AvgCostMicro int64
+}
+
+// Stocked reads a product's stock for a quote.
+func (s *Service) Stocked(ctx context.Context, productID id.ID) (Stocked, error) {
+	l, err := s.store.Level(ctx, productID)
+	if err != nil {
+		return Stocked{}, err
+	}
+	return Stocked{OnHandMicro: l.OnHandMicro, CostKnown: l.CostKnown(), AvgCostMicro: l.AvgCostMicro}, nil
+}
+
+// EachSaleMovement streams every sale and sale-void movement, for the sales verifier.
+func (s *Service) EachSaleMovement(ctx context.Context, fn func(domain.Movement) error) error {
+	return s.store.EachSaleMovement(ctx, fn)
 }
 
 // OnHand is a product's quantity, with no cost (Q-L2.4).

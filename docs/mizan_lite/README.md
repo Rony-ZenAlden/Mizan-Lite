@@ -28,11 +28,11 @@ what is not verified — once built.
 | **L0** | Skeleton and gates | [phases/L0_SKELETON.md](phases/L0_SKELETON.md) | ✅ complete — `c2a1d0e` |
 | **L1** | Catalogue, units, owner PIN, demo data generator | [phases/L1_CATALOGUE.md](phases/L1_CATALOGUE.md) | ✅ complete — `edb4570` |
 | **L2** | Stock: receipts, adjustments, weighted-average cost, opening packages | [phases/L2_STOCK.md](phases/L2_STOCK.md) | ✅ complete — `407fdbb` |
-| **L3** | Exchange rates and the currency system | [phases/L3_RATES.md](phases/L3_RATES.md) | ✅ complete — committed |
-| L4 | The till | — | not started |
+| **L3** | Exchange rates and the currency system | [phases/L3_RATES.md](phases/L3_RATES.md) | ✅ complete — `67d72c8` |
+| **L4** | The till: sales, checkout, receipts | [phases/L4_TILL.md](phases/L4_TILL.md) | ✅ complete — committed 2026-09-14 |
 | L5 | Customers and debts | — | not started |
 | L6 | Profit | — | not started |
-| L7 | Receipts (printing) | — | not started |
+| L7 | Receipt printing and a backups screen (proposed in L4 §2.3) | — | not started |
 | L8 | Release | — | not started |
 
 ## Conventions

@@ -1,11 +1,9 @@
 package domain
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/mizan-erp/mizan/internal/kernel/money"
 	"github.com/mizan-erp/mizan/internal/kernel/quantity"
+	"github.com/mizan-erp/mizan/internal/lite/numinput"
 )
 
 // Value is what the level is worth at its average cost, in USD minor units (cents).
@@ -39,26 +37,8 @@ func FormatMinor(minor int64) string {
 	return formatFixed(minor, d, d)
 }
 
-// formatFixed formats v, which is scaled by 10^scale, with at least `decimals` decimals.
 func formatFixed(v int64, scale, decimals int) string {
-	sign := ""
-	magnitude := uint64(v) //nolint:gosec // reinterpreted below for negative values
-	if v < 0 {
-		sign = "-"
-		magnitude = -magnitude // two's complement: the magnitude of every int64, MinInt64 included
-	}
-	text := strconv.FormatUint(magnitude, 10)
-	if len(text) <= scale {
-		text = strings.Repeat("0", scale-len(text)+1) + text
-	}
-	whole, frac := text[:len(text)-scale], strings.TrimRight(text[len(text)-scale:], "0")
-	if len(frac) < decimals {
-		frac += strings.Repeat("0", decimals-len(frac))
-	}
-	if frac == "" {
-		return sign + whole
-	}
-	return sign + whole + "." + frac
+	return numinput.FormatFixed(v, scale, decimals)
 }
 
 // FormatRate formats a rate held at 10⁻⁹: "15000", "14250.5".

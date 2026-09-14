@@ -46,6 +46,7 @@ func main() {
 	fmt.Printf("  products:      %d (%d on the quick grid)\n", res.Products, res.QuickSlots)
 	fmt.Printf("  stock:         %d opening balances, %d deliveries, value %s USD\n", res.Openings, res.Receipts, res.StockValue)
 	fmt.Printf("  rate:          1 USD = %s SYP (manual mode: the app shows the internet rate for reference)\n", res.Rate)
+	fmt.Printf("  till:          %d sales today, %d voided; taken %s SYP and %s USD\n", res.Sales, res.Voids, res.Takings["SYP"], res.Takings["USD"])
 	fmt.Printf("  owner PIN:     %s\n", *pin)
 	fmt.Printf("  recovery code: %s\n", res.RecoveryCode)
 }

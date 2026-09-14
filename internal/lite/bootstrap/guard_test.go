@@ -3,6 +3,7 @@ package bootstrap_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
@@ -15,6 +16,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
+	"github.com/mizan-erp/mizan/internal/lite/sales"
+	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
@@ -241,3 +244,251 @@ func TestTheRateJobFetchesWhenAProviderIsRegistered(t *testing.T) {
 		t.Fatalf("after the job: %d calls, %+v", source.Calls, current)
 	}
 }
+
+// TestTheTillReachesTheRealModules proves the till's five adapters on the real graph: a sale moves real stock, snapshots
+// the real rate, a discount and a void ask the real owner, and both verifiers walk the result clean.
+func TestTheTillReachesTheRealModules(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t) // olive oil, by the litre, $3.25; first run at 15,000
+	if sales.CodeOwnerRequired != ownerdomain.CodeRequired {
+		t.Fatalf("the till's refusal %q is not the owner's", sales.CodeOwnerRequired)
+	}
+	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Stock.Opening(ctx, stock.ReceiveInput{ProductID: oil.ID, Quantity: "1", Cost: stockdomain.CostInput{Amount: "2", Currency: "USD"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Owner.EndElevation(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1.5 L at $3.25 is $4.875 → $4.88, and 73,125 pounds → a 73,000 total on the 500 note: beyond the 1 L on the shelf.
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "1.5"}}}
+	q, err := app.Sales.Quote(ctx, in)
+	if err != nil || q.TotalMinor != 73_000 || q.RoundingMinor != -125 || q.Lines[0].GrossUSDMinor != 488 || len(q.Lines[0].Warnings) != 1 {
+		t.Fatalf("quote = %+v, %v", q, err)
+	}
+	sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil || sale.ReceiptNo != 1 || sale.Lines[0].UnitCostMicro != 2_000_000 || !sale.Lines[0].CostKnown {
+		t.Fatalf("sale = %+v, %v", sale, err)
+	}
+	if levels, _ := app.Stock.Levels(ctx); levels[0].OnHandMicro != -500_000 {
+		t.Fatalf("stock after selling beyond it = %+v", levels)
+	}
+
+	// A discount needs the real owner.
+	discounted := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "1", DiscountPercent: "10"}}}
+	dq, _ := app.Sales.Quote(ctx, discounted)
+	if _, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: discounted, Token: dq.Token}); errs.CodeOf(err) != ownerdomain.CodeRequired {
+		t.Fatalf("a discount outside owner mode: %v", err)
+	}
+	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: discounted, Token: dq.Token}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "خطأ"}); err != nil {
+		t.Fatal(err)
+	}
+	if levels, _ := app.Stock.Levels(ctx); levels[0].OnHandMicro != 0 {
+		t.Fatalf("stock after the void = %+v", levels)
+	}
+	if findings, err := app.Sales.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("sales findings = %+v, %v", findings, err)
+	}
+	if findings, err := app.Stock.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("stock findings = %+v, %v", findings, err)
+	}
+	if guardedActs(t, app) != 2 {
+		t.Fatalf("the discount and the void are not both in the owner's history")
+	}
+	if found, ok, err := app.Sales.Scan(ctx, "nothing"); err != nil || ok {
+		t.Fatalf("scan = %+v %v %v", found, ok, err)
+	}
+}
+
+// failSecondLine writes the first line's stock movement for real and fails the second.
+type failSecondLine struct {
+	sales.Stock
+	calls int
+}
+
+var errSecondLine = errors.New("the second line's stock movement failed")
+
+func (f *failSecondLine) RecordSale(ctx context.Context, line sales.StockLine) error {
+	f.calls++
+	if f.calls == 2 {
+		return errSecondLine
+	}
+	return f.Stock.RecordSale(ctx, line)
+}
+
+// TestACheckoutThatFailsAfterTheStockMovementLeavesNothing: the first line's movement is written to the real ledger, then
+// the second fails — and the one transaction leaves no sale, no line, no movement and no used receipt number.
+func TestACheckoutThatFailsAfterTheStockMovementLeavesNothing(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t)
+	jam, err := app.Catalog.Create(ctx, catalogdomain.Draft{NameAR: "مربى", UnitCode: "jar", PriceCurrency: "SYP", Price: "30000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := &failSecondLine{}
+	till := bootstrap.TillWithStock(app, func(s sales.Stock) sales.Stock { failing.Stock = s; return failing })
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "1"}, {ProductID: jam.ID, Quantity: "1"}}}
+	q, err := till.Quote(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = till.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token}); !errors.Is(err, errSecondLine) || failing.calls != 2 {
+		t.Fatalf("checkout = %v after %d movements", err, failing.calls)
+	}
+
+	if levels, _ := app.Stock.Levels(ctx); len(levels) != 0 {
+		t.Fatalf("the first line's movement survived: %+v", levels)
+	}
+	if history, _ := app.Stock.History(ctx, oil.ID, 10); len(history.Movements) != 0 {
+		t.Fatalf("ledger = %+v", history.Movements)
+	}
+	if day, _ := app.Sales.Day(ctx, ""); len(day.Sales) != 0 {
+		t.Fatalf("sales = %+v", day.Sales)
+	}
+	sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil || sale.ReceiptNo != 1 {
+		t.Fatalf("the next checkout = %+v, %v — a rolled-back checkout used a receipt number", sale, err)
+	}
+}
+
+// TestVoidNeedsTheOwnerAndReturnsTheStockAtTheSnapshottedCost, on the real modules: a delivery between the sale and its
+// void moves the average; the void averages the goods back in at the cost they left at.
+func TestVoidNeedsTheOwnerAndReturnsTheStockAtTheSnapshottedCost(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t) // $3.25 a litre
+	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Stock.Opening(ctx, stock.ReceiveInput{ProductID: oil.ID, Quantity: "10", Cost: stockdomain.CostInput{Amount: "20", Currency: "USD"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Owner.EndElevation(ctx); err != nil {
+		t.Fatal(err)
+	}
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "4"}}}
+	q, err := app.Sales.Quote(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil || sale.Lines[0].UnitCostMicro != 2_000_000 {
+		t.Fatalf("sale = %+v, %v", sale, err)
+	}
+	// 6 L at $2 and 6 L at $4: $3.
+	if _, err = app.Stock.Receive(ctx, stock.ReceiveInput{ProductID: oil.ID, Quantity: "6", Cost: stockdomain.CostInput{Amount: "24", Currency: "USD"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "أعاده"}); errs.CodeOf(err) != ownerdomain.CodeRequired {
+		t.Fatalf("a void outside owner mode: %v", err)
+	}
+	if levels, _ := app.Stock.Levels(ctx); levels[0].OnHandMicro != 12_000_000 {
+		t.Fatalf("a refused void moved stock: %+v", levels)
+	}
+	if _, err = app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "أعاده"}); err != nil {
+		t.Fatal(err)
+	}
+	// (12 × 3 + 4 × 2) ÷ 16 = 2.75.
+	v, err := app.Stock.Valuation(ctx)
+	if err != nil || len(v.Lines) != 1 || v.Lines[0].OnHandMicro != 16_000_000 || v.Lines[0].AvgCostMicro != 2_750_000 {
+		t.Fatalf("valuation = %+v, %v", v, err)
+	}
+	if findings, err := app.Stock.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("stock findings = %+v, %v", findings, err)
+	}
+	if findings, err := app.Sales.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("sales findings = %+v, %v", findings, err)
+	}
+}
+
+// TestConcurrentCheckoutsNeverShareAReceiptNumber: the number is read and used inside the checkout's transaction, so
+// checkouts racing each other take 1…N — never the same number twice, and never a refusal for it.
+func TestConcurrentCheckoutsNeverShareAReceiptNumber(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t)
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "1"}}}
+	q, err := app.Sales.Quote(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 8
+	numbers := make(chan int64, n)
+	failures := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+			if err != nil {
+				failures <- err
+				return
+			}
+			numbers <- sale.ReceiptNo
+		}()
+	}
+	wg.Wait()
+	close(numbers)
+	close(failures)
+	for err := range failures {
+		t.Errorf("a concurrent checkout failed: %v", err)
+	}
+	seen := map[int64]bool{}
+	for no := range numbers {
+		if seen[no] || no < 1 || no > n {
+			t.Errorf("receipt number %d taken twice or out of 1…%d", no, n)
+		}
+		seen[no] = true
+	}
+	if len(seen) != n {
+		t.Fatalf("%d distinct receipt numbers, want %d", len(seen), n)
+	}
+}
+
+// TestAReceiptIsTheSaleAsRecordedNotTheCatalogueNow: renaming a product and changing its price after the sale changes
+// nothing on the receipt (L4 §7.2).
+func TestAReceiptIsTheSaleAsRecordedNotTheCatalogueNow(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t)
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "2"}}}
+	q, _ := app.Sales.Quote(ctx, in)
+	sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renamed, err := app.Catalog.Update(ctx, catalog.UpdateInput{ID: oil.ID, RowVersion: oil.RowVersion, NameAR: "زيت مستورد", NameEN: "Imported oil"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.Catalog.SetPrice(ctx, catalog.SetPriceInput{ID: oil.ID, RowVersion: renamed.RowVersion, Currency: "USD", Price: "4.00"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.Settings.Update(ctx, settingsdomain.Update{ShopName: ptr("متجر جديد")}); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := app.Sales.Receipt(ctx, sale.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := receipt.Lines[0]
+	if l.NameAR != "زيت زيتون" || l.UnitPriceMicro != 3_250_000 || l.GrossUSDMinor != 650 || receipt.ShopName != "المونة" || receipt.TotalMinor != sale.TotalMinor {
+		t.Fatalf("the receipt followed the catalogue: %+v %+v", receipt, l)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }

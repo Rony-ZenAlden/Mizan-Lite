@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Client, Movement, Product, RateState } from "./client";
+import type { CartQuote, Client, Movement, Product, RateState, Sale } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -93,6 +93,105 @@ export function aMovement(overrides: Partial<Movement> = {}): Movement {
   };
 }
 
+/** A priced cart as Go sends it: 1.5 L of olive oil, 73,000 pounds after rounding, paid with $5, with any field replaceable. */
+export function aQuote(overrides: Partial<CartQuote> = {}): CartQuote {
+  return {
+    lines: [
+      {
+        productId: aProduct().id,
+        nameAr: "زيت زيتون",
+        nameEn: "Olive oil",
+        unitCode: "l",
+        quantity: "1.500",
+        priceCurrency: "USD",
+        unitPrice: "3.25",
+        grossLocal: "73125",
+        grossUsd: "4.88",
+        discountPercent: "",
+        discountLocal: "0",
+        discountUsd: "0.00",
+        netLocal: "73125",
+        netUsd: "4.88",
+        onHand: "12.500",
+        warnings: [],
+      },
+    ],
+    localCurrency: "SYP",
+    linesLocal: "73125",
+    linesUsd: "4.88",
+    discountLocal: "0",
+    discountUsd: "0.00",
+    settlement: "SYP",
+    total: "73000",
+    rounding: "-125",
+    cashNote: "500",
+    otherCurrency: "USD",
+    totalOther: "4.88",
+    tenderCurrency: "SYP",
+    tendered: "73000",
+    tenderGiven: false,
+    changeCurrency: "SYP",
+    change: "0",
+    discounted: false,
+    rate: "15000",
+    rateRecordedAt: "2026-09-14T06:00:00.000Z",
+    rateStale: false,
+    token: "token-1",
+    ...overrides,
+  };
+}
+
+/** A recorded sale as Go sends it — receipt 7, the quote above paid exactly — with any field replaceable. */
+export function aSale(overrides: Partial<Sale> = {}): Sale {
+  const q = aQuote();
+  return {
+    id: "0190a1b2-0000-7000-8000-00000000s007",
+    receiptNo: 7,
+    businessDate: "2026-09-14",
+    soldAt: "2026-09-14T08:30:00.000Z",
+    status: "posted",
+    payment: "cash",
+    shopName: "بقالية المونة",
+    localCurrency: "SYP",
+    rate: "15000",
+    rateRecordedAt: q.rateRecordedAt,
+    settlement: "SYP",
+    linesLocal: q.linesLocal,
+    linesUsd: q.linesUsd,
+    discountLocal: "0",
+    discountUsd: "0.00",
+    cashNote: "500",
+    rounding: "-125",
+    total: "73000",
+    tenderCurrency: "SYP",
+    tendered: "73000",
+    changeCurrency: "SYP",
+    change: "0",
+    voidedAt: "",
+    voidBusinessDate: "",
+    voidReason: "",
+    lines: q.lines.map((l, i) => ({
+      id: `line-${i + 1}`,
+      lineNo: i + 1,
+      productId: l.productId,
+      nameAr: l.nameAr,
+      nameEn: l.nameEn,
+      unitCode: l.unitCode,
+      quantity: l.quantity,
+      priceCurrency: l.priceCurrency,
+      unitPrice: l.unitPrice,
+      grossLocal: l.grossLocal,
+      grossUsd: l.grossUsd,
+      discountPercent: l.discountPercent,
+      discountLocal: l.discountLocal,
+      discountUsd: l.discountUsd,
+      netLocal: l.netLocal,
+      netUsd: l.netUsd,
+    })),
+    ...overrides,
+  };
+}
+
 /** A client answering as a healthy, set-up application, with any method replaceable. */
 export function fakeClient(overrides: Overrides = {}): Client {
   const base: Client = {
@@ -165,6 +264,26 @@ export function fakeClient(overrides: Overrides = {}): Client {
       setMode: async (mode) => aRate({ mode }),
       fetchQuote: async () => ({ provider: "currency-api-jsdelivr", rate: "13007.5355" }),
     },
+    till: {
+      scan: async () => ({ found: false, productId: "", nameAr: "", nameEn: "", unitCode: "", unitDecimals: 0, active: false, onHand: "" }),
+      quote: async () => aQuote(),
+      checkout: async () => aSale(),
+      cashNote: async () => ({ currency: "SYP", note: "500" }),
+      setCashNote: async (note) => ({ currency: "SYP", note }),
+    },
+    sales: {
+      list: async (businessDate) => ({
+        businessDate: businessDate || "2026-09-14",
+        sales: [aSale()],
+        totals: [
+          { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 0, refunded: "0" },
+          { currency: "USD", sales: 0, charged: "0.00", cashIn: "0.00", changeOut: "0.00", voids: 0, refunded: "0.00" },
+        ],
+      }),
+      receipt: async () => aSale(),
+      void: async (input) => aSale({ status: "voided", voidReason: input.reason, voidedAt: "2026-09-14T09:00:00.000Z", voidBusinessDate: "2026-09-14" }),
+      verify: async () => [],
+    },
     owner: {
       status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 0 }),
       elevate: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 120 }),
@@ -181,6 +300,8 @@ export function fakeClient(overrides: Overrides = {}): Client {
     owner: { ...base.owner, ...overrides.owner },
     stock: { ...base.stock, ...overrides.stock },
     fx: { ...base.fx, ...overrides.fx },
+    till: { ...base.till, ...overrides.till },
+    sales: { ...base.sales, ...overrides.sales },
   };
 }
 

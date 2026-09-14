@@ -10,6 +10,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
+	"github.com/mizan-erp/mizan/internal/lite/customers"
+	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx/fxtest"
@@ -492,3 +494,153 @@ func TestAReceiptIsTheSaleAsRecordedNotTheCatalogueNow(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// TestTheTillReachesTheCustomers proves the debt book's adapters on the real graph: a credit sale charged in dollars with
+// pounds paid now, its receipt, a repayment in pounds, a void after it, a refund — and all four verifiers clean.
+func TestTheTillReachesTheCustomers(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t) // olive oil at $3.25 a litre, 15,000
+	if customers.CodeOwnerRequired != ownerdomain.CodeRequired {
+		t.Fatal("the debt book's refusal is not the owner's")
+	}
+	samir, err := app.Customers.Create(ctx, customersdomain.Draft{Name: "سمير", Phone: "0933"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 4 L at $3.25 = $13.00, charged in dollars, 45,000 pounds ($3.00) paid now: $10.00 on the book.
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "4"}}, Settlement: "USD",
+		TenderCurrency: "SYP", Tendered: "45000", Payment: salesdomain.PaymentCredit, CustomerID: samir.ID}
+	q, err := app.Sales.Quote(ctx, in)
+	if err != nil || q.DebtMinor != 1_000 || q.BalanceBeforeMinor != 0 || q.Customer.Name != "سمير" {
+		t.Fatalf("quote = %+v, %v", q, err)
+	}
+	sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil || sale.Credit.AmountMinor != 1_000 || sale.Credit.BalanceAfterMinor != 1_000 || sale.Credit.CustomerName != "سمير" {
+		t.Fatalf("sale = %+v, %v", sale, err)
+	}
+	if receipt, _ := app.Sales.Receipt(ctx, sale.ID); receipt.Credit.Currency != "USD" || receipt.Credit.AmountMinor != 1_000 {
+		t.Fatalf("receipt credit = %+v", receipt.Credit)
+	}
+
+	pay := customersdomain.CashInput{Currency: "USD", TenderCurrency: "SYP", Amount: "60000"} // $4.00
+	pq, err := app.Customers.QuotePayment(ctx, samir.ID, pay)
+	if err != nil || pq.SettledMinor != 400 {
+		t.Fatalf("payment quote = %+v, %v", pq, err)
+	}
+	if _, err = app.Customers.RecordPayment(ctx, customers.PaymentInput{CustomerID: samir.ID, Cash: pay, Token: pq.Token}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "أعاد الزيت"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := app.Customers.Balance(ctx, samir.ID, "USD"); b != -400 {
+		t.Fatalf("balance after voiding a repaid credit sale = %d, want −400 (the shop owes $4)", b)
+	}
+	refund, err := app.Customers.Refund(ctx, customers.RefundInput{CustomerID: samir.ID, Cash: customersdomain.CashInput{Currency: "USD", All: true}, Reason: "نقداً"})
+	if err != nil || refund.BalanceAfterMinor != 0 {
+		t.Fatalf("refund = %+v, %v", refund, err)
+	}
+	for name, verify := range map[string]func() (int, error){
+		"stock": func() (int, error) { f, err := app.Stock.Verify(ctx); return len(f), err },
+		"sales": func() (int, error) { f, err := app.Sales.Verify(ctx); return len(f), err },
+		"debts": func() (int, error) { f, err := app.Customers.Verify(ctx); return len(f), err },
+	} {
+		if n, err := verify(); err != nil || n != 0 {
+			t.Errorf("%s verifier: %d findings, %v", name, n, err)
+		}
+	}
+	if acts := guardedActs(t, app); acts != 2 { // the void and the refund
+		t.Fatalf("%d guarded acts, want 2", acts)
+	}
+}
+
+// failCharge fails every charge — after the sale and its stock movements were written for real.
+type failCharge struct{ sales.Debts }
+
+var errCharge = errors.New("the charge failed")
+
+func (failCharge) Charge(context.Context, sales.ChargeInput) (salesdomain.Credit, error) {
+	return salesdomain.Credit{}, errCharge
+}
+
+// TestACreditSaleWhoseChargeFailsLeavesNothing: the sale, its lines, its stock movement and its receipt number roll back
+// with the charge — one transaction across three modules (L5 H5).
+func TestACreditSaleWhoseChargeFailsLeavesNothing(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t)
+	samir, _ := app.Customers.Create(ctx, customersdomain.Draft{Name: "سمير"})
+	till := bootstrap.TillWithDebts(app, func(d sales.Debts) sales.Debts { return failCharge{d} })
+	in := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "1"}}, Payment: salesdomain.PaymentCredit, CustomerID: samir.ID}
+	q, err := till.Quote(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = till.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token}); !errors.Is(err, errCharge) {
+		t.Fatalf("checkout = %v", err)
+	}
+	if levels, _ := app.Stock.Levels(ctx); len(levels) != 0 {
+		t.Fatalf("the stock movement survived: %+v", levels)
+	}
+	if day, _ := app.Sales.Day(ctx, ""); len(day.Sales) != 0 {
+		t.Fatalf("the sale survived: %+v", day.Sales)
+	}
+	sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil || sale.ReceiptNo != 1 || sale.Credit.AmountMinor != 49_000 { // 48,750 rounded to the note, as a cash total is
+		t.Fatalf("the next checkout = %+v, %v", sale, err)
+	}
+}
+
+// TestConcurrentPaymentsOnOneDebtNeverShareAPlace: five cashiers' screens record the same quoted payment at once. The place
+// is read inside each recording's transaction, so one is written and the rest are refused as stale — never a place taken
+// twice, never a database error (L5 §4.2, §6.4).
+func TestConcurrentPaymentsOnOneDebtNeverShareAPlace(t *testing.T) {
+	ctx := context.Background()
+	app, _ := startFast(t)
+	samir, _ := app.Customers.Create(ctx, customersdomain.Draft{Name: "سمير"})
+	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Customers.Opening(ctx, customers.AmountInput{CustomerID: samir.ID, Currency: "USD", Amount: "50"}); err != nil {
+		t.Fatal(err)
+	}
+	pay := customersdomain.CashInput{Currency: "USD", Amount: "5"}
+	q, err := app.Customers.QuotePayment(ctx, samir.ID, pay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 5
+	results := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := app.Customers.RecordPayment(ctx, customers.PaymentInput{CustomerID: samir.ID, Cash: pay, Token: q.Token})
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+	written := 0
+	for err := range results {
+		switch {
+		case err == nil:
+			written++
+		case errs.CodeOf(err) != customersdomain.CodePaymentStale:
+			t.Errorf("a concurrent payment failed other than stale: %v", err)
+		}
+	}
+	if written != 1 {
+		t.Fatalf("%d payments written from one quote, want 1", written)
+	}
+	if b, _ := app.Customers.Balance(ctx, samir.ID, "USD"); b != 4_500 {
+		t.Fatalf("balance = %d", b)
+	}
+	if findings, err := app.Customers.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("findings = %+v, %v", findings, err)
+	}
+}

@@ -18,7 +18,7 @@ func assembled(t *testing.T, s shop, in domain.CartInput, receiptNo int64) domai
 	}
 	return domain.Assemble(q, s.ctx.Local, domain.Stamp{
 		SaleID: newID(t), LineIDs: ids, ReceiptNo: receiptNo, BusinessDate: "2026-09-14",
-		SoldAt: time.Date(2026, 9, 14, 7, 0, 0, 0, time.UTC), ShopName: "بقالية المونة", Payment: domain.PaymentCash,
+		SoldAt: time.Date(2026, 9, 14, 7, 0, 0, 0, time.UTC), ShopName: "بقالية المونة",
 	})
 }
 
@@ -78,7 +78,7 @@ func TestTheSalesVerifier(t *testing.T) {
 		return sales, moves
 	}
 	sales, moves := day()
-	if f := domain.Verify(sales, moves, syp, usd); len(f) != 0 {
+	if f := domain.Verify(sales, moves, nil, syp, usd); len(f) != 0 {
 		t.Fatalf("a consistent day: %+v", f)
 	}
 	for name, plant := range map[string]struct {
@@ -123,7 +123,7 @@ func TestTheSalesVerifier(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ss, m := day()
 			ss, m = plant.change(ss, m)
-			found := domain.Verify(ss, m, syp, usd)
+			found := domain.Verify(ss, m, nil, syp, usd)
 			if len(found) == 0 {
 				t.Fatalf("nothing found; want %s", plant.code)
 			}

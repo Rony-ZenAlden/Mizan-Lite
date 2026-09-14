@@ -8,6 +8,7 @@
 // struct, so a field renamed in Go is a compile error here.
 import * as App from "../../wailsjs/go/api/App";
 import * as Catalog from "../../wailsjs/go/api/Catalog";
+import * as Customers from "../../wailsjs/go/api/Customers";
 import * as FX from "../../wailsjs/go/api/FX";
 import * as Owner from "../../wailsjs/go/api/Owner";
 import * as Sales from "../../wailsjs/go/api/Sales";
@@ -66,6 +67,21 @@ export type Day = Plain<api.DayDTO>;
 export type DayTotals = Plain<api.DayTotalsDTO>;
 export type VoidInput = Plain<api.VoidInput>;
 export type SaleFinding = Plain<api.SaleFindingDTO>;
+export type Customer = Plain<api.CustomerDTO>;
+export type Balance = Plain<api.BalanceDTO>;
+export type CustomerQuery = Plain<api.CustomerQueryDTO>;
+export type CustomerInput = Plain<api.CustomerInput>;
+export type UpdateCustomerInput = Plain<api.UpdateCustomerInput>;
+export type SetCustomerActiveInput = Plain<api.SetCustomerActiveInput>;
+export type Statement = Plain<api.StatementDTO>;
+export type Entry = Plain<api.EntryDTO>;
+export type Outstanding = Plain<api.OutstandingDTO>;
+export type DebtDay = Plain<api.DebtDayDTO>;
+export type PaymentInput = Plain<api.PaymentInput>;
+export type PaymentQuote = Plain<api.PaymentQuoteDTO>;
+export type DebtAmountInput = Plain<api.DebtAmountInput>;
+export type RefundInput = Plain<api.RefundInput>;
+export type ReverseEntryInput = Plain<api.ReverseEntryInput>;
 
 export function createClient() {
   return {
@@ -132,6 +148,21 @@ export function createClient() {
       receipt: (saleId: string) => unwrap(() => Sales.Receipt(saleId)),
       void: (input: VoidInput) => unwrap(() => Sales.Void(api.VoidInput.createFrom(input))),
       verify: () => unwrap(Sales.Verify),
+    },
+    customers: {
+      search: (query: CustomerQuery) => unwrap(() => Customers.Search(api.CustomerQueryDTO.createFrom(query))),
+      create: (input: CustomerInput) => unwrap(() => Customers.Create(api.CustomerInput.createFrom(input))),
+      update: (input: UpdateCustomerInput) => unwrap(() => Customers.Update(api.UpdateCustomerInput.createFrom(input))),
+      setActive: (input: SetCustomerActiveInput) => unwrap(() => Customers.SetActive(api.SetCustomerActiveInput.createFrom(input))),
+      statement: (customerId: string, currency: string) =>
+        unwrap(() => Customers.Statement(api.StatementQueryDTO.createFrom({ customerId, currency }))),
+      outstanding: () => unwrap(Customers.Outstanding),
+      quotePayment: (input: PaymentInput) => unwrap(() => Customers.QuotePayment(api.PaymentInput.createFrom(input))),
+      recordPayment: (input: PaymentInput) => unwrap(() => Customers.RecordPayment(api.PaymentInput.createFrom(input))),
+      opening: (input: DebtAmountInput) => unwrap(() => Customers.Opening(api.DebtAmountInput.createFrom(input))),
+      writeOff: (input: DebtAmountInput) => unwrap(() => Customers.WriteOff(api.DebtAmountInput.createFrom(input))),
+      refund: (input: RefundInput) => unwrap(() => Customers.Refund(api.RefundInput.createFrom(input))),
+      reverse: (input: ReverseEntryInput) => unwrap(() => Customers.Reverse(api.ReverseEntryInput.createFrom(input))),
     },
     owner: {
       status: () => unwrap(Owner.Status),

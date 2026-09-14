@@ -39,13 +39,15 @@ type CartInput struct {
 	TenderCurrency string          `json:"tenderCurrency"`
 	Tendered       string          `json:"tendered"`
 	ChangeCurrency string          `json:"changeCurrency"`
+	// Payment is "cash" (or "") or "credit"; on credit, Tendered is what was paid now and CustomerID who is charged (L5 §5).
+	Payment    string `json:"payment"`
+	CustomerID string `json:"customerId"`
 }
 
-// CheckoutInput is a cart and the token of the quote the cashier saw. Payment is "cash" or ""; credit arrives in L5.
+// CheckoutInput is a cart and the token of the quote the cashier saw.
 type CheckoutInput struct {
-	Cart    CartInput `json:"cart"`
-	Token   string    `json:"token"`
-	Payment string    `json:"payment"`
+	Cart  CartInput `json:"cart"`
+	Token string    `json:"token"`
 }
 
 // CartLineDTO is one priced line.
@@ -98,6 +100,15 @@ type CartQuoteDTO struct {
 	RateRecordedAt string `json:"rateRecordedAt"`
 	RateStale      bool   `json:"rateStale"`
 	Token          string `json:"token"`
+	// A credit sale (L5 §5.1): the customer, what is added to their debt in Settlement, and their balance in it now and
+	// after — all "" for a cash sale. NeedsCustomer is true until a customer is chosen.
+	Payment       string `json:"payment"`
+	CustomerID    string `json:"customerId"`
+	CustomerName  string `json:"customerName"`
+	NeedsCustomer bool   `json:"needsCustomer"`
+	Debt          string `json:"debt"`
+	BalanceBefore string `json:"balanceBefore"`
+	BalanceAfter  string `json:"balanceAfter"`
 }
 
 // ScanDTO is what a barcode found. Found is false for an unknown code — not an error: the cashier types it again.
@@ -123,7 +134,15 @@ func (in CartInput) toDomain() (salesdomain.CartInput, error) {
 	out := salesdomain.CartInput{
 		Settlement: in.Settlement, SaleDiscount: in.SaleDiscount,
 		TenderCurrency: in.TenderCurrency, Tendered: in.Tendered, ChangeCurrency: in.ChangeCurrency,
-		Lines: make([]salesdomain.LineInput, 0, len(in.Lines)),
+		Payment: salesdomain.Payment(in.Payment), Lines: make([]salesdomain.LineInput, 0, len(in.Lines)),
+	}
+	if in.CustomerID != "" {
+		customerID, err := id.Parse(in.CustomerID)
+		if err != nil {
+			return salesdomain.CartInput{}, errs.NotFound(salesdomain.CodeCustomerNotFound, "no such customer").
+				WithField(salesdomain.FieldCustomer, salesdomain.CodeCustomerNotFound, "not found")
+		}
+		out.CustomerID = customerID
 	}
 	for _, l := range in.Lines {
 		productID, err := id.Parse(l.ProductID)
@@ -176,6 +195,12 @@ func (v tillView) quote(q salesdomain.Quote, local string) CartQuoteDTO {
 	}
 	if q.Settlement.Code != usd {
 		dto.CashNote = v.money(q.CashNoteMinor, local)
+	}
+	dto.Payment = string(q.Payment)
+	if q.Payment == salesdomain.PaymentCredit {
+		dto.CustomerID, dto.CustomerName, dto.NeedsCustomer = q.Customer.ID.String(), q.Customer.Name, q.NeedsCustomer
+		dto.Debt = v.money(q.DebtMinor, q.Settlement.Code)
+		dto.BalanceBefore, dto.BalanceAfter = v.money(q.BalanceBeforeMinor, q.Settlement.Code), v.money(q.BalanceAfterMinor, q.Settlement.Code)
 	}
 	for _, l := range q.Lines {
 		line := v.line(l.Line, local)
@@ -241,7 +266,7 @@ func (t *Till) Checkout(in CheckoutInput) envelope.Result[SaleDTO] {
 		if err != nil {
 			return SaleDTO{}, err
 		}
-		sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: cart, Token: in.Token, Payment: salesdomain.Payment(in.Payment)})
+		sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: cart, Token: in.Token})
 		if err != nil {
 			return SaleDTO{}, err
 		}

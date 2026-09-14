@@ -17,7 +17,7 @@ describe.each(cases)("every route in %s", (locale, direction) => {
   it.each(ROUTES.map((r) => [r.path, r] as const))("mounts %s", async (path) => {
     // The stored language matches the one under test; otherwise the shell correctly adopts the
     // stored one and the case would measure that instead.
-    const client = fakeClient({ settings: { get: async () => ({ locale, shopName: "بقالية المونة", direction }) } });
+    const client = fakeClient({ settings: { get: async () => ({ locale, shopName: "بقالية المونة", direction, debtCurrency: "USD" }) } });
     renderWithProviders(<Shell />, { client, locale, route: path });
     await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", direction));
     expect(document.documentElement).toHaveAttribute("lang", locale);

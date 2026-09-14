@@ -1,6 +1,6 @@
 # Mizan Lite — Phase L4: the till — sales, checkout, and receipts
 
-> **Status: COMPLETE — committed 2026-09-14.** The owner approved this note, its 16 decisions and the stock-ledger migration
+> **Status: COMPLETE — committed `76463fd` (2026-09-14).** The owner approved this note, its 16 decisions and the stock-ledger migration
 > path, answered §13.2 (recorded in §14, which amends §3, §6 and §13 where they differ), and approved the eleven decisions
 > made while building (§16). §15–§21 are the implementation record.
 > **Date:** 2026-09-14. **Base:** L3 (`67d72c8`). **Design:** [../DESIGN.md](../DESIGN.md) §4.4–§4.6, §5 `sales` and
@@ -787,5 +787,5 @@ tests and gates, production build, G5 on the bundle — **every step passed, non
 The owner approved D-L4.i1–i11 — naming D-L4.i1, a void recorded on the day it is made so that a closed day's totals never
 change — and the commit. O4, O7 (for `sales`) and O12 are closed in [../PROGRESS.md](../PROGRESS.md); O1, O5 and O8 remain.
 
-**Next:** L5's design note — customers and debts (`L5_CUSTOMERS.md`).
+**Next:** L5's design note — customers and debts: [L5_CUSTOMERS.md](L5_CUSTOMERS.md).
 

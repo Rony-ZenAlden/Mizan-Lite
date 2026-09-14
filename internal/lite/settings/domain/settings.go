@@ -76,6 +76,14 @@ func ParseCashNote(raw string) (int64, error) {
 	return v, nil
 }
 
+// KeyDebtCurrency is the stored key for the currency a sale put on credit is charged in by default (L5 §5.1, Q-L5.1): a
+// currency code — USD or the local currency — not "local"/"usd", so a redenomination changes no stored value (A-L5.4).
+// The cashier switches it per sale; nothing writes it in L5.
+const KeyDebtCurrency = "debt.default_currency"
+
+// DefaultDebtCurrency is US dollars, by the owner's answer to Q-L5.1: a debt that keeps its value while it is owed.
+const DefaultDebtCurrency = "USD"
+
 // DefaultLocalCurrency is the local currency of a fresh installation (Q-L3.4).
 const DefaultLocalCurrency = "SYP"
 
@@ -158,11 +166,14 @@ type Settings struct {
 	LocalCurrency string
 	// CashNote is the smallest local note, in local minor units, that local totals round to (L4).
 	CashNote int64
+	// DebtCurrency is the currency a credit sale is charged in by default: USD or LocalCurrency (L5).
+	DebtCurrency string
 }
 
 // Defaults is what a fresh installation uses.
 func Defaults() Settings {
-	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote}
+	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote,
+		DebtCurrency: DefaultDebtCurrency}
 }
 
 // ProblemKind says what was wrong with a stored row.
@@ -228,9 +239,20 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.CashNote = note
+		case KeyDebtCurrency:
+			if !isCurrencyCode(value) {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.DebtCurrency = value
 		default:
 			problems = append(problems, Problem{Key: key, Value: value, Kind: UnknownKey})
 		}
+	}
+	// Only now is the local currency known: a debt currency must be it or dollars (rows arrive in no order).
+	if out.DebtCurrency != DefaultDebtCurrency && out.DebtCurrency != out.LocalCurrency {
+		problems = append(problems, Problem{Key: KeyDebtCurrency, Value: out.DebtCurrency, Kind: InvalidValue})
+		out.DebtCurrency = DefaultDebtCurrency
 	}
 	return out, problems
 }

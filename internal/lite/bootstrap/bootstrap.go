@@ -20,6 +20,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	catalogdb "github.com/mizan-erp/mizan/internal/lite/catalog/infra/sqlite"
+	"github.com/mizan-erp/mizan/internal/lite/customers"
+	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
+	customersdb "github.com/mizan-erp/mizan/internal/lite/customers/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	fxdb "github.com/mizan-erp/mizan/internal/lite/fx/infra/sqlite"
@@ -147,6 +150,7 @@ type App struct {
 	Stock     *stock.Service
 	FX        *fx.Service
 	Sales     *sales.Service
+	Customers *customers.Service
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -208,9 +212,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Setup = setup.NewService(db, app.Settings, app.Owner, setupRates{fx: app.FX})
 	app.Stock = stock.NewService(db, stockdb.NewStore(db, opts.Clock), stockCatalogue{catalog: app.Catalog},
 		stockGate{owner: app.Owner}, opts.Clock, opts.Location)
+	app.Customers = customers.NewService(db, customersdb.NewStore(db, opts.Clock), customersRates{fx: app.FX}, customersSettings{settings: app.Settings},
+		customersCurrencies{catalog: app.Catalog}, customersGate{owner: app.Owner}, opts.Clock, opts.Location)
 	// The till is built last: its adapters hold the services above, so each must already exist.
 	app.Sales = sales.NewService(db, salesdb.NewStore(db, opts.Clock), salesCatalogue{catalog: app.Catalog}, salesStock{stock: app.Stock},
-		salesRates{fx: app.FX}, salesSettings{settings: app.Settings}, salesGate{owner: app.Owner}, opts.Clock, opts.Location)
+		salesDebts{customers: app.Customers}, salesRates{fx: app.FX}, salesSettings{settings: app.Settings}, salesGate{owner: app.Owner},
+		opts.Clock, opts.Location)
 
 	scheduler, err := jobs.New(db, jobs.Options{Clock: opts.Clock, Logger: opts.Logger})
 	if err != nil {
@@ -618,3 +625,92 @@ func (s salesSettings) SetCashNote(ctx context.Context, raw string) (int64, erro
 	next, err := s.settings.Update(ctx, settingsdomain.Update{CashNote: &raw})
 	return next.CashNote, err
 }
+
+// salesDebts satisfies the till's Debts port with the debt book (L5 §10.1).
+type salesDebts struct{ customers *customers.Service }
+
+func (d salesDebts) Customer(ctx context.Context, customerID id.ID) (salesdomain.Customer, bool, error) {
+	c, err := d.customers.Customer(ctx, customerID)
+	if errs.CodeOf(err) == customersdomain.CodeNotFound {
+		return salesdomain.Customer{}, false, nil
+	}
+	if err != nil {
+		return salesdomain.Customer{}, false, err
+	}
+	return salesdomain.Customer{ID: c.ID, Name: c.Name, Active: c.Active}, true, nil
+}
+
+func (d salesDebts) Balances(ctx context.Context, customerID id.ID) (map[string]int64, error) {
+	return d.customers.Balances(ctx, customerID)
+}
+
+func creditOf(e customersdomain.Entry, reversed bool) salesdomain.Credit {
+	return salesdomain.Credit{CustomerID: e.CustomerID, CustomerName: e.CustomerName, Currency: e.Currency, AmountMinor: e.AmountMinor,
+		BalanceAfterMinor: e.BalanceAfterMinor, Reversed: reversed}
+}
+
+func (d salesDebts) Charge(ctx context.Context, in sales.ChargeInput) (salesdomain.Credit, error) {
+	e, err := d.customers.Charge(ctx, customers.ChargeInput{CustomerID: in.CustomerID, SaleID: in.SaleID, Currency: in.Currency,
+		AmountMinor: in.AmountMinor, BusinessDate: in.BusinessDate, At: in.At})
+	return creditOf(e, false), err
+}
+
+func (d salesDebts) ReverseCharge(ctx context.Context, saleID id.ID, reason string, at time.Time, businessDate string) error {
+	_, err := d.customers.ReverseCharge(ctx, saleID, reason, at, businessDate)
+	return err
+}
+
+func (d salesDebts) CreditOf(ctx context.Context, saleID id.ID) (salesdomain.Credit, bool, error) {
+	view, found, err := d.customers.ChargeOf(ctx, saleID)
+	if err != nil || !found {
+		return salesdomain.Credit{}, false, err
+	}
+	return creditOf(view.Charge, view.Reversed), true, nil
+}
+
+func (d salesDebts) EachCharge(ctx context.Context, fn func(salesdomain.Charge) error) error {
+	return d.customers.EachCharge(ctx, func(v customers.ChargeView) error {
+		return fn(salesdomain.Charge{SaleID: v.Charge.SaleID, CustomerID: v.Charge.CustomerID, Currency: v.Charge.Currency,
+			AmountMinor: v.Charge.AmountMinor, Reversed: v.Reversed})
+	})
+}
+
+// customersRates satisfies the debt book's Rates port with the fx service.
+type customersRates struct{ fx *fx.Service }
+
+func (r customersRates) InForce(ctx context.Context) (id.ID, int64, string, bool, error) {
+	c, err := r.fx.Current(ctx)
+	if err != nil || !c.Found {
+		return "", 0, c.Local, false, err
+	}
+	return c.Rate.ID, c.Rate.Nano, c.Local, true, nil
+}
+
+// customersSettings satisfies the debt book's Settings port.
+type customersSettings struct{ settings *settings.Service }
+
+func (s customersSettings) CashNote(ctx context.Context) (int64, error) {
+	current, err := s.settings.Get(ctx)
+	return current.CashNote, err
+}
+
+// customersCurrencies satisfies the debt book's Currencies port with the catalogue.
+type customersCurrencies struct{ catalog *catalog.Service }
+
+func (c customersCurrencies) Currencies(ctx context.Context) ([]customersdomain.Currency, error) {
+	currencies, err := c.catalog.Currencies(ctx)
+	out := make([]customersdomain.Currency, 0, len(currencies))
+	for _, cur := range currencies {
+		out = append(out, customersdomain.Currency{Code: cur.Code, Decimals: cur.Decimals})
+	}
+	return out, err
+}
+
+// customersGate satisfies the debt book's OwnerGate port with the owner service.
+type customersGate struct{ owner *owner.Service }
+
+func (g customersGate) Require(ctx context.Context, act customers.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After})
+}
+
+func (g customersGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }

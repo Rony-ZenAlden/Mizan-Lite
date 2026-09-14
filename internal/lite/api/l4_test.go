@@ -62,8 +62,13 @@ func TestTheTillThroughTheBindings(t *testing.T) {
 	if r := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: "not-the-token"}); codeOf(t, r) != salesdomain.CodeQuoteStale {
 		t.Fatal("a checkout with a stale token went through")
 	}
-	if r := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: q.Token, Payment: "credit"}); codeOf(t, r) != salesdomain.CodeCreditNotAvailable {
-		t.Fatal("a credit sale before L5")
+	onCredit := api.CartInput{Lines: cart.Lines, Payment: "credit"}
+	creditQuote := quoted(t, set, onCredit)
+	if !creditQuote.NeedsCustomer || creditQuote.Debt == "" {
+		t.Fatalf("a credit quote with no customer = %+v", creditQuote)
+	}
+	if r := set.Till.Checkout(api.CheckoutInput{Cart: onCredit, Token: creditQuote.Token}); codeOf(t, r) != salesdomain.CodeCustomerRequired {
+		t.Fatal("a credit sale with no customer")
 	}
 	sold := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: q.Token})
 	if !sold.OK || sold.Data.ReceiptNo != 1 || sold.Data.Status != "posted" || sold.Data.Total != "73000" || sold.Data.Change != "2000" ||
@@ -90,8 +95,8 @@ func TestTheTillThroughTheBindings(t *testing.T) {
 		t.Fatalf("List = %+v", day)
 	}
 	syp, usd := day.Data.Totals[0], day.Data.Totals[1]
-	if syp != (api.DayTotalsDTO{Currency: "SYP", Sales: 1, Charged: "73000", CashIn: "0", ChangeOut: "2000", Refunded: "0"}) ||
-		usd != (api.DayTotalsDTO{Currency: "USD", Charged: "0.00", CashIn: "5.00", ChangeOut: "0.00", Refunded: "0.00"}) {
+	if syp != (api.DayTotalsDTO{Currency: "SYP", Sales: 1, Charged: "73000", CashIn: "0", ChangeOut: "2000", Refunded: "0", OnCredit: "0"}) ||
+		usd != (api.DayTotalsDTO{Currency: "USD", Charged: "0.00", CashIn: "5.00", ChangeOut: "0.00", Refunded: "0.00", OnCredit: "0.00"}) {
 		t.Fatalf("totals = %+v", day.Data.Totals)
 	}
 	if r := set.Sales.List("14/09/2026"); codeOf(t, r) != "lite.sales.invalid_date" {

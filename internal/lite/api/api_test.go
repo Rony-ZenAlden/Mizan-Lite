@@ -141,13 +141,13 @@ func TestAttachedBindingsServeTheRealGraph(t *testing.T) {
 	}
 
 	got := set.Settings.Get()
-	if !got.OK || got.Data != (api.SettingsDTO{Locale: "ar", ShopName: "", Direction: "rtl"}) {
+	if !got.OK || got.Data != (api.SettingsDTO{Locale: "ar", ShopName: "", Direction: "rtl", DebtCurrency: "USD"}) {
 		t.Fatalf("Settings.Get = %+v", got)
 	}
 
 	en := "en"
 	updated := set.Settings.Update(api.SettingsInput{Locale: &en})
-	if !updated.OK || updated.Data != (api.SettingsDTO{Locale: "en", ShopName: "", Direction: "ltr"}) {
+	if !updated.OK || updated.Data != (api.SettingsDTO{Locale: "en", ShopName: "", Direction: "ltr", DebtCurrency: "USD"}) {
 		t.Fatalf("Settings.Update = %+v", updated)
 	}
 
@@ -209,7 +209,7 @@ func TestTheWireShapeIsWhatTheFrontendUnwraps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl"}}`
+	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl","debtCurrency":"USD"}}`
 	if string(wire) != want {
 		t.Fatalf("wire = %s\nwant %s", wire, want)
 	}

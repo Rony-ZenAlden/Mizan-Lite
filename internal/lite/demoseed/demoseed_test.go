@@ -10,6 +10,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
+	"github.com/mizan-erp/mizan/internal/lite/customers"
+	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/demoseed"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
@@ -244,13 +246,14 @@ func TestTheSeederRingsUpADayAtTheTill(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Ten sales, one voided: 38,000 + 30,000 + 135,000 + 487,500 + 243,000 + 89,500 + 120,000 + 36,000 pounds still posted,
-	// 1,179,000 in all, and $16.25.
-	if res.Sales != 10 || res.Voids != 1 || res.Takings["SYP"] != "1179000" || res.Takings["USD"] != "16.25" {
+	// 1,179,000 in all, and $16.25 — with L5's credit sales, 16.25 + 16.25 (honey and tahini) + 2.93 (lentils) = 35.43 USD;
+	// the pounds credit sale was voided the same day, so it adds as much as it refunds.
+	if res.Sales != 10 || res.Voids != 2 || res.Takings["SYP"] != "1179000" || res.Takings["USD"] != "35.43" {
 		t.Fatalf("result = %+v", res)
 	}
 
 	day, err := app.Sales.Day(ctx, "")
-	if err != nil || len(day.Sales) != 10 {
+	if err != nil || len(day.Sales) != 13 { // ten at the till, three on credit (L5)
 		t.Fatalf("day = %d sales, %v", len(day.Sales), err)
 	}
 	byReceipt := map[int64]salesdomain.Sale{}
@@ -306,7 +309,7 @@ func TestTheSeederRingsUpADayAtTheTill(t *testing.T) {
 			acts[e.Action]++
 		}
 	}
-	if acts[sales.ActDiscount] != 2 || acts[sales.ActVoid] != 1 {
+	if acts[sales.ActDiscount] != 2 || acts[sales.ActVoid] != 2 { // the till's void, and L5's voided credit sale
 		t.Fatalf("guarded acts = %v", acts)
 	}
 	if status, _ := app.Owner.Status(ctx); status.ElevatedFor != 0 {
@@ -317,5 +320,75 @@ func TestTheSeederRingsUpADayAtTheTill(t *testing.T) {
 	}
 	if findings, err := app.Sales.VerifyUnguarded(ctx); err != nil || len(findings) != 0 {
 		t.Fatalf("the sales verifier found %+v, %v", findings, err)
+	}
+}
+
+// TestTheSeederKeepsADebtBook is L5 §12: eight customers, the paper book adopted, credit and repayments both ways, a
+// voided repaid credit sale refunded, a write-off — and the balances each chain ends at.
+func TestTheSeederKeepsADebtBook(t *testing.T) {
+	ctx := context.Background()
+	app := start(t)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Customers != 8 || res.DebtOpenings != 7 || res.CreditSales != 3 || res.Payments != 4 {
+		t.Fatalf("result = %+v", res)
+	}
+	all, err := app.Customers.Search(ctx, "", false, true)
+	if err != nil || len(all) != 8 {
+		t.Fatalf("%d customers, %v", len(all), err)
+	}
+	balances := map[string]map[string]int64{}
+	for _, w := range all {
+		balances[w.Customer.Name] = map[string]int64{}
+		for _, s := range w.Summaries {
+			balances[w.Customer.Name][s.Currency] = s.BalanceMinor
+		}
+	}
+	for name, want := range map[string]map[string]int64{
+		"أبو محمد - الحلاق": {"USD": 2_500},
+		"أبو محمد - الخضري": {"SYP": 180_000},
+		"أم خالد":           {"USD": 1_250, "SYP": 95_000},
+		"سمير الحداد":       {"USD": 0},                  // a $50 note on $40, $10 change
+		"رامي":              {"SYP": 60_000, "USD": 160}, // 2.93 less 20,000 pounds
+		"أبو فادي":          {"USD": 0},                  // written off
+		"جميلة":             {"USD": 0},                  // 100,000 pounds, then pay all: 143,500
+		"وليد":              {"SYP": 0},                  // voided after 30,000 paid, refunded
+	} {
+		for cur, minor := range want {
+			if balances[name][cur] != minor {
+				t.Errorf("%s %s = %d, want %d", name, cur, balances[name][cur], minor)
+			}
+		}
+	}
+	jamila, _ := app.Customers.Search(ctx, "جميلة", false, false)
+	st, _ := app.Customers.Statement(ctx, jamila[0].Customer.ID, "USD")
+	if len(st.Entries) != 3 || st.Entries[2].Cash.TenderedMinor != 143_500 || st.Entries[2].AmountMinor != -958 {
+		t.Fatalf("Jamila's pay all = %+v", st.Entries)
+	}
+	waleed, _ := app.Customers.Search(ctx, "وليد", false, false)
+	if st, _ := app.Customers.Statement(ctx, waleed[0].Customer.ID, "SYP"); len(st.Entries) != 4 || st.Entries[2].BalanceAfterMinor != -30_000 || st.Entries[3].Kind != customersdomain.KindRefund {
+		t.Fatalf("Waleed's chain = %+v", st.Entries)
+	}
+
+	events, _ := app.Owner.Events(ctx, 500)
+	acts := map[string]int{}
+	for _, e := range events {
+		if e.Kind == ownerdomain.EventGuardedAct {
+			acts[e.Action]++
+		}
+	}
+	if acts[customers.ActOpening] != 7 || acts[customers.ActWriteOff] != 1 || acts[customers.ActRefund] != 1 || acts[sales.ActVoid] != 2 {
+		t.Fatalf("guarded acts = %v", acts)
+	}
+	if status, _ := app.Owner.Status(ctx); status.ElevatedFor != 0 {
+		t.Fatal("the seeder left the installation in owner mode")
+	}
+	if findings, err := app.Customers.VerifyUnguarded(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("debt findings = %+v, %v", findings, err)
+	}
+	if findings, err := app.Sales.VerifyUnguarded(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("sales findings = %+v, %v", findings, err)
 	}
 }

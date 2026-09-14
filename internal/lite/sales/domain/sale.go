@@ -29,7 +29,11 @@ const (
 	CodeChangeCurrency     = "lite.sales.change_currency"
 	CodeDiscountInvalid    = "lite.sales.discount_invalid"
 	CodeDiscountTooLarge   = "lite.sales.discount_too_large"
-	CodeCreditNotAvailable = "lite.sales.credit_not_available"
+	CodeUnknownPayment     = "lite.sales.unknown_payment"
+	CodeCustomerRequired   = "lite.sales.customer_required"
+	CodeCustomerNotFound   = "lite.sales.customer_not_found"
+	CodeCustomerInactive   = "lite.sales.customer_inactive"
+	CodeCreditPaidInFull   = "lite.sales.credit_paid_in_full"
 	CodeVoidReasonRequired = "lite.sales.void_reason_required"
 	CodeVoidReasonTooLong  = "lite.sales.void_reason_too_long"
 	CodeAlreadyVoided      = "lite.sales.already_voided"
@@ -45,6 +49,7 @@ const (
 	FieldTendered        = "tendered"
 	FieldChangeCurrency  = "changeCurrency"
 	FieldReason          = "reason"
+	FieldCustomer        = "customerId"
 )
 
 const (
@@ -59,7 +64,7 @@ const (
 // Payment is how a sale is paid.
 type Payment string
 
-// The payments. Credit exists in the schema and is refused until customers do (L5, A-L4.2).
+// The payments. A credit sale's customer, and what it added to their debt, live on its charge in the debt book (A-L4.2).
 const (
 	PaymentCash   Payment = "cash"
 	PaymentCredit Payment = "credit"
@@ -100,6 +105,33 @@ type Stocked struct {
 	AvgCostMicro int64
 }
 
+// Customer is what the till needs about a customer, supplied by the debt book through a port.
+type Customer struct {
+	ID     id.ID
+	Name   string
+	Active bool
+}
+
+// Credit is a credit sale's charge as the receipt shows it: who, in which currency, what it added, and the balance after
+// (L5 §5.5). Read from the debt book, which holds it immutably.
+type Credit struct {
+	CustomerID        id.ID
+	CustomerName      string
+	Currency          string
+	AmountMinor       int64
+	BalanceAfterMinor int64
+	Reversed          bool
+}
+
+// Charge is a credit sale's charge as the sales verifier checks it.
+type Charge struct {
+	SaleID      id.ID
+	CustomerID  id.ID
+	Currency    string
+	AmountMinor int64
+	Reversed    bool
+}
+
 // Rate is the rate in force a sale snapshots.
 type Rate struct {
 	ID         id.ID
@@ -138,7 +170,9 @@ type Sale struct {
 	VoidBusinessDate   string
 	VoidReason         string
 	RowVersion         int64
-	Lines              []Line
+	// Credit is filled from the debt book for a credit sale; it is not a column of sales.
+	Credit Credit
+	Lines  []Line
 }
 
 // Line is one line of a sale, fully snapshotted.

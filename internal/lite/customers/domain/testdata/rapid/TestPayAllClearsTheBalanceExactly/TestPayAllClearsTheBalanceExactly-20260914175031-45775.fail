@@ -1,0 +1,17 @@
+# 2026/09/14 17:50:31.028707 [TestPayAllClearsTheBalanceExactly] [rapid] draw balance: 4193466
+# 2026/09/14 17:50:31.028718 [TestPayAllClearsTheBalanceExactly] [rapid] draw rate: 255322036560
+# 2026/09/14 17:50:31.028719 [TestPayAllClearsTheBalanceExactly] [rapid] draw debt: "USD"
+# 2026/09/14 17:50:31.028721 [TestPayAllClearsTheBalanceExactly] [rapid] draw paid: "SYP"
+# 2026/09/14 17:50:31.028728 [TestPayAllClearsTheBalanceExactly] the verifier refused pay all: [{Code:lite.customers.verify.cash_wrong CustomerID:01a0a065-f2f4-7b0c-8d5f-c37965795592 Currency:USD EntryID:01a0a065-f2f4-7b10-9217-4cc7e7609d36}], entry {ID:01a0a065-f2f4-7b10-9217-4cc7e7609d36 CustomerID:01a0a065-f2f4-7b0c-8d5f-c37965795592 Currency:USD Seq:2 BusinessDate: OccurredAt:0001-01-01 00:00:00 +0000 UTC Kind:payment AmountMinor:-4193466 BalanceBeforeMinor:4193466 BalanceAfterMinor:0 SaleID: ReversesID: Cash:{RateID:01a0a065-f2f4-7b04-9a21-6d4b7722d3b4 RateNano:255322036560 CashNoteMinor:500 TenderedCurrency:SYP TenderedMinor:10707000 ChangeCurrency:SYP ChangeMinor:0} CustomerName:x Note:}
+# 
+v0.4.8#5138955227917990120
+0x7f7683a043fe1
+0x1c9e2cc950a9cc
+0x3ffcb9
+0xe7fd027e56458
+0x1ef35af1161165
+0x2429ea3150
+0x910b60884e3ce
+0x0
+0xf6c17e3b3a1f
+0x1

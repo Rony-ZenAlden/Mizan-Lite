@@ -89,7 +89,7 @@ drill mizan-cmd-independent-of-lite "Mizan must not import Mizan Lite" \
   cmd/demoseed/zz_drill.go "package main
 import _ \"$M/internal/lite/paths\""
 
-drill lite-pure-text "textkey, numinput and bizdate may import only" \
+drill lite-pure-text "textkey, numinput, bizdate and tender may import only" \
   internal/lite/textkey/zz_drill.go "package textkey
 import _ \"$M/internal/platform/database\""
 
@@ -138,7 +138,7 @@ drill lite-setup-forbids-stock "setup may reach other modules only through the p
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/stock\""
 
-drill lite-bizdate-pure "textkey, numinput and bizdate may import only" \
+drill lite-bizdate-pure "textkey, numinput, bizdate and tender may import only" \
   internal/lite/bizdate/zz_drill.go "package bizdate
 import _ \"$M/internal/kernel/clock\""
 
@@ -211,5 +211,50 @@ import _ \"$M/internal/lite/sales\""
 drill lite-setup-forbids-sales "setup may reach other modules only through the ports it declares" \
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/sales\""
+
+# ── added in L5 ─────────────────────────────────────────────────────────────────────────────────────
+drill lite-customers-isolated "customers may not import another Lite module" \
+  internal/lite/customers/zz_drill.go "package customers
+import _ \"$M/internal/lite/sales\""
+
+drill lite-customers-domain-isolated "customers may not import another Lite module" \
+  internal/lite/customers/domain/zz_drill.go "package domain
+import _ \"$M/internal/lite/sales/domain\""
+
+drill lite-customers-isolated-from-fx "customers may not import another Lite module" \
+  internal/lite/customers/infra/sqlite/zz_drill.go "package sqlite
+import _ \"$M/internal/lite/fx/domain\""
+
+drill lite-tender-pure "textkey, numinput, bizdate and tender may import only" \
+  internal/lite/tender/zz_drill.go "package tender
+import _ \"$M/internal/kernel/money\""
+
+drill lite-sales-forbids-customers "sales may not import another Lite module" \
+  internal/lite/sales/zz_drill.go "package sales
+import _ \"$M/internal/lite/customers\""
+
+drill lite-catalog-forbids-customers "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/customers\""
+
+drill lite-owner-forbids-customers "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/customers\""
+
+drill lite-settings-forbids-customers "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/customers\""
+
+drill lite-stock-forbids-customers "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/customers\""
+
+drill lite-fx-forbids-customers "fx may not import another Lite module" \
+  internal/lite/fx/zz_drill.go "package fx
+import _ \"$M/internal/lite/customers\""
+
+drill lite-setup-forbids-customers "setup may reach other modules only through the ports it declares" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/customers\""
 
 echo "every Lite architecture rule was seen failing"

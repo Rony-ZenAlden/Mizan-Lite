@@ -71,6 +71,30 @@ type Stock interface {
 	EachSaleMovement(ctx context.Context, fn func(domain.StockMovement) error) error
 }
 
+// ChargeInput is what a credit sale adds to its customer's debt.
+type ChargeInput struct {
+	CustomerID   id.ID
+	SaleID       id.ID
+	Currency     string
+	AmountMinor  int64
+	BusinessDate string
+	At           time.Time
+}
+
+// Debts is what the till needs from the debt book (L5 §10.1).
+type Debts interface {
+	// Customer returns a customer, or found=false.
+	Customer(ctx context.Context, customerID id.ID) (domain.Customer, bool, error)
+	// Balances is a customer's balance per currency.
+	Balances(ctx context.Context, customerID id.ID) (map[string]int64, error)
+	// Charge and ReverseCharge join the caller's transaction.
+	Charge(ctx context.Context, in ChargeInput) (domain.Credit, error)
+	ReverseCharge(ctx context.Context, saleID id.ID, reason string, at time.Time, businessDate string) error
+	// CreditOf returns a sale's charge as the receipt shows it, or found=false.
+	CreditOf(ctx context.Context, saleID id.ID) (domain.Credit, bool, error)
+	EachCharge(ctx context.Context, fn func(domain.Charge) error) error
+}
+
 // Rates is what the till needs from the exchange-rate module: the rate in force and the local currency's code.
 type Rates interface {
 	InForce(ctx context.Context) (rate domain.Rate, localCurrency string, found bool, err error)
@@ -108,6 +132,7 @@ type Service struct {
 	store     Store
 	catalogue Catalogue
 	stock     Stock
+	debts     Debts
 	rates     Rates
 	settings  Settings
 	gate      OwnerGate
@@ -117,9 +142,9 @@ type Service struct {
 }
 
 // NewService builds the service.
-func NewService(tx Transactor, store Store, catalogue Catalogue, stock Stock, rates Rates, settings Settings, gate OwnerGate,
+func NewService(tx Transactor, store Store, catalogue Catalogue, stock Stock, debts Debts, rates Rates, settings Settings, gate OwnerGate,
 	clk clock.Clock, loc *time.Location) *Service {
-	return &Service{tx: tx, store: store, catalogue: catalogue, stock: stock, rates: rates, settings: settings, gate: gate,
+	return &Service{tx: tx, store: store, catalogue: catalogue, stock: stock, debts: debts, rates: rates, settings: settings, gate: gate,
 		clk: clk, loc: loc, newID: id.New}
 }
 
@@ -148,22 +173,15 @@ func (s *Service) Quote(ctx context.Context, in domain.CartInput) (domain.Quote,
 	return domain.Price(in, c)
 }
 
-// CheckoutInput is a cart, the token of the quote the cashier saw, and how it is paid.
+// CheckoutInput is a cart — how it is paid included — and the token of the quote the cashier saw.
 type CheckoutInput struct {
-	Cart    domain.CartInput
-	Token   string
-	Payment domain.Payment
+	Cart  domain.CartInput
+	Token string
 }
 
-// Checkout records a sale, moves its stock and issues its receipt, atomically (L4 §4). A discount needs the owner.
+// Checkout records a sale, moves its stock, charges a credit sale's customer and issues its receipt, atomically (L4 §4,
+// L5 §5.4). A discount needs the owner.
 func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (domain.Sale, error) {
-	switch in.Payment {
-	case domain.PaymentCash, "":
-	case domain.PaymentCredit:
-		return domain.Sale{}, errs.Conflict(domain.CodeCreditNotAvailable, "credit sales arrive with customers")
-	default:
-		return domain.Sale{}, errs.Validation(domain.CodeCreditNotAvailable, "unknown payment").WithParam("value", string(in.Payment))
-	}
 	var out domain.Sale
 	err := s.tx.Do(ctx, func(ctx context.Context) error {
 		c, err := s.context(ctx, in.Cart)
@@ -176,6 +194,10 @@ func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (domain.Sale, 
 		}
 		if q.Token != in.Token {
 			return errs.Conflict(domain.CodeQuoteStale, "the rate or a price changed since the quote")
+		}
+		if q.NeedsCustomer {
+			return errs.Validation(domain.CodeCustomerRequired, "a credit sale needs a customer").
+				WithField(domain.FieldCustomer, domain.CodeCustomerRequired, "required")
 		}
 		if q.Discounted {
 			if err = s.gate.Require(ctx, GuardedAct{Action: ActDiscount, Before: grossText(q), After: moneyText(q.TotalMinor, q.Settlement)}); err != nil {
@@ -192,6 +214,12 @@ func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (domain.Sale, 
 		}
 		for _, l := range sale.Lines {
 			if err = s.stock.RecordSale(ctx, StockLine{ProductID: l.ProductID, QuantityMicro: l.QuantityMicro, SaleID: sale.ID, SaleLineID: l.ID}); err != nil {
+				return err
+			}
+		}
+		if sale.Payment == domain.PaymentCredit {
+			if sale.Credit, err = s.debts.Charge(ctx, ChargeInput{CustomerID: q.Customer.ID, SaleID: sale.ID, Currency: q.Settlement.Code,
+				AmountMinor: q.DebtMinor, BusinessDate: sale.BusinessDate, At: sale.SoldAt}); err != nil {
 				return err
 			}
 		}
@@ -214,7 +242,7 @@ func (s *Service) stamp(ctx context.Context, lines int) (domain.Stamp, error) {
 	if err != nil {
 		return domain.Stamp{}, err
 	}
-	st := domain.Stamp{SaleID: saleID, ReceiptNo: receiptNo, ShopName: shop, Payment: domain.PaymentCash}
+	st := domain.Stamp{SaleID: saleID, ReceiptNo: receiptNo, ShopName: shop}
 	for range lines {
 		lineID, err := s.newID()
 		if err != nil {
@@ -271,6 +299,18 @@ func (s *Service) context(ctx context.Context, in domain.CartInput) (domain.Cont
 			return domain.Context{}, err
 		}
 	}
+	if in.Payment == domain.PaymentCredit && in.CustomerID != "" {
+		customer, found, err := s.debts.Customer(ctx, in.CustomerID)
+		if err != nil {
+			return domain.Context{}, err
+		}
+		if found {
+			c.Customer = customer
+			if c.Balances, err = s.debts.Balances(ctx, customer.ID); err != nil {
+				return domain.Context{}, err
+			}
+		}
+	}
 	return c, nil
 }
 
@@ -296,6 +336,8 @@ type CurrencyTotals struct {
 	// Voids and RefundedMinor count the voids made that day, by settlement currency, whenever the sale was.
 	Voids         int
 	RefundedMinor int64
+	// OnCreditMinor is what the day's credit sales added to debts, in the currency they were charged in (L5 §5.7).
+	OnCreditMinor int64
 }
 
 // Day returns the sales of a business date, today when empty.
@@ -317,13 +359,20 @@ func (s *Service) Day(ctx context.Context, businessDate string) (Day, error) {
 		}
 		return d.Totals[code]
 	}
-	for _, sale := range sales {
+	for i, sale := range sales {
+		if sale.Payment == domain.PaymentCredit {
+			if sales[i], err = s.withCredit(ctx, sale); err != nil {
+				return Day{}, err
+			}
+			sale = sales[i]
+		}
 		if sale.BusinessDate == businessDate {
 			totals(sale.TenderedCurrency).CashInMinor += sale.TenderedMinor
 			totals(sale.ChangeCurrency).ChangeOutMinor += sale.ChangeMinor
 			t := totals(sale.SettlementCurrency)
 			t.Sales++
 			t.ChargedMinor += sale.TotalMinor
+			t.OnCreditMinor += sale.Credit.AmountMinor
 		}
 		if sale.Status == domain.StatusVoided && sale.VoidBusinessDate == businessDate {
 			t := totals(sale.SettlementCurrency)
@@ -334,9 +383,24 @@ func (s *Service) Day(ctx context.Context, businessDate string) (Day, error) {
 	return d, nil
 }
 
-// Receipt returns a sale as it was recorded.
+// Receipt returns a sale as it was recorded — a credit sale with its charge from the debt book.
 func (s *Service) Receipt(ctx context.Context, saleID id.ID) (domain.Sale, error) {
-	return s.store.Get(ctx, saleID)
+	sale, err := s.store.Get(ctx, saleID)
+	if err != nil || sale.Payment != domain.PaymentCredit {
+		return sale, err
+	}
+	return s.withCredit(ctx, sale)
+}
+
+func (s *Service) withCredit(ctx context.Context, sale domain.Sale) (domain.Sale, error) {
+	credit, found, err := s.debts.CreditOf(ctx, sale.ID)
+	if err != nil {
+		return domain.Sale{}, err
+	}
+	if found {
+		sale.Credit = credit
+	}
+	return sale, nil
 }
 
 // VoidInput is a void as asked for.
@@ -377,7 +441,13 @@ func (s *Service) Void(ctx context.Context, in VoidInput) (domain.Sale, error) {
 				return err
 			}
 		}
-		return nil
+		if sale.Payment == domain.PaymentCredit {
+			if err = s.debts.ReverseCharge(ctx, sale.ID, voided.VoidReason, at, voided.VoidBusinessDate); err != nil {
+				return err
+			}
+			out, err = s.withCredit(ctx, out)
+		}
+		return err
 	})
 	return out, err
 }
@@ -444,7 +514,11 @@ func (s *Service) VerifyUnguarded(ctx context.Context) ([]domain.Finding, error)
 		if err = s.stock.EachSaleMovement(ctx, func(m domain.StockMovement) error { moves = append(moves, m); return nil }); err != nil {
 			return err
 		}
-		findings = domain.Verify(sales, moves, localCur, usdCur)
+		var charges []domain.Charge
+		if err = s.debts.EachCharge(ctx, func(ch domain.Charge) error { charges = append(charges, ch); return nil }); err != nil {
+			return err
+		}
+		findings = domain.Verify(sales, moves, charges, localCur, usdCur)
 		return nil
 	})
 	return findings, err

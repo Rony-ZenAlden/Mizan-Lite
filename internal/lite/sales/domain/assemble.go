@@ -14,14 +14,13 @@ type Stamp struct {
 	BusinessDate string
 	SoldAt       time.Time
 	ShopName     string
-	Payment      Payment
 }
 
 // Assemble turns a quote into the sale checkout records — the receipt, fully snapshotted (L4 §7.2).
 func Assemble(q Quote, local Currency, st Stamp) Sale {
 	s := Sale{
 		ID: st.SaleID, ReceiptNo: st.ReceiptNo, BusinessDate: st.BusinessDate, SoldAt: st.SoldAt, Status: StatusPosted,
-		Payment: st.Payment, LocalCurrency: local.Code, RateID: q.Rate.ID, RateNano: q.Rate.Nano, RateRecordedAt: q.Rate.RecordedAt,
+		Payment: q.Payment, LocalCurrency: local.Code, RateID: q.Rate.ID, RateNano: q.Rate.Nano, RateRecordedAt: q.Rate.RecordedAt,
 		SettlementCurrency: q.Settlement.Code, LinesLocalMinor: q.LinesLocalMinor, LinesUSDMinor: q.LinesUSDMinor,
 		DiscountLocalMinor: q.DiscountLocalMinor, DiscountUSDMinor: q.DiscountUSDMinor, CashNoteMinor: q.CashNoteMinor,
 		RoundingMinor: q.RoundingMinor, TotalMinor: q.TotalMinor, TenderedCurrency: q.Tender.Code, TenderedMinor: q.TenderedMinor,

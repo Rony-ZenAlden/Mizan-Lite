@@ -17,6 +17,8 @@ type SettingsDTO struct {
 	ShopName string `json:"shopName"`
 	// Direction is derived, not stored, and sent so the frontend never re-derives it.
 	Direction string `json:"direction"`
+	// DebtCurrency is the currency the till charges a credit sale in by default (Q-L5.1).
+	DebtCurrency string `json:"debtCurrency"`
 }
 
 // SettingsInput is a partial change. An absent field is left as it is.
@@ -26,7 +28,7 @@ type SettingsInput struct {
 }
 
 func toSettingsDTO(s domain.Settings) SettingsDTO {
-	return SettingsDTO{Locale: string(s.Locale), ShopName: s.ShopName, Direction: string(s.Locale.Direction())}
+	return SettingsDTO{Locale: string(s.Locale), ShopName: s.ShopName, Direction: string(s.Locale.Direction()), DebtCurrency: s.DebtCurrency}
 }
 
 // Get returns the current settings.

@@ -14,6 +14,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/quantity"
 	"github.com/mizan-erp/mizan/internal/kernel/round"
 	"github.com/mizan-erp/mizan/internal/lite/numinput"
+	"github.com/mizan-erp/mizan/internal/lite/tender"
 )
 
 // rounding is the one rounding every computed figure of a sale uses.
@@ -42,6 +43,10 @@ type CartInput struct {
 	Tendered       string
 	// ChangeCurrency is the currency change is given in; "" for the default (Q-L4.2, Q-L4.3).
 	ChangeCurrency string
+	// Payment is "" or cash, or credit (L5 §5). On credit, Tendered is what was paid now and change is never given.
+	Payment Payment
+	// CustomerID is the customer a credit sale is charged to; a quote without one is priced, and checkout refuses it.
+	CustomerID id.ID
 }
 
 // Context is everything a cart is priced against, read in one moment.
@@ -52,6 +57,10 @@ type Context struct {
 	CashNote int64
 	Products map[id.ID]Product
 	Stock    map[id.ID]Stocked
+	// Customer is the credit sale's customer as the debt book has it (ID empty when not found), and Balances their
+	// balance per currency — for the quote to show, not to decide what is charged.
+	Customer Customer
+	Balances map[string]int64
 }
 
 // Warning is something the till shows on a line without refusing it.
@@ -94,6 +103,15 @@ type Quote struct {
 	Discounted bool
 	Rate       Rate
 	Token      string
+
+	// A credit sale (L5 §5.1): the customer, what is added to their debt in the settlement currency, and their balance
+	// in it now and after. NeedsCustomer is true when no customer has been chosen yet.
+	Payment            Payment
+	Customer           Customer
+	NeedsCustomer      bool
+	DebtMinor          int64
+	BalanceBeforeMinor int64
+	BalanceAfterMinor  int64
 }
 
 // Price prices a cart (L4 §3). It refuses what checkout would refuse, so a quote that succeeds is a sale that can be
@@ -142,7 +160,17 @@ func Price(in CartInput, c Context) (Quote, error) {
 	}
 	q.TotalOtherMinor = q.inOther(q.LinesLocalMinor, q.LinesUSDMinor) - q.inOther(q.DiscountLocalMinor, q.DiscountUSDMinor)
 
-	if err = q.applyTender(in, c); err != nil {
+	switch in.Payment {
+	case "", PaymentCash:
+		q.Payment = PaymentCash
+		err = q.applyTender(in, c)
+	case PaymentCredit:
+		q.Payment = PaymentCredit
+		err = q.applyCredit(in, c)
+	default:
+		err = errs.Validation(CodeUnknownPayment, "a sale is paid in cash or on credit").WithParam("value", string(in.Payment))
+	}
+	if err != nil {
 		return Quote{}, err
 	}
 	q.Token = token(c, q)
@@ -370,36 +398,73 @@ func (q *Quote) applyTender(in CartInput, c Context) error {
 	return nil
 }
 
-// inMinor is an amount in minor units of one currency, exactly, in minor units of another, at the context's rate.
+// applyCredit works out a credit sale (L5 §5.2): the customer, what was paid now in either currency, and what that
+// leaves owed in the settlement currency. Paying the whole total is a cash sale.
+func (q *Quote) applyCredit(in CartInput, c Context) error {
+	switch {
+	case in.CustomerID == "":
+		q.NeedsCustomer = true
+	case c.Customer.ID != in.CustomerID:
+		return errs.NotFound(CodeCustomerNotFound, "no such customer").WithField(FieldCustomer, CodeCustomerNotFound, "not found")
+	case !c.Customer.Active:
+		return errs.Conflict(CodeCustomerInactive, "this customer is inactive").
+			WithField(FieldCustomer, CodeCustomerInactive, "inactive").WithParam("name", c.Customer.Name)
+	default:
+		q.Customer = c.Customer
+	}
+	q.Tender = q.Settlement
+	if in.TenderCurrency != "" {
+		t, _, err := settlement(in.TenderCurrency, c)
+		if err != nil {
+			return errs.Validation(CodeUnknownCurrency, "paid in the local currency or USD").WithParam("value", in.TenderCurrency)
+		}
+		q.Tender = t
+	}
+	q.Change, q.ChangeMinor = q.Settlement, 0
+	if strings.TrimSpace(in.Tendered) == "" {
+		q.Tender, q.TenderedMinor = q.Settlement, 0
+	} else {
+		tenderCur, err := money.NewCurrency(q.Tender.Code, uint8(q.Tender.Decimals), rounding) //nolint:gosec // 0–4 by the schema's CHECK
+		if err != nil {
+			return err
+		}
+		tendered, err := parseAmount(in.Tendered, tenderCur, FieldTendered, CodeTenderDecimals)
+		if err != nil {
+			return err
+		}
+		q.TenderedMinor, q.TenderGiven = tendered.Minor(), true
+	}
+	q.DebtMinor = DebtOf(q.TotalMinor, q.Settlement, q.Tender, q.TenderedMinor, c.Rate.Nano, c.CashNote)
+	if q.DebtMinor <= 0 {
+		return errs.Validation(CodeCreditPaidInFull, "paid in full: take it as a cash sale").
+			WithField(FieldTendered, CodeCreditPaidInFull, "paid in full")
+	}
+	q.BalanceBeforeMinor = c.Balances[q.Settlement.Code]
+	q.BalanceAfterMinor = q.BalanceBeforeMinor + q.DebtMinor
+	return nil
+}
+
+// DebtOf is what a credit sale adds to the debt (L5 §5.2): the total less what was paid now — exactly in the same
+// currency, otherwise converted at the sale's rate and rounded once, to the note in pounds and the cent in dollars.
+func DebtOf(totalMinor int64, settle, tendered Currency, tenderedMinor, rateNano, cashNote int64) int64 {
+	switch {
+	case tenderedMinor == 0:
+		return totalMinor
+	case tendered.Code == settle.Code:
+		return totalMinor - tenderedMinor
+	}
+	exact := new(big.Rat).Sub(big.NewRat(totalMinor, 1), tender.Convert(tenderedMinor, tender.Currency(tendered), tender.Currency(settle), rateNano))
+	return tender.Round(exact, tender.Increment(tender.Currency(settle), cashNote))
+}
+
+// inMinor is an amount in minor units of one currency, exactly, in minor units of another, at the context's rate. The
+// arithmetic is internal/lite/tender's, shared with the debt book (L5 §10.2).
 func inMinor(minor int64, from, to Currency, c Context) *big.Rat {
-	v := new(big.Rat).SetFrac(big.NewInt(minor), pow10(from.Decimals)) // major units of `from`
-	switch from.Code {
-	case to.Code:
-	case c.USD.Code: // dollars → local: × rate
-		v.Mul(v, new(big.Rat).SetFrac(big.NewInt(c.Rate.Nano), big.NewInt(1_000_000_000)))
-	default: // local → dollars: ÷ rate
-		v.Mul(v, new(big.Rat).SetFrac(big.NewInt(1_000_000_000), big.NewInt(c.Rate.Nano)))
-	}
-	return v.Mul(v, new(big.Rat).SetInt(pow10(to.Decimals)))
+	return tender.Convert(minor, tender.Currency(from), tender.Currency(to), c.Rate.Nano)
 }
 
-// roundToNote rounds a non-negative amount in minor units to the nearest multiple of note, half up (Q-L4.1).
-func roundToNote(v *big.Rat, note int64) int64 {
-	if note < 1 {
-		note = 1
-	}
-	units := new(big.Rat).Quo(v, big.NewRat(note, 1))
-	num, den := units.Num(), units.Denom()
-	neg := num.Sign() < 0
-	abs := new(big.Int).Abs(num)
-	half := new(big.Int).Quo(new(big.Int).Add(new(big.Int).Mul(abs, big.NewInt(2)), den), new(big.Int).Mul(den, big.NewInt(2)))
-	if neg {
-		half.Neg(half)
-	}
-	return half.Int64() * note
-}
-
-func pow10(n int) *big.Int { return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil) }
+// roundToNote rounds an amount in minor units to the nearest multiple of note, half up (Q-L4.1).
+func roundToNote(v *big.Rat, note int64) int64 { return tender.Round(v, note) }
 
 func parseQuantity(raw string, decimals int) (int64, error) {
 	normalised, err := numinput.Normalise(raw)
@@ -478,9 +543,9 @@ func lineErr(err error, lineNo int, field string) error {
 // one operator, one machine — only a record of what the screen showed.
 func token(c Context, q Quote) string {
 	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "rate=%s:%d|note=%d|settle=%s|discount=%d/%d|tender=%s:%d:%t|change=%s\n",
+	_, _ = fmt.Fprintf(h, "rate=%s:%d|note=%d|settle=%s|discount=%d/%d|tender=%s:%d:%t|change=%s|payment=%s:%s\n",
 		c.Rate.ID, c.Rate.Nano, c.CashNote, q.Settlement.Code, q.DiscountLocalMinor, q.DiscountUSDMinor,
-		q.Tender.Code, q.TenderedMinor, q.TenderGiven, q.Change.Code)
+		q.Tender.Code, q.TenderedMinor, q.TenderGiven, q.Change.Code, q.Payment, q.Customer.ID)
 	for _, l := range q.Lines {
 		p := c.Products[l.ProductID]
 		_, _ = fmt.Fprintf(h, "%s:%d:%s:%d|%d|%d\n", p.ID, p.RowVersion, p.PriceCurrency, p.PriceMicro, l.QuantityMicro, l.DiscountPercentMicro)

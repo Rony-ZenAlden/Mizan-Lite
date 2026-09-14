@@ -358,3 +358,115 @@ func (g *Gate) Allowed(context.Context) bool {
 	defer g.mu.Unlock()
 	return g.Elevated
 }
+
+// Debts is a fake debt book: customers, balances per currency, and the charges the till wrote.
+type Debts struct {
+	mu        sync.Mutex
+	customers map[id.ID]domain.Customer
+	balances  map[id.ID]map[string]int64
+	charges   []domain.Charge
+	credits   map[id.ID]domain.Credit
+	failNext  bool
+}
+
+// NewDebts returns an empty book.
+func NewDebts() *Debts {
+	return &Debts{customers: map[id.ID]domain.Customer{}, balances: map[id.ID]map[string]int64{}, credits: map[id.ID]domain.Credit{}}
+}
+
+// Add registers a customer with balances, and returns it with its id.
+func (d *Debts) Add(c domain.Customer, balances map[string]int64) domain.Customer {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if c.ID == "" {
+		c.ID, _ = id.New()
+	}
+	d.customers[c.ID] = c
+	d.balances[c.ID] = map[string]int64{}
+	for k, v := range balances {
+		d.balances[c.ID][k] = v
+	}
+	return c
+}
+
+// FailCharges makes the next Charge fail — after the sale and its stock were written.
+func (d *Debts) FailCharges() { d.mu.Lock(); d.failNext = true; d.mu.Unlock() }
+
+// Charges returns the charges written.
+func (d *Debts) Charges() []domain.Charge {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]domain.Charge(nil), d.charges...)
+}
+
+func (d *Debts) Customer(_ context.Context, customerID id.ID) (domain.Customer, bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c, ok := d.customers[customerID]
+	return c, ok, nil
+}
+
+func (d *Debts) Balances(_ context.Context, customerID id.ID) (map[string]int64, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := map[string]int64{}
+	for k, v := range d.balances[customerID] {
+		out[k] = v
+	}
+	return out, nil
+}
+
+func (d *Debts) Charge(_ context.Context, in sales.ChargeInput) (domain.Credit, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.failNext {
+		d.failNext = false
+		return domain.Credit{}, ErrInjected
+	}
+	c, ok := d.customers[in.CustomerID]
+	if !ok || !c.Active {
+		return domain.Credit{}, errs.Conflict("lite.customers.inactive", "inactive")
+	}
+	for _, ch := range d.charges {
+		if ch.SaleID == in.SaleID {
+			return domain.Credit{}, errs.Conflict("database.duplicate", "one charge per sale")
+		}
+	}
+	d.balances[c.ID][in.Currency] += in.AmountMinor
+	d.charges = append(d.charges, domain.Charge{SaleID: in.SaleID, CustomerID: c.ID, Currency: in.Currency, AmountMinor: in.AmountMinor})
+	credit := domain.Credit{CustomerID: c.ID, CustomerName: c.Name, Currency: in.Currency, AmountMinor: in.AmountMinor, BalanceAfterMinor: d.balances[c.ID][in.Currency]}
+	d.credits[in.SaleID] = credit
+	return credit, nil
+}
+
+func (d *Debts) ReverseCharge(_ context.Context, saleID id.ID, _ string, _ time.Time, _ string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for i, ch := range d.charges {
+		if ch.SaleID == saleID && !ch.Reversed {
+			d.charges[i].Reversed = true
+			d.balances[ch.CustomerID][ch.Currency] -= ch.AmountMinor
+			credit := d.credits[saleID]
+			credit.Reversed = true
+			d.credits[saleID] = credit
+			return nil
+		}
+	}
+	return errs.NotFound("lite.customers.charge_not_found", "no charge")
+}
+
+func (d *Debts) CreditOf(_ context.Context, saleID id.ID) (domain.Credit, bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c, ok := d.credits[saleID]
+	return c, ok, nil
+}
+
+func (d *Debts) EachCharge(_ context.Context, fn func(domain.Charge) error) error {
+	for _, ch := range d.Charges() {
+		if err := fn(ch); err != nil {
+			return err
+		}
+	}
+	return nil
+}

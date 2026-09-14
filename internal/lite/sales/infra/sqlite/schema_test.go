@@ -193,7 +193,7 @@ func TestACheckoutThatFailsAfterInsertingLeavesNothing(t *testing.T) {
 	clk := clock.NewFixed(time.Date(2026, 9, 14, 7, 0, 0, 0, time.UTC))
 	in := domain.CartInput{Lines: []domain.LineInput{{ProductID: jar.ID, Quantity: "1"}}}
 
-	failing := sales.NewService(db, store, catalogue, failingStock{stock}, rates, salestest.NewSettings(), &salestest.Gate{}, clk, time.UTC)
+	failing := sales.NewService(db, store, catalogue, failingStock{stock}, salestest.NewDebts(), rates, salestest.NewSettings(), &salestest.Gate{}, clk, time.UTC)
 	q, err := failing.Quote(ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestACheckoutThatFailsAfterInsertingLeavesNothing(t *testing.T) {
 		t.Fatalf("%d sales and %d lines survived a failed checkout", sales64, lines)
 	}
 
-	ok := sales.NewService(db, store, catalogue, stock, rates, salestest.NewSettings(), &salestest.Gate{}, clk, time.UTC)
+	ok := sales.NewService(db, store, catalogue, stock, salestest.NewDebts(), rates, salestest.NewSettings(), &salestest.Gate{}, clk, time.UTC)
 	sale, err := ok.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
 	if err != nil || sale.ReceiptNo != 1 {
 		t.Fatalf("the next checkout = %+v, %v — a rolled-back checkout used a receipt number", sale, err)

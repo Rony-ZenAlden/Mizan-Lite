@@ -68,6 +68,13 @@ type SaleDTO struct {
 	VoidBusinessDate string        `json:"voidBusinessDate"`
 	VoidReason       string        `json:"voidReason"`
 	Lines            []SaleLineDTO `json:"lines"`
+	// A credit sale's charge, read from the debt book (L5 §5.5): flat fields, all "" for a cash sale.
+	CreditCustomerID   string `json:"creditCustomerId"`
+	CreditCustomerName string `json:"creditCustomerName"`
+	CreditCurrency     string `json:"creditCurrency"`
+	CreditAmount       string `json:"creditAmount"`
+	CreditBalanceAfter string `json:"creditBalanceAfter"`
+	CreditReversed     bool   `json:"creditReversed"`
 }
 
 // DayTotalsDTO is one currency's side of a day.
@@ -79,6 +86,8 @@ type DayTotalsDTO struct {
 	ChangeOut string `json:"changeOut"`
 	Voids     int    `json:"voids"`
 	Refunded  string `json:"refunded"`
+	// OnCredit is what the day's credit sales added to debts in this currency (L5 §5.7).
+	OnCredit string `json:"onCredit"`
 }
 
 // DayDTO is the sales of a business date — those sold and those voided on it — and its totals, local currency first.
@@ -140,6 +149,11 @@ func (v tillView) sale(s salesdomain.Sale) SaleDTO {
 	if !s.VoidedAt.IsZero() {
 		dto.VoidedAt = clock.Format(s.VoidedAt)
 	}
+	if s.Payment == salesdomain.PaymentCredit && s.Credit.CustomerID != "" {
+		c := s.Credit
+		dto.CreditCustomerID, dto.CreditCustomerName, dto.CreditCurrency = c.CustomerID.String(), c.CustomerName, c.Currency
+		dto.CreditAmount, dto.CreditBalanceAfter, dto.CreditReversed = v.money(c.AmountMinor, c.Currency), v.money(c.BalanceAfterMinor, c.Currency), c.Reversed
+	}
 	for _, l := range s.Lines {
 		dto.Lines = append(dto.Lines, v.line(l, local))
 	}
@@ -165,6 +179,7 @@ func (s *Sales) List(businessDate string) envelope.Result[DayDTO] {
 			out.Totals = append(out.Totals, DayTotalsDTO{
 				Currency: code, Sales: t.Sales, Charged: v.money(t.ChargedMinor, code), CashIn: v.money(t.CashInMinor, code),
 				ChangeOut: v.money(t.ChangeOutMinor, code), Voids: t.Voids, Refunded: v.money(t.RefundedMinor, code),
+				OnCredit: v.money(t.OnCreditMinor, code),
 			})
 		}
 		// Dollars last, whatever the local currency is called.

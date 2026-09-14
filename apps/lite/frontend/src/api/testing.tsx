@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { CartQuote, Client, Movement, Product, RateState, Sale } from "./client";
+import type { CartQuote, Client, Customer, Entry, Movement, Product, RateState, Sale, Statement } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -137,6 +137,13 @@ export function aQuote(overrides: Partial<CartQuote> = {}): CartQuote {
     rateRecordedAt: "2026-09-14T06:00:00.000Z",
     rateStale: false,
     token: "token-1",
+    payment: "cash",
+    customerId: "",
+    customerName: "",
+    needsCustomer: false,
+    debt: "",
+    balanceBefore: "",
+    balanceAfter: "",
     ...overrides,
   };
 }
@@ -170,6 +177,12 @@ export function aSale(overrides: Partial<Sale> = {}): Sale {
     voidedAt: "",
     voidBusinessDate: "",
     voidReason: "",
+    creditCustomerId: "",
+    creditCustomerName: "",
+    creditCurrency: "",
+    creditAmount: "",
+    creditBalanceAfter: "",
+    creditReversed: false,
     lines: q.lines.map((l, i) => ({
       id: `line-${i + 1}`,
       lineNo: i + 1,
@@ -192,6 +205,65 @@ export function aSale(overrides: Partial<Sale> = {}): Sale {
   };
 }
 
+/** A customer as Go sends it — أبو محمد, owing 9.58 USD since 12 September — with any field replaceable. */
+export function aCustomer(overrides: Partial<Customer> = {}): Customer {
+  return {
+    id: "0190a1b2-0000-7000-8000-00000000c001",
+    name: "أبو محمد",
+    phone: "0933 123 456",
+    note: "الحلاق",
+    active: true,
+    rowVersion: 1,
+    balances: [{ currency: "USD", balance: "9.58", owedSince: "2026-09-12", lastPayment: "2026-09-14", reference: "143700", referenceCurrency: "SYP" }],
+    ...overrides,
+  };
+}
+
+/** A debt book entry as Go sends it: a payment of 6.67 USD in pounds, with any field replaceable. */
+export function anEntry(overrides: Partial<Entry> = {}): Entry {
+  return {
+    id: "0190a1b2-0000-7000-8000-00000000e002",
+    seq: 2,
+    businessDate: "2026-09-14",
+    occurredAt: "2026-09-14T09:00:00.000Z",
+    kind: "payment",
+    currency: "USD",
+    amount: "-6.67",
+    balanceAfter: "9.58",
+    saleId: "",
+    reversesId: "",
+    tenderedCurrency: "SYP",
+    tendered: "100000",
+    changeCurrency: "SYP",
+    change: "0",
+    rate: "15000",
+    note: "",
+    customerName: "أبو محمد",
+    reversed: false,
+    reversible: true,
+    ...overrides,
+  };
+}
+
+/** A statement as Go sends it: the customer's dollar chain, newest first. */
+export function aStatement(overrides: Partial<Statement> = {}): Statement {
+  return {
+    customer: aCustomer(),
+    currency: "USD",
+    balance: "9.58",
+    owedSince: "2026-09-12",
+    lastPayment: "2026-09-14",
+    entries: [
+      anEntry(),
+      anEntry({ id: "e1", seq: 1, businessDate: "2026-09-12", kind: "charge", amount: "16.25", balanceAfter: "16.25", saleId: aSale().id,
+        tenderedCurrency: "", tendered: "", changeCurrency: "", change: "", rate: "", reversible: false }),
+    ],
+    rate: "15000",
+    localCurrency: "SYP",
+    ...overrides,
+  };
+}
+
 /** A client answering as a healthy, set-up application, with any method replaceable. */
 export function fakeClient(overrides: Overrides = {}): Client {
   const base: Client = {
@@ -202,11 +274,12 @@ export function fakeClient(overrides: Overrides = {}): Client {
       completeFirstRun: async () => ({ recoveryCode: "ABCD-EFGH-JKMN-PQRS" }),
     },
     settings: {
-      get: async () => ({ locale: "ar", shopName: "بقالية المونة", direction: "rtl" }),
+      get: async () => ({ locale: "ar", shopName: "بقالية المونة", direction: "rtl", debtCurrency: "USD" }),
       update: async (input) => ({
         locale: input.locale ?? "ar",
         shopName: input.shopName ?? "بقالية المونة",
         direction: input.locale === "en" ? "ltr" : "rtl",
+        debtCurrency: "USD",
       }),
     },
     catalog: {
@@ -276,13 +349,45 @@ export function fakeClient(overrides: Overrides = {}): Client {
         businessDate: businessDate || "2026-09-14",
         sales: [aSale()],
         totals: [
-          { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 0, refunded: "0" },
-          { currency: "USD", sales: 0, charged: "0.00", cashIn: "0.00", changeOut: "0.00", voids: 0, refunded: "0.00" },
+          { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 0, refunded: "0", onCredit: "0" },
+          { currency: "USD", sales: 0, charged: "0.00", cashIn: "0.00", changeOut: "0.00", voids: 0, refunded: "0.00", onCredit: "0.00" },
         ],
       }),
       receipt: async () => aSale(),
       void: async (input) => aSale({ status: "voided", voidReason: input.reason, voidedAt: "2026-09-14T09:00:00.000Z", voidBusinessDate: "2026-09-14" }),
       verify: async () => [],
+    },
+    customers: {
+      search: async () => [aCustomer()],
+      create: async (input) => aCustomer({ id: "new", name: input.name, phone: input.phone, note: input.note, balances: [] }),
+      update: async (input) => aCustomer({ id: input.id, name: input.name, phone: input.phone, note: input.note, rowVersion: input.rowVersion + 1 }),
+      setActive: async (input) => aCustomer({ id: input.id, active: input.active, rowVersion: input.rowVersion + 1 }),
+      statement: async (_customerId, currency) => aStatement({ currency }),
+      outstanding: async () => ({
+        businessDate: "2026-09-14",
+        customers: [aCustomer()],
+        today: [{ currency: "USD", payments: 1, settled: "6.67", cashIn: "0.00", changeOut: "0.00", refunds: 0, refundOut: "0.00", charged: "16.25", writtenOff: "0.00" }],
+        rate: "15000",
+        localCurrency: "SYP",
+      }),
+      quotePayment: async (input) => ({
+        currency: input.currency,
+        tenderCurrency: input.tenderCurrency || input.currency,
+        tendered: "100000",
+        changeCurrency: "SYP",
+        change: "0",
+        settled: "6.67",
+        balanceBefore: "16.25",
+        balanceAfter: "9.58",
+        all: input.all,
+        rate: "15000",
+        token: "pay-token",
+      }),
+      recordPayment: async () => anEntry(),
+      opening: async (input) => anEntry({ kind: "opening", amount: input.amount, currency: input.currency, note: input.note }),
+      writeOff: async (input) => anEntry({ kind: "write_off", amount: `-${input.amount}`, note: input.note }),
+      refund: async (input) => anEntry({ kind: "refund", note: input.reason }),
+      reverse: async (input) => anEntry({ kind: "reversal", reversesId: input.entryId, note: input.reason }),
     },
     owner: {
       status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 0 }),
@@ -302,6 +407,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
     fx: { ...base.fx, ...overrides.fx },
     till: { ...base.till, ...overrides.till },
     sales: { ...base.sales, ...overrides.sales },
+    customers: { ...base.customers, ...overrides.customers },
   };
 }
 

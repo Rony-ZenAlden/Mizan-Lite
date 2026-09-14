@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { MessageKey } from "@/i18n/messages";
+import { CustomersScreen } from "@/screens/customers/CustomersScreen";
 import { HomeScreen } from "@/screens/home/HomeScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
 import { ProductsScreen } from "@/screens/products/ProductsScreen";
@@ -22,6 +23,7 @@ export interface RouteDef {
 export const ROUTES: readonly RouteDef[] = [
   { path: "/till", labelKey: "nav.till", Screen: TillScreen },
   { path: "/sales", labelKey: "nav.sales", Screen: SalesScreen },
+  { path: "/customers", labelKey: "nav.customers", Screen: CustomersScreen },
   { path: "/products", labelKey: "nav.products", Screen: ProductsScreen },
   { path: "/stock", labelKey: "nav.stock", Screen: StockScreen },
   { path: "/rates", labelKey: "nav.rates", Screen: RatesScreen },

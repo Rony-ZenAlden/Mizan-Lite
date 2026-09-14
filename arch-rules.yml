@@ -112,15 +112,17 @@ rules:
           - "self/internal/lite/*/domain/**"
           - "self/internal/lite/textkey"
           - "self/internal/lite/numinput"
-        message: "Lite domain packages may import only stdlib, kernel, textkey, numinput and Lite domain packages"
+          - "self/internal/lite/tender"
+        message: "Lite domain packages may import only stdlib, kernel, textkey, numinput, tender and Lite domain packages"
 
       - name: lite-pure-text
-        description: textkey, numinput and bizdate stay pure, so domains and services may depend on them.
+        description: textkey, numinput, bizdate and tender stay pure, so domains and services may depend on them.
         # bizdate joined in L2: every stock movement's business date comes from it, and a clock or a database
         # reaching it would make "which day is this" depend on something other than the instant and the zone.
-        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**"]
+        # tender joined in L5: the till's change and the debt book's repayments round through it (L5 §10.2).
+        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**", "self/internal/lite/tender/**"]
         allow_only: ["std", "self/internal/kernel/errs"]
-        message: "textkey, numinput and bizdate may import only the standard library and kernel/errs — domain packages and services depend on them"
+        message: "textkey, numinput, bizdate and tender may import only the standard library and kernel/errs — domain packages and services depend on them"
 
       - name: lite-cmd-entry
         description: Lite's commands wire internal/lite and hold nothing else.
@@ -142,6 +144,7 @@ rules:
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -157,6 +160,7 @@ rules:
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -172,6 +176,7 @@ rules:
           - "self/internal/lite/owner/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -185,6 +190,7 @@ rules:
           - "self/internal/lite/stock/**"
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -200,6 +206,7 @@ rules:
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -215,6 +222,7 @@ rules:
           - "self/internal/lite/setup/**"
           - "self/internal/lite/stock/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -232,10 +240,29 @@ rules:
           - "self/internal/lite/owner/**"
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
+          - "self/internal/lite/customers/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
         message: "sales may not import another Lite module — declare a port (see sales.Catalogue, sales.Stock, sales.Rates)"
+
+      - name: lite-customers-isolated
+        description: >
+          The debt book imports no other Lite module. It reaches the rate, settings, the currencies and the owner through
+          the ports it declares; the till reaches it through the Debts port the till declares (L5 §10.1).
+        applies_to: ["self/internal/lite/customers/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "customers may not import another Lite module — declare a port (see customers.Rates and customers.OwnerGate)"
 
       - name: lite-network-only-in-httpsource
         description: >

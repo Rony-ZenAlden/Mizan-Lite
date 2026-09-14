@@ -235,3 +235,52 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L4.i9 | `TextField` forwards its ref; `CellInput` for table cells | approved | [L4 §16](phases/L4_TILL.md) |
 | D-L4.i10 | `bootstrap.TillWithStock`, a test-only export to fail a real transaction after a stock movement | approved | [L4 §16](phases/L4_TILL.md) |
 | D-L4.i11 | The seeder's beyond-stock sale is white cheese, not labneh | approved | [L4 §16](phases/L4_TILL.md) |
+
+## L5 — approved 2026-09-14, with the owner's answers
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L5.1 | A `customers` module owns `customers` and `debt_entries`; reached by the till through a `Debts` port | approved | [L5 §10.1](phases/L5_CUSTOMERS.md) |
+| D-L5.2 | One insert-only chain per customer and currency, ordered by `seq`, balance before/after; never summed across currencies | approved | [L5 §4.1](phases/L5_CUSTOMERS.md) |
+| D-L5.3 | Six kinds (opening, charge, payment, write_off, refund, reversal) held by CHECKs, nullable comparisons guarded | approved | [L5 §8](phases/L5_CUSTOMERS.md) |
+| D-L5.4 | The debt currency is the currency the sale is charged in; the credit default is a setting | approved | [L5 §5.1](phases/L5_CUSTOMERS.md) |
+| D-L5.5 | A credit sale's total is the cash total; optional paid now in either currency; paid in full is cash | approved | [L5 §5.2](phases/L5_CUSTOMERS.md) |
+| D-L5.6 | The charge is written in the checkout transaction; exactly one charge per credit sale (UNIQUE + verifier) | approved | [L5 §5.4](phases/L5_CUSTOMERS.md) |
+| D-L5.7 | Voiding a credit sale reverses its charge in the void's transaction | approved | [L5 §5.6](phases/L5_CUSTOMERS.md) |
+| D-L5.8 | Repayments at the rate in force when paid, rounded once, change by L4's rule, quoted with a token | approved | [L5 §6](phases/L5_CUSTOMERS.md) |
+| D-L5.9 | Pay all settles the balance exactly, recording the rounded note taken (gap ≤ half a note) | approved | [L5 §6.3](phases/L5_CUSTOMERS.md) |
+| D-L5.10 | A balance below zero only from a reversal; used by the next charge or refunded, never past zero | approved | [L5 §7.3](phases/L5_CUSTOMERS.md) |
+| D-L5.11 | Any entry but a charge reversed once with PIN and reason; a charge only by voiding its sale | approved | [L5 §7.4](phases/L5_CUSTOMERS.md) |
+| D-L5.12 | PIN for openings, write-offs, refunds, reversals and deactivating a customer who owes | approved | [L5 §7.5](phases/L5_CUSTOMERS.md) |
+| D-L5.13 | Customer names unique after normalisation; phone in any digits; the charge snapshots the name | approved | [L5 §3](phases/L5_CUSTOMERS.md) |
+| D-L5.14 | Owed since and last payment from the chain; who owes what never totals across currencies | approved | [L5 §4.3](phases/L5_CUSTOMERS.md) |
+| D-L5.15 | Every money movement snapshots the rate; no rate, no payment | approved | [L5 §2.4](phases/L5_CUSTOMERS.md) |
+| D-L5.16 | Conversion and note rounding move to a pure `internal/lite/tender` package | approved | [L5 §10.2](phases/L5_CUSTOMERS.md) |
+| D-L5.17 | A debt verifier; the sales verifier learns credit in the same change | approved | [L5 §9](phases/L5_CUSTOMERS.md) |
+| D-L5.18 | `lite-customers-isolated`; every other isolation rule forbids `customers` | approved | [L5 §10.3](phases/L5_CUSTOMERS.md) |
+| Q-L5.1 | US dollars by default, one tap to pounds | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.2 | Part paid at the counter on a credit sale: yes | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.3 | No credit limits; the balance shown before the sale is completed | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.4 | Anyone at the counter; no PIN for credit sales or repayments | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.5 | Repayments at the rate in force on the day they are made | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.6 | Voiding a partly repaid credit sale allowed; the excess is the customer's credit, used or refunded | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.7 | Write-offs with the owner PIN and a required reason | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.8 | **Each currency's balance separately, each labelled with its reference at the rate** (changed from the recommendation) | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+| Q-L5.9 | Name, phone and note; names unique | approved | [L5 §15](phases/L5_CUSTOMERS.md) |
+
+### L5 — decisions made while building (approved 2026-09-14)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L5.i1 | `debt_entries.cash_note_minor` on payments and refunds, for the verifier's half-note bound | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i2 | Q-L5.8 as answered: each balance with its own labelled reference; no figure adds currencies | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i3 | A credit quote without a customer still prices; checkout refuses it | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i4 | `payment` and `customerId` are part of the cart and its token | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i5 | *On credit* switches the till to the default debt currency and opens the picker | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i6 | A payment's value rounds to the debt's minor unit; change to the note | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i7 | Pay all that rounds to nothing in the other currency is refused | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i8 | *On credit* on the Sales screen counts credit sales rung up that day | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i9 | Today's debt book per currency on the Customers screen | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i10 | Statements newest first; a charge links to its receipt | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i11 | The 50,000-entry timing test: 1 s, 10 s under the race detector | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+| D-L5.i12 | The seeder's sold figure includes credit; its summary counts credit sales and both voids | approved | [L5 §17](phases/L5_CUSTOMERS.md) |

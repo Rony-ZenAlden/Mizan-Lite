@@ -101,15 +101,41 @@ export function ReceiptView({ sale, onClose, onVoided }: { sale: Sale; onClose: 
           <dd className="text-sm font-semibold">
             <Money value={sale.total} currency={sale.settlement} />
           </dd>
-          <dt>{t("receipt.tendered")}</dt>
-          <dd>
-            <Money value={sale.tendered} currency={sale.tenderCurrency} />
-          </dd>
-          <dt>{t("receipt.change")}</dt>
-          <dd>
-            <Money value={sale.change} currency={sale.changeCurrency} />
-          </dd>
+          {sale.payment === "credit" ? (
+            <>
+              <dt>{t("receipt.paid_now")}</dt>
+              <dd>
+                <Money value={sale.tendered} currency={sale.tenderCurrency} />
+              </dd>
+            </>
+          ) : (
+            <>
+              <dt>{t("receipt.tendered")}</dt>
+              <dd>
+                <Money value={sale.tendered} currency={sale.tenderCurrency} />
+              </dd>
+              <dt>{t("receipt.change")}</dt>
+              <dd>
+                <Money value={sale.change} currency={sale.changeCurrency} />
+              </dd>
+            </>
+          )}
         </dl>
+
+        {sale.payment === "credit" && sale.creditCustomerId ? (
+          <dl data-testid="receipt-credit" className="grid grid-cols-[1fr_auto] gap-x-2 border-t border-dashed border-border pt-2">
+            <dt className="col-span-2 font-semibold">{t("receipt.on_credit", { name: sale.creditCustomerName })}</dt>
+            <dt>{t("receipt.debt_added")}</dt>
+            <dd>
+              <Money value={sale.creditAmount} currency={sale.creditCurrency} />
+            </dd>
+            <dt>{t("receipt.balance_after")}</dt>
+            <dd>
+              <Money value={sale.creditBalanceAfter} currency={sale.creditCurrency} />
+            </dd>
+            {sale.creditReversed ? <dd className="col-span-2 text-danger">{t("receipt.debt_reversed")}</dd> : null}
+          </dl>
+        ) : null}
 
         <footer className="space-y-1 border-t border-dashed border-border pt-2 text-center text-text-muted">
           <p>

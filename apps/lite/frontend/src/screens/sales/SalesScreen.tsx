@@ -112,6 +112,10 @@ export function SalesScreen() {
               <dd>
                 <Money value={total.changeOut} currency={total.currency} />
               </dd>
+              <dt>{t("sales.totals.on_credit")}</dt>
+              <dd>
+                <Money value={total.onCredit} currency={total.currency} />
+              </dd>
               <dt>{t("sales.totals.voids", { count: formatInteger(total.voids, locale) })}</dt>
               <dd>
                 <Money value={total.refunded} currency={total.currency} />
@@ -152,7 +156,10 @@ export function SalesScreen() {
                   <td className="p-2">
                     <Money value={sale.change} currency={sale.changeCurrency} />
                   </td>
-                  <td className={`p-2 ${sale.status === "voided" ? "text-danger" : ""}`}>{tDynamic(`sales.status.${sale.status}`)}</td>
+                  <td className={`p-2 ${sale.status === "voided" ? "text-danger" : ""}`}>
+                    {tDynamic(`sales.status.${sale.status}`)}
+                    {sale.payment === "credit" ? <span className="block text-xs text-text-muted">{t("sales.on_credit_to", { name: sale.creditCustomerName })}</span> : null}
+                  </td>
                   <td className="p-2">
                     <Button onClick={() => void openSale(sale.id)}>{t("sales.open")}</Button>
                   </td>

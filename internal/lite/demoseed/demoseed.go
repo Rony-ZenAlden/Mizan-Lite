@@ -13,7 +13,9 @@
 // a later rate and a same-day correction, both through the owner's guard (L3 §11.2). The seeder registers no rate
 // provider: it never reaches the internet. L4: a day at the till — scanned barcodes and quick products, weighed goods,
 // a pounds total paid in dollars, a dollar sale, a sale beyond the shelf, two discounts and a void through the owner's PIN —
-// and then the stock verifier and the sales verifier, both of which must find nothing (L4 §11).
+// and then the stock verifier and the sales verifier, both of which must find nothing (L4 §11). L5: eight customers from
+// the paper book, credit sales in both currencies with part paid now, repayments both ways — pay all of a dollar debt in
+// pounds — a voided repaid credit sale refunded, and a write-off; then the debt book's verifier too (L5 §12).
 package demoseed
 
 import (
@@ -26,6 +28,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	"github.com/mizan-erp/mizan/internal/lite/catalog/domain"
+	"github.com/mizan-erp/mizan/internal/lite/customers"
+	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
@@ -42,11 +46,14 @@ const CodeStockInconsistent = "lite.demoseed.stock_inconsistent"
 // CodeSalesInconsistent fails a run whose sales the sales verifier finds anything wrong with.
 const CodeSalesInconsistent = "lite.demoseed.sales_inconsistent"
 
+// CodeDebtsInconsistent fails a run whose debt book the verifier finds anything wrong with.
+const CodeDebtsInconsistent = "lite.demoseed.debts_inconsistent"
+
 // CodeAlreadySetUp refuses an installation that has completed first run. Re-seeding means deleting the data
 // directory — a decision for whoever runs this, not something a seeder should do on their behalf.
 const CodeAlreadySetUp = "lite.demoseed.already_set_up"
 
-//go:embed data/catalogue.json data/stock.json data/rates.json data/sales.json
+//go:embed data/catalogue.json data/stock.json data/rates.json data/sales.json data/customers.json
 var data embed.FS
 
 type rateLine struct {
@@ -114,6 +121,47 @@ type salesData struct {
 	} `json:"void"`
 }
 
+type customersData struct {
+	Customers []struct {
+		Name     string `json:"name"`
+		Phone    string `json:"phone"`
+		Note     string `json:"note"`
+		Openings []struct {
+			Currency string `json:"currency"`
+			Amount   string `json:"amount"`
+			Note     string `json:"note"`
+		} `json:"openings"`
+	} `json:"customers"`
+	CreditSales []struct {
+		Customer       string     `json:"customer"`
+		Settlement     string     `json:"settlement"`
+		Lines          []saleLine `json:"lines"`
+		TenderCurrency string     `json:"tenderCurrency"`
+		Tendered       string     `json:"tendered"`
+	} `json:"creditSales"`
+	Payments []struct {
+		Customer       string `json:"customer"`
+		Currency       string `json:"currency"`
+		TenderCurrency string `json:"tenderCurrency"`
+		Amount         string `json:"amount"`
+		All            bool   `json:"all"`
+	} `json:"payments"`
+	WriteOff struct {
+		Customer string `json:"customer"`
+		Currency string `json:"currency"`
+		Reason   string `json:"reason"`
+	} `json:"writeOff"`
+	VoidCredit struct {
+		Customer string `json:"customer"`
+		Reason   string `json:"reason"`
+	} `json:"voidCredit"`
+	Refund struct {
+		Customer string `json:"customer"`
+		Currency string `json:"currency"`
+		Reason   string `json:"reason"`
+	} `json:"refund"`
+}
+
 type catalogue struct {
 	ShopName    string `json:"shopName"`
 	PriceChange struct {
@@ -157,6 +205,11 @@ type Result struct {
 	Sales   int
 	Voids   int
 	Takings map[string]string
+	// Customers, DebtOpenings, CreditSales and Payments are the debt book's part (L5).
+	Customers    int
+	DebtOpenings int
+	CreditSales  int
+	Payments     int
 }
 
 // Run seeds app. It refuses an installation that has completed first run.
@@ -186,6 +239,10 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}
 	var day salesData
 	if err = readData("data/sales.json", &day); err != nil {
+		return Result{}, err
+	}
+	var book customersData
+	if err = readData("data/customers.json", &book); err != nil {
 		return Result{}, err
 	}
 
@@ -234,6 +291,9 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	if err := seedSales(ctx, app, day, opts.PIN, byName, &res); err != nil {
 		return Result{}, err
 	}
+	if err := seedCustomers(ctx, app, book, opts.PIN, byName, &res); err != nil {
+		return Result{}, err
+	}
 	if err := check(ctx, app, opts.PIN, &res); err != nil {
 		return Result{}, err
 	}
@@ -272,7 +332,7 @@ func seedSales(ctx context.Context, app *bootstrap.App, day salesData, pin strin
 				return err
 			}
 		}
-		sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: cart, Token: q.Token, Payment: salesdomain.PaymentCash})
+		sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: cart, Token: q.Token})
 		if err != nil {
 			return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "ringing up demo sale "+strconv.Itoa(i+1))
 		}
@@ -300,6 +360,131 @@ func seedSales(ctx context.Context, app *bootstrap.App, day salesData, pin strin
 	return err
 }
 
+// seedCustomers adopts a paper debt book and runs a day of credit (L5 §12): the owner enters the openings with the PIN,
+// the counter sells on credit and takes repayments without it, and the owner voids, refunds and writes off with it.
+func seedCustomers(ctx context.Context, app *bootstrap.App, book customersData, pin string, byName map[string]domain.Product, res *Result) error {
+	people := map[string]customersdomain.Customer{}
+	who := func(name string) (customersdomain.Customer, error) {
+		c, ok := people[name]
+		if !ok {
+			return customersdomain.Customer{}, errs.Internal(CodeDebtsInconsistent, "the demo names a customer it did not create").WithParam("name", name)
+		}
+		return c, nil
+	}
+	elevated := func(fn func() error) error {
+		if _, err := app.Owner.Elevate(ctx, pin); err != nil {
+			return err
+		}
+		if err := fn(); err != nil {
+			return err
+		}
+		_, err := app.Owner.EndElevation(ctx)
+		return err
+	}
+
+	for _, c := range book.Customers {
+		created, err := app.Customers.Create(ctx, customersdomain.Draft{Name: c.Name, Phone: c.Phone, Note: c.Note})
+		if err != nil {
+			return err
+		}
+		people[c.Name] = created
+		res.Customers++
+	}
+	if err := elevated(func() error {
+		for _, c := range book.Customers {
+			for _, o := range c.Openings {
+				if _, err := app.Customers.Opening(ctx, customers.AmountInput{CustomerID: people[c.Name].ID, Currency: o.Currency, Amount: o.Amount, Note: o.Note}); err != nil {
+					return err
+				}
+				res.DebtOpenings++
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	sold := map[string]salesdomain.Sale{}
+	for i, cs := range book.CreditSales {
+		c, err := who(cs.Customer)
+		if err != nil {
+			return err
+		}
+		settlement := cs.Settlement
+		if settlement == "" {
+			current, getErr := app.Settings.Get(ctx)
+			if getErr != nil {
+				return getErr
+			}
+			settlement = current.DebtCurrency // the till's default on credit (Q-L5.1)
+		}
+		cart := salesdomain.CartInput{Settlement: settlement, TenderCurrency: cs.TenderCurrency, Tendered: cs.Tendered,
+			Payment: salesdomain.PaymentCredit, CustomerID: c.ID}
+		for _, l := range cs.Lines {
+			productID := byName[l.Product].ID
+			if l.Barcode != "" {
+				scanned, found, scanErr := app.Sales.Scan(ctx, l.Barcode)
+				if scanErr != nil || !found {
+					return errs.Internal(CodeDebtsInconsistent, "a demo barcode scans nothing").WithParam("barcode", l.Barcode)
+				}
+				productID = scanned.Product.ID
+			}
+			cart.Lines = append(cart.Lines, salesdomain.LineInput{ProductID: productID, Quantity: l.Quantity})
+		}
+		q, err := app.Sales.Quote(ctx, cart)
+		if err != nil {
+			return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "quoting demo credit sale "+strconv.Itoa(i+1))
+		}
+		sale, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: cart, Token: q.Token})
+		if err != nil {
+			return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "ringing up demo credit sale "+strconv.Itoa(i+1))
+		}
+		sold[cs.Customer] = sale
+		res.CreditSales++
+	}
+
+	for i, p := range book.Payments {
+		c, err := who(p.Customer)
+		if err != nil {
+			return err
+		}
+		in := customersdomain.CashInput{Currency: p.Currency, TenderCurrency: p.TenderCurrency, Amount: p.Amount, All: p.All}
+		q, err := app.Customers.QuotePayment(ctx, c.ID, in)
+		if err != nil {
+			return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "quoting demo payment "+strconv.Itoa(i+1))
+		}
+		if _, err = app.Customers.RecordPayment(ctx, customers.PaymentInput{CustomerID: c.ID, Cash: in, Token: q.Token}); err != nil {
+			return err
+		}
+		res.Payments++
+	}
+
+	return elevated(func() error {
+		off, err := who(book.WriteOff.Customer)
+		if err != nil {
+			return err
+		}
+		if _, err = app.Customers.WriteOff(ctx, customers.AmountInput{CustomerID: off.ID, Currency: book.WriteOff.Currency, All: true, Note: book.WriteOff.Reason}); err != nil {
+			return err
+		}
+		voided, ok := sold[book.VoidCredit.Customer]
+		if !ok {
+			return errs.Internal(CodeDebtsInconsistent, "the demo voids a credit sale it did not make")
+		}
+		if _, err = app.Sales.Void(ctx, sales.VoidInput{SaleID: voided.ID, Reason: book.VoidCredit.Reason}); err != nil {
+			return err
+		}
+		res.Voids++
+		refunded, err := who(book.Refund.Customer)
+		if err != nil {
+			return err
+		}
+		_, err = app.Customers.Refund(ctx, customers.RefundInput{CustomerID: refunded.ID, Reason: book.Refund.Reason,
+			Cash: customersdomain.CashInput{Currency: book.Refund.Currency, All: true}})
+		return err
+	})
+}
+
 // check runs both verifiers over everything seeded, in owner mode, and records the figures the command prints. A demo
 // that fails the application's own checks is a demo of a defect.
 func check(ctx context.Context, app *bootstrap.App, pin string, res *Result) error {
@@ -321,6 +506,14 @@ func check(ctx context.Context, app *bootstrap.App, pin string, res *Result) err
 	if len(salesFindings) > 0 {
 		return errs.Internal(CodeSalesInconsistent, "the sales verifier found problems in the seeded data").
 			WithParam("first", salesFindings[0].Code).WithParam("count", strconv.Itoa(len(salesFindings)))
+	}
+	debtFindings, err := app.Customers.Verify(ctx)
+	if err != nil {
+		return err
+	}
+	if len(debtFindings) > 0 {
+		return errs.Internal(CodeDebtsInconsistent, "the debt book's verifier found problems in the seeded data").
+			WithParam("first", debtFindings[0].Code).WithParam("count", strconv.Itoa(len(debtFindings)))
 	}
 	valuation, err := app.Stock.Valuation(ctx)
 	if err != nil {

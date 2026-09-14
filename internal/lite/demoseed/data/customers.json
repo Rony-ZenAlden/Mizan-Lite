@@ -1,0 +1,27 @@
+{
+  "comment": "Customers and their debts for lite-demoseed (L5 §12): believable, not real. Openings come from the paper book; credit sales, payments and the owner's acts follow in the order a shop would make them. The comments are what the tests expect.",
+  "customers": [
+    { "name": "أبو محمد - الحلاق", "phone": "0933 111 222", "note": "يدفع آخر الشهر", "openings": [{ "currency": "USD", "amount": "25", "note": "الدفتر، صفحة 3" }] },
+    { "name": "أبو محمد - الخضري", "phone": "0944 333 444", "openings": [{ "currency": "SYP", "amount": "180000", "note": "الدفتر، صفحة 5" }] },
+    { "name": "أم خالد", "phone": "0955 555 666", "openings": [{ "currency": "USD", "amount": "12.50", "note": "الدفتر، صفحة 7" }, { "currency": "SYP", "amount": "95000", "note": "الدفتر، صفحة 7" }] },
+    { "name": "سمير الحداد", "phone": "0966 777 888", "openings": [{ "currency": "USD", "amount": "40", "note": "الدفتر، صفحة 9" }] },
+    { "name": "رامي", "phone": "0988 999 000", "openings": [{ "currency": "SYP", "amount": "60000", "note": "الدفتر، صفحة 10" }] },
+    { "name": "أبو فادي", "phone": "0911 222 333", "openings": [{ "currency": "USD", "amount": "8", "note": "الدفتر، صفحة 12" }] },
+    { "name": "جميلة", "phone": "0922 444 555" },
+    { "name": "وليد", "phone": "0999 666 777" }
+  ],
+  "creditSales": [
+    { "comment": "honey and tahini charged in dollars, the default: 16.25 USD owed", "customer": "جميلة", "lines": [{ "barcode": "6290001000141", "quantity": "1" }, { "barcode": "6290001000103", "quantity": "1" }] },
+    { "comment": "two jars charged in pounds, 20,000 paid now: 56,000 SYP owed — voided below", "customer": "وليد", "settlement": "SYP", "lines": [{ "barcode": "6290001000042", "quantity": "2" }], "tenderCurrency": "SYP", "tendered": "20000" },
+    { "comment": "2 kg of lentils, 2.93 USD, 20,000 pounds paid now (1.3333 USD): 1.60 USD owed", "customer": "رامي", "lines": [{ "product": "عدس أحمر", "quantity": "2" }], "tenderCurrency": "SYP", "tendered": "20000" }
+  ],
+  "payments": [
+    { "comment": "100,000 pounds towards 16.25 USD: settles 6.67, 9.58 left", "customer": "جميلة", "currency": "USD", "tenderCurrency": "SYP", "amount": "100000" },
+    { "comment": "pay all of 9.58 USD in pounds: 143,500 taken, nothing left", "customer": "جميلة", "currency": "USD", "tenderCurrency": "SYP", "all": true },
+    { "comment": "a $50 note on 40 USD: 10 USD change", "customer": "سمير الحداد", "currency": "USD", "tenderCurrency": "USD", "amount": "50" },
+    { "comment": "30,000 pounds towards 56,000 — before the sale is voided", "customer": "وليد", "currency": "SYP", "amount": "30000" }
+  ],
+  "writeOff": { "customer": "أبو فادي", "currency": "USD", "reason": "سافر خارج البلد" },
+  "voidCredit": { "customer": "وليد", "reason": "أعاد البضاعة" },
+  "refund": { "customer": "وليد", "currency": "SYP", "reason": "رُدّت الدفعة نقداً" }
+}

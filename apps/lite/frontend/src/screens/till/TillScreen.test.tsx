@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { aProduct, aQuote, aRate, aSale, fakeClient, renderWithProviders } from "@/api/testing";
+import { aCustomer, aProduct, aQuote, aRate, aSale, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import type { CartInput, CartQuote, CheckoutInput, Sale } from "@/api/client";
 import { QUOTE_DEBOUNCE_MS, TillScreen } from "./TillScreen";
@@ -40,6 +40,8 @@ describe("TillScreen — adding", () => {
       tenderCurrency: "",
       tendered: "",
       changeCurrency: "",
+      payment: "cash",
+      customerId: "",
     });
     const total = screen.getByTestId("till-total");
     expect(total).toHaveTextContent("73,000 SYP");
@@ -203,9 +205,8 @@ describe("TillScreen — paying", () => {
 
     expect(checkout).toHaveBeenCalledTimes(1);
     expect(checkout.mock.calls[0]![0]).toEqual({
-      cart: { lines: [{ productId: "jam", quantity: "1", discountPercent: "" }], settlement: "", saleDiscount: "", tenderCurrency: "", tendered: "", changeCurrency: "" },
+      cart: { lines: [{ productId: "jam", quantity: "1", discountPercent: "" }], settlement: "", saleDiscount: "", tenderCurrency: "", tendered: "", changeCurrency: "", payment: "cash", customerId: "" },
       token: "token-1",
-      payment: "cash",
     });
     const receipt = await screen.findByRole("dialog", { name: "Receipt No. 7" });
     expect(within(receipt).getByTestId("receipt")).toHaveTextContent("Total73,000 SYP");
@@ -299,5 +300,104 @@ describe("TillScreen — paying", () => {
     await settle();
     expect(screen.getByTestId("till-total")).toHaveTextContent("73,000 ل.س");
     expect(screen.getByRole("button", { name: "ادفع" })).toBeEnabled();
+  });
+});
+
+describe("TillScreen — on credit", () => {
+  const credited = (input: CartInput) =>
+    aQuote({
+      payment: input.payment,
+      settlement: input.settlement || "SYP",
+      total: input.settlement === "USD" ? "4.88" : "73000",
+      customerId: input.customerId,
+      customerName: input.customerId ? "أبو محمد" : "",
+      needsCustomer: input.payment === "credit" && !input.customerId,
+      debt: input.payment === "credit" ? "4.88" : "",
+      balanceBefore: input.customerId ? "9.58" : "",
+      balanceAfter: input.customerId ? "14.46" : "",
+    });
+
+  it("credit charges in dollars by default, needs a customer before Pay, and shows the debt Go worked out", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async (input) => credited(input));
+    const checkout = vi.fn<(input: CheckoutInput) => Promise<Sale>>(async () => aSale({ payment: "credit", creditCustomerId: aCustomer().id, creditCustomerName: "أبو محمد", creditCurrency: "USD", creditAmount: "4.88", creditBalanceAfter: "14.46" }));
+    const search = vi.fn(async () => [aCustomer()]);
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote, checkout }, customers: { search } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+
+    await userEvent.click(screen.getByRole("button", { name: "On credit" }));
+    const picker = await screen.findByRole("dialog", { name: "Who is this sale on credit to?" });
+    await settle();
+    expect(screen.getByRole("button", { name: "Pay" })).toBeDisabled();
+    expect(quote.mock.lastCall![0]).toEqual(expect.objectContaining({ payment: "credit", settlement: "USD", customerId: "" }));
+
+    await userEvent.type(within(picker).getByLabelText("Search by name or phone"), "٠٩٣٣");
+    await settle();
+    expect(search).toHaveBeenLastCalledWith({ text: "٠٩٣٣", owingOnly: false, includeInactive: false });
+    const match = within(within(picker).getByRole("list", { name: "Matching customers" })).getByRole("button", { name: /أبو محمد/ });
+    expect(match).toHaveTextContent("9.58 USD");
+    await userEvent.click(match);
+    await settle();
+
+    expect(screen.getByTestId("till-customer")).toHaveTextContent("On credit to أبو محمد");
+    expect(quote.mock.lastCall![0]).toEqual(expect.objectContaining({ payment: "credit", customerId: aCustomer().id, changeCurrency: "" }));
+    const block = screen.getByTestId("till-credit");
+    expect(block).toHaveTextContent("Added to the debt4.88 USD");
+    expect(block).toHaveTextContent("Balance now9.58 USD");
+    expect(block).toHaveTextContent("Balance after this sale14.46 USD");
+    expect(screen.getByLabelText("Paid now (optional)")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Change in")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await settle();
+    expect(checkout.mock.calls[0]![0].cart).toEqual(expect.objectContaining({ payment: "credit", customerId: aCustomer().id }));
+    const receipt = await screen.findByRole("dialog", { name: "Receipt No. 7" });
+    expect(within(receipt).getByTestId("receipt-credit")).toHaveTextContent("On credit — أبو محمد");
+    expect(within(receipt).getByTestId("receipt-credit")).toHaveTextContent("Added to the debt4.88 USD");
+    await userEvent.click(within(receipt).getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("button", { name: "Cash" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("a new customer is created from the picker without leaving the sale", async () => {
+    const create = vi.fn(async (input: { name: string; phone: string; note: string }) => aCustomer({ id: "new", name: input.name, balances: [] }));
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote: async (i) => credited(i) }, customers: { create } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "On credit" }));
+    const picker = await screen.findByRole("dialog", { name: "Who is this sale on credit to?" });
+    await userEvent.click(within(picker).getByRole("button", { name: "New customer" }));
+    await userEvent.type(within(picker).getByLabelText("Name"), "خالد");
+    await userEvent.type(within(picker).getByLabelText("Phone (optional)"), "0944");
+    await userEvent.click(within(picker).getByRole("button", { name: "Save" }));
+    await settle();
+    expect(create).toHaveBeenCalledWith({ name: "خالد", phone: "0944", note: "" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByTestId("till-customer")).toHaveTextContent("On credit to خالد");
+    expect(screen.getAllByTestId("cart-line")).toHaveLength(1);
+  });
+
+  it("paying the whole total on credit is refused under Paid now", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async (input) => {
+      if (input.payment === "credit" && input.tendered) {
+        throw new BindingError({
+          code: "lite.sales.credit_paid_in_full",
+          messageKey: "lite.sales.credit_paid_in_full",
+          fields: [{ field: "tendered", code: "lite.sales.credit_paid_in_full", messageKey: "lite.sales.credit_paid_in_full" }],
+        });
+      }
+      return credited(input);
+    });
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "On credit" }));
+    const picker = await screen.findByRole("dialog", { name: "Who is this sale on credit to?" });
+    await settle();
+    await userEvent.click(within(within(picker).getByRole("list", { name: "Matching customers" })).getByRole("button", { name: /أبو محمد/ }));
+    await userEvent.type(screen.getByLabelText("Paid now (optional)"), "5");
+    await settle();
+    expect(screen.getByText("That pays the whole total — take it as a cash sale.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay" })).toBeDisabled();
   });
 });

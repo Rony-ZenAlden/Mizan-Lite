@@ -15,6 +15,13 @@ var WrapKeepingParams = wrapKeepingParams
 // a real stock movement was written.
 func TillWithStock(app *App, wrap func(sales.Stock) sales.Stock) *sales.Service {
 	return sales.NewService(app.DB, salesdb.NewStore(app.DB, clock.System()), salesCatalogue{catalog: app.Catalog},
-		wrap(salesStock{stock: app.Stock}), salesRates{fx: app.FX}, salesSettings{settings: app.Settings},
+		wrap(salesStock{stock: app.Stock}), salesDebts{customers: app.Customers}, salesRates{fx: app.FX}, salesSettings{settings: app.Settings},
+		salesGate{owner: app.Owner}, clock.System(), time.UTC)
+}
+
+// TillWithDebts builds the till on app's real modules, its debt port wrapped.
+func TillWithDebts(app *App, wrap func(sales.Debts) sales.Debts) *sales.Service {
+	return sales.NewService(app.DB, salesdb.NewStore(app.DB, clock.System()), salesCatalogue{catalog: app.Catalog},
+		salesStock{stock: app.Stock}, wrap(salesDebts{customers: app.Customers}), salesRates{fx: app.FX}, salesSettings{settings: app.Settings},
 		salesGate{owner: app.Owner}, clock.System(), time.UTC)
 }

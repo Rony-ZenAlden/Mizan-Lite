@@ -204,3 +204,23 @@ func TestTheCashNote(t *testing.T) {
 		t.Fatalf("Apply = %+v %v %v", next, changes, err)
 	}
 }
+
+// TestTheDebtCurrency is Q-L5.1: dollars by default; the local currency may be stored; anything else is reported and
+// the default used.
+func TestTheDebtCurrency(t *testing.T) {
+	if domain.Defaults().DebtCurrency != "USD" {
+		t.Fatalf("default = %q", domain.Defaults().DebtCurrency)
+	}
+	if got, problems := domain.FromStored(map[string]string{domain.KeyDebtCurrency: "SYP"}); got.DebtCurrency != "SYP" || len(problems) != 0 {
+		t.Fatalf("SYP = %+v %v", got, problems)
+	}
+	for _, bad := range []map[string]string{
+		{domain.KeyDebtCurrency: "EUR"},
+		{domain.KeyDebtCurrency: "usd"},
+		{domain.KeyDebtCurrency: "SYP", domain.KeyLocalCurrency: "SYN"},
+	} {
+		if got, problems := domain.FromStored(bad); got.DebtCurrency != "USD" || len(problems) != 1 {
+			t.Errorf("%v resolved to %q with %v", bad, got.DebtCurrency, problems)
+		}
+	}
+}

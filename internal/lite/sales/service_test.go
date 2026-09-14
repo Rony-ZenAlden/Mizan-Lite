@@ -26,6 +26,7 @@ type fixture struct {
 	store     *salestest.Fake
 	catalogue *salestest.Catalogue
 	stock     *salestest.Stock
+	debts     *salestest.Debts
 	rates     *salestest.Rates
 	settings  *salestest.Settings
 	gate      *salestest.Gate
@@ -36,7 +37,7 @@ type fixture struct {
 func newFixture(t *testing.T) fixture {
 	t.Helper()
 	f := fixture{
-		store: salestest.NewFake(), catalogue: salestest.NewCatalogue(), stock: salestest.NewStock(), rates: salestest.NewRates(),
+		store: salestest.NewFake(), catalogue: salestest.NewCatalogue(), stock: salestest.NewStock(), debts: salestest.NewDebts(), rates: salestest.NewRates(),
 		settings: salestest.NewSettings(), gate: &salestest.Gate{},
 		clk: clock.NewFixed(time.Date(2026, 9, 14, 7, 0, 0, 0, time.UTC)), // 10:00 in Damascus
 	}
@@ -44,7 +45,7 @@ func newFixture(t *testing.T) fixture {
 	f.jar = f.catalogue.Add(domain.Product{NameAR: "دبس رمان", UnitCode: "jar", PriceCurrency: "SYP", PriceMicro: 45_000 * u, Active: true}, "6290001000028")
 	f.stock.Set(f.oil.ID, domain.Stocked{OnHandMicro: 12 * u, CostKnown: true, AvgCostMicro: 4_680_000})
 	f.stock.Set(f.jar.ID, domain.Stocked{OnHandMicro: 3 * u, CostKnown: true, AvgCostMicro: 2 * u})
-	f.svc = sales.NewService(litetest.Immediate{}, f.store, f.catalogue, f.stock, f.rates, f.settings, f.gate, f.clk, damascus)
+	f.svc = sales.NewService(litetest.Immediate{}, f.store, f.catalogue, f.stock, f.debts, f.rates, f.settings, f.gate, f.clk, damascus)
 	return f
 }
 
@@ -172,12 +173,81 @@ func TestADiscountNeedsTheOwner(t *testing.T) {
 	}
 }
 
-func TestCreditIsRefusedUntilCustomersExist(t *testing.T) {
+// credit is a cart put on credit.
+func credit(customer domain.Customer, settle, tenderCur, tendered string, lines ...domain.LineInput) domain.CartInput {
+	return domain.CartInput{Lines: lines, Settlement: settle, TenderCurrency: tenderCur, Tendered: tendered, Payment: domain.PaymentCredit, CustomerID: customer.ID}
+}
+
+func TestACreditSaleNeedsACustomer(t *testing.T) {
 	f := newFixture(t)
-	in := cart(line(f.jar, "1"))
+	in := credit(domain.Customer{}, "", "", "", line(f.jar, "1"))
+	q, err := f.svc.Quote(ctx, in)
+	if err != nil || !q.NeedsCustomer {
+		t.Fatalf("quote = %+v, %v", q, err)
+	}
+	if _, err := f.svc.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token}); errs.CodeOf(err) != domain.CodeCustomerRequired {
+		t.Fatalf("a credit sale with no customer: %v", err)
+	}
+	if n, _ := f.store.NextReceiptNo(ctx); n != 1 || len(f.stock.Sold()) != 0 || len(f.debts.Charges()) != 0 {
+		t.Fatal("a refused credit sale wrote")
+	}
+}
+
+// TestACreditSaleChargesItsCustomerInTheSameCheckout: a pounds total of 90,000 with 20,000 paid now, charged to سمير.
+func TestACreditSaleChargesItsCustomerInTheSameCheckout(t *testing.T) {
+	f := newFixture(t)
+	samir := f.debts.Add(domain.Customer{Name: "سمير", Active: true}, map[string]int64{"SYP": 10_000})
+	in := credit(samir, "SYP", "SYP", "20000", line(f.jar, "2"))
+	q, err := f.svc.Quote(ctx, in)
+	if err != nil || q.DebtMinor != 70_000 || q.BalanceBeforeMinor != 10_000 || q.BalanceAfterMinor != 80_000 || q.Customer.Name != "سمير" {
+		t.Fatalf("quote = %+v, %v", q, err)
+	}
+	sale, err := f.svc.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token})
+	if err != nil || sale.Payment != domain.PaymentCredit || sale.TenderedMinor != 20_000 || sale.ChangeMinor != 0 ||
+		sale.Credit != (domain.Credit{CustomerID: samir.ID, CustomerName: "سمير", Currency: "SYP", AmountMinor: 70_000, BalanceAfterMinor: 80_000}) {
+		t.Fatalf("sale = %+v, %v", sale, err)
+	}
+	if ch := f.debts.Charges(); len(ch) != 1 || ch[0].SaleID != sale.ID || ch[0].AmountMinor != 70_000 {
+		t.Fatalf("charges = %+v", ch)
+	}
+	if receipt, _ := f.svc.Receipt(ctx, sale.ID); receipt.Credit.AmountMinor != 70_000 {
+		t.Fatalf("the receipt lost its credit: %+v", receipt.Credit)
+	}
+	day, _ := f.svc.Day(ctx, "")
+	if syp := day.Totals["SYP"]; syp.OnCreditMinor != 70_000 || syp.CashInMinor != 20_000 || syp.ChargedMinor != 90_000 {
+		t.Fatalf("the day = %+v", *syp)
+	}
+	f.gate.Elevated = true
+	if findings, err := f.svc.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("findings = %+v, %v", findings, err)
+	}
+}
+
+func TestAFailedChargeFailsTheCheckout(t *testing.T) {
+	f := newFixture(t)
+	samir := f.debts.Add(domain.Customer{Name: "سمير", Active: true}, nil)
+	in := credit(samir, "USD", "", "", line(f.oil, "1"))
 	q, _ := f.svc.Quote(ctx, in)
-	if _, err := f.svc.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token, Payment: domain.PaymentCredit}); errs.CodeOf(err) != domain.CodeCreditNotAvailable {
+	f.debts.FailCharges()
+	if _, err := f.svc.Checkout(ctx, sales.CheckoutInput{Cart: in, Token: q.Token}); !errors.Is(err, salestest.ErrInjected) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestVoidingACreditSaleReversesItsCharge(t *testing.T) {
+	f := newFixture(t)
+	samir := f.debts.Add(domain.Customer{Name: "سمير", Active: true}, nil)
+	sale := f.sell(t, credit(samir, "USD", "", "", line(f.oil, "1")))
+	f.gate.Elevated = true
+	voided, err := f.svc.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "أعاده"})
+	if err != nil || !voided.Credit.Reversed {
+		t.Fatalf("voided = %+v, %v", voided, err)
+	}
+	if b, _ := f.debts.Balances(ctx, samir.ID); b["USD"] != 0 {
+		t.Fatalf("balance after the void = %v", b)
+	}
+	if findings, _ := f.svc.Verify(ctx); len(findings) != 0 {
+		t.Fatalf("findings = %+v", findings)
 	}
 }
 

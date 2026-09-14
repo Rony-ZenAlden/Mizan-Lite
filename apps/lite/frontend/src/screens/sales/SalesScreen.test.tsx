@@ -39,8 +39,8 @@ const aDay = (overrides: Partial<Day> = {}): Day => ({
   businessDate: "2026-09-14",
   sales: [aSale(), dollarSale],
   totals: [
-    { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 1, refunded: "15000" },
-    { currency: "USD", sales: 1, charged: "10.50", cashIn: "20.00", changeOut: "9.50", voids: 0, refunded: "0.00" },
+    { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 1, refunded: "15000", onCredit: "0" },
+    { currency: "USD", sales: 1, charged: "10.50", cashIn: "20.00", changeOut: "9.50", voids: 0, refunded: "0.00", onCredit: "0.00" },
   ],
   ...overrides,
 });
@@ -165,5 +165,24 @@ describe("isZero", () => {
   it("is a comparison of Go's text", () => {
     expect(["0", "0.00", "-0", "-0.00"].every(isZero)).toBe(true);
     expect(["-125", "0.01", "10", "500"].some(isZero)).toBe(false);
+  });
+});
+
+describe("ReceiptView — on credit", () => {
+  it("shows who the sale is on, what it added to the debt and the balance after, and that a void reversed it", async () => {
+    const credit = aSale({ payment: "credit", tendered: "20000", creditCustomerId: "c1", creditCustomerName: "أبو محمد", creditCurrency: "SYP", creditAmount: "53000", creditBalanceAfter: "103000", status: "voided", voidReason: "أعاده", creditReversed: true });
+    renderWithProviders(<SalesScreen />, { client: fakeClient({ sales: { list: async () => aDay({ sales: [credit] }), receipt: async () => credit } }), locale: "en" });
+    await settle();
+    const row = screen.getAllByRole("row")[1]!;
+    expect(row).toHaveTextContent("On credit — أبو محمد");
+    await userEvent.click(within(row).getByRole("button", { name: "Receipt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Receipt No. 7" });
+    const block = within(dialog).getByTestId("receipt-credit");
+    expect(block).toHaveTextContent("On credit — أبو محمد");
+    expect(block).toHaveTextContent("Added to the debt53,000 SYP");
+    expect(block).toHaveTextContent("Balance now103,000 SYP");
+    expect(block).toHaveTextContent("The debt was reversed with the void.");
+    expect(within(dialog).getByTestId("receipt")).toHaveTextContent("Paid now20,000 SYP");
+    expect(within(dialog).getByTestId("receipt")).not.toHaveTextContent("Change");
   });
 });

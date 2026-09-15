@@ -4,9 +4,11 @@ module github.com/mizan-erp/mizan
 go 1.26
 
 require (
+	github.com/go-text/typesetting v0.3.5
 	github.com/google/uuid v1.6.0
 	github.com/wailsapp/wails/v2 v2.13.0
 	golang.org/x/crypto v0.54.0
+	golang.org/x/image v0.40.0
 	golang.org/x/tools v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.54.0

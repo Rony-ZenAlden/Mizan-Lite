@@ -66,7 +66,10 @@ type ForbidCall struct {
 type NoFloatRule struct {
 	Enabled   bool     `yaml:"enabled"`
 	AppliesTo []string `yaml:"applies_to"`
-	Message   string   `yaml:"message"`
+	// Except removes packages from AppliesTo: added for Mizan Lite L7, whose typesetting and document geometry are points and
+	// pixels handed to a shaper and a rasteriser that take floats — never money.
+	Except  []string `yaml:"except"`
+	Message string   `yaml:"message"`
 }
 
 // ModuleIsolationRule enforces ARCHITECTURE_v1 §3.2: a module may import another module only
@@ -137,6 +140,7 @@ func (c *Config) expand() {
 		rep(call.Exclude)
 	}
 	rep(c.Rules.NoFloat.AppliesTo)
+	rep(c.Rules.NoFloat.Except)
 	rep(c.Rules.NoSQL.AppliesTo)
 
 	mi := &c.Rules.ModuleIsolation

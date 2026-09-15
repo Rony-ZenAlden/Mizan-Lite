@@ -146,7 +146,10 @@ describe("CustomersScreen — payments", () => {
     await userEvent.click(within(pay).getByRole("button", { name: "Record payment" }));
     await settle();
     expect(recordPayment).toHaveBeenCalledWith(expect.objectContaining({ all: true, amount: "", token: "all" }));
-    expect(screen.queryByRole("dialog", { name: /Payment/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /^Payment —/ })).not.toBeInTheDocument();
+    // Its voucher follows, and prints itself: the shop prints payments automatically (Q-L7.2).
+    const voucher = await screen.findByRole("dialog", { name: "Voucher — Payment" });
+    expect(await within(voucher).findByText("Sent to Xprinter XP-80")).toBeInTheDocument();
   });
 
   it("a payment gone stale is quoted again and must be recorded again", async () => {
@@ -249,5 +252,42 @@ describe("balance text", () => {
     expect(isNegative("-4.00") && !isNegative("-0.00") && !isNegative("4.00")).toBe(true);
     expect(unsigned("-4.00")).toBe("4.00");
     expect(unsigned("4.00")).toBe("4.00");
+  });
+});
+
+describe("CustomersScreen — L7", () => {
+  it("exports the debt ledger over a range, and a statement in every currency", async () => {
+    const debtLedger = vi.fn(async () => ({ path: "/Users/shop/ledger.xlsx", bytes: 1, cancelled: false }));
+    const statement = vi.fn(async () => ({ path: "/Users/shop/statement.pdf", bytes: 1, cancelled: false }));
+    renderWithProviders(<CustomersScreen />, { client: fakeClient({ exports: { debtLedger, statement } }), locale: "en" });
+    await settle();
+    const ledger = screen.getByRole("region", { name: "Export the debt ledger" });
+    await userEvent.click(within(ledger).getByRole("button", { name: "Excel" }));
+    await settle();
+    expect(debtLedger).toHaveBeenCalledWith("", "", "xlsx");
+
+    await userEvent.click(within(screen.getAllByRole("row")[1]!).getByRole("button", { name: "Statement" }));
+    const dialog = await screen.findByRole("dialog", { name: "Statement — أبو محمد" });
+    await settle();
+    await userEvent.click(within(within(dialog).getByTestId("export")).getByRole("button", { name: "PDF" }));
+    await settle();
+    expect(statement).toHaveBeenCalledWith(aCustomer().id, "pdf");
+  });
+
+  it("a payment's voucher is reprinted from its statement row; a charge has none", async () => {
+    const entries = [anEntry({ id: "pay-1", kind: "payment" }), anEntry({ id: "charge-1", kind: "charge", saleId: aSale().id })];
+    const entry = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 2, path: "driver" }));
+    const preview = vi.fn(async () => ({ png: "QUJD", width: 576, height: 700, copyNo: 2 })); // printed once already
+    const dialog = await openStatement(fakeClient({ customers: { statement: async () => aStatement({ entries }) }, print: { entry, preview } }));
+    const rows = within(dialog).getAllByTestId("statement-entry");
+    expect(within(rows[1]!).queryByRole("button", { name: "Voucher" })).not.toBeInTheDocument();
+    await userEvent.click(within(rows[0]!).getByRole("button", { name: "Voucher" }));
+    const voucher = await screen.findByRole("dialog", { name: "Voucher — Payment" });
+    await settle();
+    expect(entry).not.toHaveBeenCalled(); // a reprint waits for its button
+    expect(preview).toHaveBeenCalledWith("entry", "pay-1");
+    await userEvent.click(within(voucher).getByRole("button", { name: "Print a copy" }));
+    await settle();
+    expect(entry).toHaveBeenCalledWith("pay-1");
   });
 });

@@ -139,3 +139,22 @@ describe("CashScreen", () => {
     expect(screen.getByTestId("expected-SYP")).toHaveTextContent("97,500 ل.س");
   });
 });
+
+describe("CashScreen — L7", () => {
+  it("exports the drawer of the day on screen, through the owner's PIN", async () => {
+    const report = vi
+      .fn(async () => ({ path: "/Users/shop/drawer.pdf", bytes: 1, cancelled: false }))
+      .mockImplementationOnce(async () => {
+        throw required();
+      });
+    renderWithProviders(<CashScreen />, { client: fakeClient({ exports: { report } }), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "PDF" }));
+    await userEvent.type(await screen.findByLabelText("Owner PIN"), "246813");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await settle();
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(report).toHaveBeenLastCalledWith({ kind: "drawer", date: aDrawer().date, month: "", from: "", to: "", format: "pdf" });
+    expect(screen.getByText("/Users/shop/drawer.pdf")).toBeInTheDocument();
+  });
+});

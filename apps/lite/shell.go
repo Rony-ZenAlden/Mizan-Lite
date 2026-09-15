@@ -30,6 +30,9 @@ type shell struct {
 	// of the shell reaches the network (L3 D-L3.26).
 	rates fx.Source
 
+	// reload repaints the window after a restart; wailsruntime.WindowReloadApp in the application, nil in tests.
+	reload func(context.Context)
+
 	mu      sync.Mutex
 	ctx     context.Context
 	app     *bootstrap.App
@@ -52,7 +55,10 @@ func (s *shell) startup(ctx context.Context) {
 }
 
 func (s *shell) boot(ctx context.Context) {
-	defer close(s.booted)
+	s.mu.Lock()
+	booted := s.booted
+	s.mu.Unlock()
+	defer close(booted)
 
 	app, err := s.start(ctx, bootstrap.Options{
 		Paths:          s.paths,
@@ -105,6 +111,33 @@ func (s *shell) shutdown(ctx context.Context) {
 	// framework detail staying true. The shutdown steps carry their own timeouts.
 	if err := app.Shutdown(context.WithoutCancel(ctx)); err != nil {
 		s.log.WarnContext(ctx, "shutdown completed with errors", slog.Any("error", err))
+	}
+}
+
+// restart rebuilds the graph after a restore is staged (L7 §6.4): the bindings refuse while it happens, the graph closes, and
+// a new start applies the staged file before opening the database. In the same process — nothing is relaunched — and the
+// window reloads onto the restored shop.
+func (s *shell) restart() {
+	s.mu.Lock()
+	ctx, app, closing := s.ctx, s.app, s.closing
+	if closing || ctx == nil {
+		s.mu.Unlock()
+		return
+	}
+	s.app = nil
+	s.booted = make(chan struct{})
+	s.mu.Unlock()
+
+	s.set.Detach()
+	if app != nil {
+		if err := app.Shutdown(context.WithoutCancel(ctx)); err != nil {
+			s.log.WarnContext(ctx, "closing the graph before a restore completed with errors", slog.Any("error", err))
+		}
+	}
+	s.log.InfoContext(ctx, "restarting to apply a restore")
+	s.boot(ctx)
+	if s.reload != nil {
+		s.reload(ctx)
 	}
 }
 

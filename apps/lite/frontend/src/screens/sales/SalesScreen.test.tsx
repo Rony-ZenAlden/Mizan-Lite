@@ -203,3 +203,37 @@ describe("ReceiptView — what a void hands back", () => {
     expect(within(dialog).getByTestId("void-hand-back")).not.toHaveTextContent("USD");
   });
 });
+
+describe("SalesScreen — L7", () => {
+  it("exports the sales history over the range typed", async () => {
+    const salesHistory = vi.fn(async () => ({ path: "/Users/shop/sales.xlsx", bytes: 1, cancelled: false }));
+    renderWithProviders(<SalesScreen />, { client: fakeClient({ sales: { list: async () => aDay() }, exports: { salesHistory } }), locale: "en" });
+    await settle();
+    const section = screen.getByRole("region", { name: "Export the sales history" });
+    fireEvent.change(within(section).getByLabelText("From"), { target: { value: "2026-09-01" } });
+    await userEvent.click(within(section).getByRole("button", { name: "Excel" }));
+    await settle();
+    expect(salesHistory).toHaveBeenCalledWith("2026-09-01", "", "xlsx");
+    expect(within(section).getByRole("status")).toHaveTextContent("/Users/shop/sales.xlsx");
+  });
+
+  it("a receipt shows the bitmap Go prints on its own tab, and prints from there", async () => {
+    const preview = vi.fn(async () => ({ png: "UE5H", width: 576, height: 900, copyNo: 2 }));
+    const sale = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 2, path: "raw" }));
+    renderWithProviders(<SalesScreen />, { client: fakeClient({ sales: { list: async () => aDay() }, print: { preview, sale } }), locale: "en" });
+    await settle();
+    await userEvent.click(within(screen.getAllByRole("row")[1]!).getByRole("button", { name: "Receipt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Receipt No. 7" });
+    expect(preview).not.toHaveBeenCalled(); // an old sale opened to read: nothing printed, nothing asked of the printer
+    expect(sale).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole("tab", { name: "As printed" }));
+    await settle();
+    expect(within(dialog).getByRole("img", { name: "The receipt as it will print" })).toHaveAttribute("src", "data:image/png;base64,UE5H");
+    expect(within(dialog).getByTestId("receipt")).not.toBeVisible();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Print a copy" }));
+    await settle();
+    expect(sale).toHaveBeenCalledWith(aSale().id);
+    expect(within(dialog).getByText("Copy 2 sent to Xprinter XP-80")).toBeInTheDocument();
+  });
+});

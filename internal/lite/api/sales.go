@@ -203,17 +203,22 @@ func (s *Sales) List(businessDate string) envelope.Result[DayDTO] {
 // Receipt is one sale as recorded.
 func (s *Sales) Receipt(saleID string) envelope.Result[SaleDTO] {
 	return call(s.core, "Sales.Receipt", func(ctx context.Context, app *bootstrap.App) (SaleDTO, error) {
-		parsed, err := id.Parse(saleID)
-		if err != nil {
-			return SaleDTO{}, salesdomain.ErrNotFound()
-		}
-		sale, err := app.Sales.Receipt(ctx, parsed)
-		if err != nil {
-			return SaleDTO{}, err
-		}
-		v, err := newTillView(ctx, app)
-		return v.sale(sale), err
+		return receiptDTO(ctx, app, saleID)
 	})
+}
+
+// receiptDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func receiptDTO(ctx context.Context, app *bootstrap.App, saleID string) (SaleDTO, error) {
+	parsed, err := id.Parse(saleID)
+	if err != nil {
+		return SaleDTO{}, salesdomain.ErrNotFound()
+	}
+	sale, err := app.Sales.Receipt(ctx, parsed)
+	if err != nil {
+		return SaleDTO{}, err
+	}
+	v, err := newTillView(ctx, app)
+	return v.sale(sale), err
 }
 
 // Void voids a whole sale and returns its stock. Owner only; the reason is required (Q-L4.4).

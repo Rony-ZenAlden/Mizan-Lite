@@ -7,11 +7,15 @@
 // Types are not written by hand: each result type is inferred from the file Wails generated from the Go
 // struct, so a field renamed in Go is a compile error here.
 import * as App from "../../wailsjs/go/api/App";
+import * as Backups from "../../wailsjs/go/api/Backups";
 import * as Cash from "../../wailsjs/go/api/Cash";
 import * as Catalog from "../../wailsjs/go/api/Catalog";
 import * as Customers from "../../wailsjs/go/api/Customers";
+import * as Export from "../../wailsjs/go/api/Export";
 import * as FX from "../../wailsjs/go/api/FX";
 import * as Owner from "../../wailsjs/go/api/Owner";
+import * as Print from "../../wailsjs/go/api/Print";
+import * as Printers from "../../wailsjs/go/api/Printers";
 import * as Reports from "../../wailsjs/go/api/Reports";
 import * as Sales from "../../wailsjs/go/api/Sales";
 import * as Settings from "../../wailsjs/go/api/Settings";
@@ -97,6 +101,18 @@ export type DrawerCurrency = Plain<api.DrawerCurrencyDTO>;
 export type CashEntry = Plain<api.CashEntryDTO>;
 export type CashRecordInput = Plain<api.CashRecordInput>;
 export type CashCountInput = Plain<api.CashCountInput>;
+export type ExportResult = Plain<api.ExportResultDTO>;
+export type ExportReportInput = Plain<api.ExportReportInput>;
+export type ExportFormat = "xlsx" | "pdf";
+export type PrintResult = Plain<api.PrintResultDTO>;
+export type Preview = Plain<api.PreviewDTO>;
+export type PrinterInfo = Plain<api.PrinterDTO>;
+export type PrinterSettings = Plain<api.PrinterSettingsDTO>;
+export type PrinterSettingsInput = Plain<api.PrinterSettingsInput>;
+export type BackupInfo = Plain<api.BackupDTO>;
+export type BackupStatus = Plain<api.BackupStatusDTO>;
+export type Loss = Plain<api.LossDTO>;
+export type RestoreResult = Plain<api.RestoreDTO>;
 
 export function createClient() {
   return {
@@ -190,6 +206,37 @@ export function createClient() {
       record: (input: CashRecordInput) => unwrap(() => Cash.Record(api.CashRecordInput.createFrom(input))),
       count: (input: CashCountInput) => unwrap(() => Cash.Count(api.CashCountInput.createFrom(input))),
       reverse: (entryId: string, reason: string) => unwrap(() => Cash.Reverse(api.ReverseCashInput.createFrom({ entryId, reason }))),
+    },
+    exports: {
+      report: (input: ExportReportInput) => unwrap(() => Export.Report(api.ExportReportInput.createFrom(input))),
+      statement: (customerId: string, format: ExportFormat) =>
+        unwrap(() => Export.Statement(api.ExportStatementInput.createFrom({ customerId, format }))),
+      debtLedger: (from: string, to: string, format: ExportFormat) =>
+        unwrap(() => Export.DebtLedger(api.ExportRangeInput.createFrom({ from, to, format }))),
+      salesHistory: (from: string, to: string, format: ExportFormat) =>
+        unwrap(() => Export.SalesHistory(api.ExportRangeInput.createFrom({ from, to, format }))),
+      showInFolder: (path: string) => unwrap(() => Export.ShowInFolder(path)),
+    },
+    print: {
+      sale: (saleId: string) => unwrap(() => Print.Sale(saleId)),
+      entry: (entryId: string) => unwrap(() => Print.Entry(entryId)),
+      preview: (kind: "sale" | "entry" | "test", id: string) => unwrap(() => Print.Preview(api.PreviewInput.createFrom({ kind, id }))),
+    },
+    printers: {
+      list: () => unwrap(Printers.List),
+      settings: () => unwrap(Printers.Settings),
+      save: (input: PrinterSettingsInput) => unwrap(() => Printers.Save(api.PrinterSettingsInput.createFrom(input))),
+      test: () => unwrap(Printers.Test),
+    },
+    backups: {
+      list: () => unwrap(Backups.List),
+      takeNow: () => unwrap(Backups.TakeNow),
+      status: () => unwrap(Backups.Status),
+      lossPreview: (name: string) => unwrap(() => Backups.LossPreview(name)),
+      restore: (name: string) => unwrap(() => Backups.Restore(name)),
+      restoreFromFile: () => unwrap(Backups.RestoreFromFile),
+      saveCopy: (name: string) => unwrap(() => Backups.SaveCopy(name)),
+      setOutsideFolder: (clear: boolean) => unwrap(() => Backups.SetOutsideFolder(clear)),
     },
     owner: {
       status: () => unwrap(Owner.Status),

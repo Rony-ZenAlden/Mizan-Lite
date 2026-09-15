@@ -4,7 +4,10 @@ import type { Customer, Entry, Sale, Statement } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
 import { formatDateTime } from "@/i18n/time";
+import { ExportButtons } from "@/exports/ExportButtons";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
+import { printsItself, usePrinterSettings } from "@/printing/PrintPanel";
+import { VoucherDialog, hasVoucher } from "@/printing/VoucherDialog";
 import { Money, isZero } from "@/screens/sales/Money";
 import { ReceiptView } from "@/screens/sales/ReceiptView";
 import { Alert } from "@/ui/Alert";
@@ -19,6 +22,7 @@ type Open =
   | { kind: "pay" | "opening" | "write_off" | "refund" | "edit" }
   | { kind: "reverse"; entry: Entry }
   | { kind: "receipt"; sale: Sale }
+  | { kind: "voucher"; entry: Entry; auto: boolean }
   | null;
 
 /**
@@ -35,6 +39,7 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
   const [statement, setStatement] = useState<Statement | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [open, setOpen] = useState<Open>(null);
+  const printer = usePrinterSettings();
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +58,12 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
     setOpen(null);
     void load();
     onChanged();
+  };
+
+  // A payment or refund just recorded: its voucher, printing itself when the settings say so (Q-L7.2).
+  const recorded = (entry: Entry) => {
+    done();
+    setOpen({ kind: "voucher", entry, auto: printsItself(printer, "voucher") });
   };
 
   const current = statement?.customer ?? customer;
@@ -90,6 +101,7 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
           <Button onClick={() => void toggleActive()}>{current.active ? t("customers.deactivate") : t("customers.activate")}</Button>
         </div>
       </div>
+      <ExportButtons onExport={(format) => client.exports.statement(current.id, format)} />
 
       <div role="tablist" aria-label={t("statement.currencies")} className="flex gap-2 border-b border-border">
         {currencies.map((c) => (
@@ -178,6 +190,9 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
                       <td className="p-2">
                         <div className="flex flex-wrap gap-2">
                           {e.saleId ? <Button onClick={() => void openReceipt(e.saleId)}>{t("statement.receipt")}</Button> : null}
+                          {hasVoucher(e) && !e.reversed ? (
+                            <Button onClick={() => setOpen({ kind: "voucher", entry: e, auto: false })}>{t("statement.voucher")}</Button>
+                          ) : null}
                           {e.reversible ? <Button onClick={() => setOpen({ kind: "reverse", entry: e })}>{t("debt.reverse")}</Button> : null}
                         </div>
                       </td>
@@ -191,16 +206,17 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
       ) : null}
 
       {open?.kind === "pay" ? (
-        <PaymentDialog customerId={current.id} name={current.name} currency={currency} localCurrency={localCurrency} onDone={done} onClose={() => setOpen(null)} />
+        <PaymentDialog customerId={current.id} name={current.name} currency={currency} localCurrency={localCurrency} onDone={recorded} onClose={() => setOpen(null)} />
       ) : null}
       {open?.kind === "opening" || open?.kind === "write_off" ? (
         <DebtAmountDialog kind={open.kind} customerId={current.id} name={current.name} currency={currency} currencies={currencies} onDone={done} onClose={() => setOpen(null)} />
       ) : null}
       {open?.kind === "refund" ? (
-        <RefundDialog customerId={current.id} name={current.name} currency={currency} currencies={currencies} onDone={done} onClose={() => setOpen(null)} />
+        <RefundDialog customerId={current.id} name={current.name} currency={currency} currencies={currencies} onDone={recorded} onClose={() => setOpen(null)} />
       ) : null}
       {open?.kind === "reverse" ? <ReverseDialog entry={open.entry} onDone={done} onClose={() => setOpen(null)} /> : null}
       {open?.kind === "edit" ? <CustomerForm customer={current} onSaved={done} onClose={() => setOpen(null)} /> : null}
+      {open?.kind === "voucher" ? <VoucherDialog entry={open.entry} auto={open.auto} onClose={() => setOpen(null)} /> : null}
       {open?.kind === "receipt" ? <ReceiptView sale={open.sale} onClose={() => setOpen(null)} onVoided={() => done()} /> : null}
     </Dialog>
   );

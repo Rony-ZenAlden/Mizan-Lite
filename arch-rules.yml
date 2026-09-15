@@ -76,7 +76,10 @@ rules:
           - "self/internal/platform/crypto"
           - "self/internal/api/envelope"
           - "self/internal/lite/**"
-        message: "Mizan Lite may import only the kernel, platform/{database,migrate,backup,jobs,i18n,crypto}, api/envelope and internal/lite (design §3.1, §6.2)"
+          # L7 (A-L7.3): Arabic shaping and glyph outlines for printouts, confined to internal/lite/typeset by lite-typeset-only.
+          - "github.com/go-text/typesetting/**"
+          - "golang.org/x/image/**"
+        message: "Mizan Lite may import only the kernel, platform/{database,migrate,backup,jobs,i18n,crypto}, api/envelope, internal/lite, and — in typeset — go-text/typesetting and x/image (design §3.1, §6.2, L7 A-L7.3)"
 
       - name: mizan-independent-of-lite
         description: Nothing in Mizan depends on Mizan Lite.
@@ -147,6 +150,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -165,6 +170,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -183,6 +190,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -199,6 +208,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -217,6 +228,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -235,6 +248,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -255,6 +270,8 @@ rules:
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -275,6 +292,8 @@ rules:
           - "self/internal/lite/sales/**"
           - "self/internal/lite/reports/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -295,6 +314,8 @@ rules:
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
           - "self/internal/lite/reports/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -315,10 +336,78 @@ rules:
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
           - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
         message: "reports may not import another Lite module — declare a facts port (see reports.Sales)"
+
+      - name: lite-printing-isolated
+        description: The printing module (print jobs, voucher numbers) imports no other Lite module (L7 §8).
+        applies_to: ["self/internal/lite/printing/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
+          - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/backups/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "printing may not import another Lite module — the customers module reaches it through its Vouchers port"
+
+      - name: lite-backups-isolated
+        description: >
+          The backups module imports no other Lite module; it reaches settings, the owner and the facts it counts through ports
+          (L7 §8), and platform/backup beneath it.
+        applies_to: ["self/internal/lite/backups/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
+          - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "backups may not import another Lite module — declare a port (see backups.Activity)"
+
+      - name: lite-typeset-only
+        description: >
+          One package shapes text: internal/lite/typeset. go-text/typesetting and x/image enter the edition there and nowhere else
+          (L7 A-L7.3), so a second shaper or rasteriser is a decision, not a drift.
+        applies_to: ["self/internal/lite/**", "self/apps/lite/**", "self/cmd/lite-demoseed/**"]
+        except: ["self/internal/lite/typeset"]
+        forbid: ["github.com/go-text/typesetting/**", "golang.org/x/image/**"]
+        message: "only internal/lite/typeset may import go-text/typesetting or x/image"
+
+      - name: lite-os-calls-only-in-printers
+        description: >
+          One package calls the operating system: internal/lite/printers — CUPS through os/exec, the Windows spooler and GDI through
+          syscall (L7 A-L7.4). Anything else in internal/lite that runs a program or a system call is a feature nobody reviewed as one.
+        applies_to: ["self/internal/lite/**"]
+        except: ["self/internal/lite/printers"]
+        forbid: ["os/exec", "syscall", "unsafe"]
+        message: "only internal/lite/printers may use os/exec, syscall or unsafe"
+
+      - name: lite-documents-pure
+        description: documents and sheets render values to bytes — no database, no clock, no operating system, no module (L7 §8).
+        applies_to: ["self/internal/lite/documents/**", "self/internal/lite/sheets/**"]
+        allow_only: ["std", "self/internal/kernel/errs", "self/internal/lite/typeset"]
+        message: "documents and sheets may import only the standard library, kernel/errs and typeset"
 
       - name: lite-network-only-in-httpsource
         description: >
@@ -416,6 +505,11 @@ rules:
       - "self/internal/modules/*/domain/**"
       # All of Lite, not only its domains: a till's arithmetic can leak through any layer.
       - "self/internal/lite/**"
+    # L7: typeset and documents measure pages in points and pixels for a shaper and a rasteriser that take floats. They receive
+    # money only as strings Go already formatted, and compute none; everything else in Lite stays float-free.
+    except:
+      - "self/internal/lite/typeset"
+      - "self/internal/lite/documents"
     message: "float32/float64 are forbidden here — use kernel integer money/quantity types"
 
 # ── Planned rule kinds (documented seams, added later without redesign) ────────

@@ -4,6 +4,7 @@ import type { CashEntry, Drawer, DrawerCurrency } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
 import { formatDateTime } from "@/i18n/time";
+import { ExportButtons } from "@/exports/ExportButtons";
 import { useOwner } from "@/owner/OwnerProvider";
 import { Money, isZero } from "@/screens/sales/Money";
 import { Alert } from "@/ui/Alert";
@@ -70,6 +71,7 @@ export function CashScreen() {
         </div>
       </header>
 
+      {drawer ? <ExportButtons onExport={(format) => client.exports.report({ kind: "drawer", date: date || drawer.date, month: "", from: "", to: "", format })} /> : null}
       {error ? <Alert tone="danger" title={errorText(error)} /> : null}
       {saved ? (
         <Alert

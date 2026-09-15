@@ -1,9 +1,11 @@
 import type { ComponentType } from "react";
 import type { MessageKey } from "@/i18n/messages";
+import { BackupsScreen } from "@/screens/backups/BackupsScreen";
 import { CashScreen } from "@/screens/cash/CashScreen";
 import { CustomersScreen } from "@/screens/customers/CustomersScreen";
 import { HomeScreen } from "@/screens/home/HomeScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
+import { PrinterScreen } from "@/screens/printer/PrinterScreen";
 import { ProductsScreen } from "@/screens/products/ProductsScreen";
 import { RatesScreen } from "@/screens/rates/RatesScreen";
 import { ReportsScreen } from "@/screens/reports/ReportsScreen";
@@ -31,6 +33,8 @@ export const ROUTES: readonly RouteDef[] = [
   { path: "/stock", labelKey: "nav.stock", Screen: StockScreen },
   { path: "/rates", labelKey: "nav.rates", Screen: RatesScreen },
   { path: "/reports", labelKey: "nav.reports", Screen: ReportsScreen },
+  { path: "/printer", labelKey: "nav.printer", Screen: PrinterScreen },
+  { path: "/backups", labelKey: "nav.backups", Screen: BackupsScreen },
   { path: "/owner", labelKey: "nav.owner", Screen: OwnerScreen },
   { path: "/", labelKey: "nav.home", Screen: HomeScreen },
 ];

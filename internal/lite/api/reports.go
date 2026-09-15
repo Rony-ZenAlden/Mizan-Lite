@@ -280,59 +280,74 @@ func (v reportView) day(d domain.Day, withRate bool) DayReportDTO {
 // Day is a business day's statement ("" for today). Owner only.
 func (r *Reports) Day(date string) envelope.Result[DayReportDTO] {
 	return call(r.core, "Reports.Day", func(ctx context.Context, app *bootstrap.App) (DayReportDTO, error) {
-		d, err := app.Reports.Day(ctx, date)
-		if err != nil {
-			return DayReportDTO{}, err
-		}
-		v, err := newReportView(ctx, app)
-		return v.day(d, true), err
+		return dayReportDTO(ctx, app, date)
 	})
+}
+
+// dayReportDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func dayReportDTO(ctx context.Context, app *bootstrap.App, date string) (DayReportDTO, error) {
+	d, err := app.Reports.Day(ctx, date)
+	if err != nil {
+		return DayReportDTO{}, err
+	}
+	v, err := newReportView(ctx, app)
+	return v.day(d, true), err
 }
 
 // Month is a calendar month ("" for this one), YYYY-MM. Owner only.
 func (r *Reports) Month(month string) envelope.Result[MonthReportDTO] {
 	return call(r.core, "Reports.Month", func(ctx context.Context, app *bootstrap.App) (MonthReportDTO, error) {
-		m, err := app.Reports.Month(ctx, month)
-		if err != nil {
-			return MonthReportDTO{}, err
-		}
-		v, err := newReportView(ctx, app)
-		if err != nil {
-			return MonthReportDTO{}, err
-		}
-		dto := MonthReportDTO{Month: m.Month, From: m.From, To: m.To, LocalCurrency: v.pair.Local.Code, Days: make([]DayReportDTO, 0, len(m.Days)), Total: v.day(m.Total, false)}
-		for _, d := range m.Days {
-			dto.Days = append(dto.Days, v.day(d, true))
-		}
-		return dto, nil
+		return monthReportDTO(ctx, app, month)
 	})
+}
+
+// monthReportDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func monthReportDTO(ctx context.Context, app *bootstrap.App, month string) (MonthReportDTO, error) {
+	m, err := app.Reports.Month(ctx, month)
+	if err != nil {
+		return MonthReportDTO{}, err
+	}
+	v, err := newReportView(ctx, app)
+	if err != nil {
+		return MonthReportDTO{}, err
+	}
+	dto := MonthReportDTO{Month: m.Month, From: m.From, To: m.To, LocalCurrency: v.pair.Local.Code, Days: make([]DayReportDTO, 0, len(m.Days)), Total: v.day(m.Total, false)}
+	for _, d := range m.Days {
+		dto.Days = append(dto.Days, v.day(d, true))
+	}
+	return dto, nil
 }
 
 // Products is per-product profit over a range. Owner only.
 func (r *Reports) Products(in RangeInput) envelope.Result[ProductsReportDTO] {
 	return call(r.core, "Reports.Products", func(ctx context.Context, app *bootstrap.App) (ProductsReportDTO, error) {
-		p, err := app.Reports.Products(ctx, in.From, in.To)
-		if err != nil {
-			return ProductsReportDTO{}, err
-		}
-		v, err := newReportView(ctx, app)
-		if err != nil {
-			return ProductsReportDTO{}, err
-		}
-		dto := ProductsReportDTO{From: p.From, To: p.To, LocalCurrency: v.pair.Local.Code, Rows: make([]ProductRowDTO, 0, len(p.Rows)),
-			DiscountUSD: v.usd(p.DiscountUSD), DiscountLocal: v.local(p.DiscountLocal), RoundingLocal: v.local(p.RoundingLocal), Total: v.profit(p.Total)}
-		for _, row := range p.Rows {
-			dto.Rows = append(dto.Rows, ProductRowDTO{
-				ProductID: row.ProductID.String(), NameAR: row.NameAR, NameEN: row.NameEN, UnitCode: row.UnitCode,
-				Quantity: v.quantity(row.QuantityMicro, row.UnitCode), RevenueUSD: v.usd(row.RevenueUSD), CostUSD: v.usd(row.CostUSD),
-				ProfitUSD: v.usd(row.ProfitUSD()), MarginUSD: margin(row.ProfitUSD(), row.RevenueUSD), RevenueLocal: v.local(row.RevenueLocal),
-				CostLocal: v.local(row.CostLocal), ProfitLocal: v.local(row.ProfitLocal()), MarginLocal: margin(row.ProfitLocal(), row.RevenueLocal),
-				UnknownLines: row.Unknown.Lines, UnknownQuantity: v.quantity(row.Unknown.QuantityMicro, row.UnitCode),
-				UnknownUSD: v.usd(row.Unknown.NetUSDMinor), UnknownLocal: v.local(row.Unknown.NetLocalMinor),
-			})
-		}
-		return dto, nil
+		return productsReportDTO(ctx, app, in)
 	})
+}
+
+// productsReportDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func productsReportDTO(ctx context.Context, app *bootstrap.App, in RangeInput) (ProductsReportDTO, error) {
+	p, err := app.Reports.Products(ctx, in.From, in.To)
+	if err != nil {
+		return ProductsReportDTO{}, err
+	}
+	v, err := newReportView(ctx, app)
+	if err != nil {
+		return ProductsReportDTO{}, err
+	}
+	dto := ProductsReportDTO{From: p.From, To: p.To, LocalCurrency: v.pair.Local.Code, Rows: make([]ProductRowDTO, 0, len(p.Rows)),
+		DiscountUSD: v.usd(p.DiscountUSD), DiscountLocal: v.local(p.DiscountLocal), RoundingLocal: v.local(p.RoundingLocal), Total: v.profit(p.Total)}
+	for _, row := range p.Rows {
+		dto.Rows = append(dto.Rows, ProductRowDTO{
+			ProductID: row.ProductID.String(), NameAR: row.NameAR, NameEN: row.NameEN, UnitCode: row.UnitCode,
+			Quantity: v.quantity(row.QuantityMicro, row.UnitCode), RevenueUSD: v.usd(row.RevenueUSD), CostUSD: v.usd(row.CostUSD),
+			ProfitUSD: v.usd(row.ProfitUSD()), MarginUSD: margin(row.ProfitUSD(), row.RevenueUSD), RevenueLocal: v.local(row.RevenueLocal),
+			CostLocal: v.local(row.CostLocal), ProfitLocal: v.local(row.ProfitLocal()), MarginLocal: margin(row.ProfitLocal(), row.RevenueLocal),
+			UnknownLines: row.Unknown.Lines, UnknownQuantity: v.quantity(row.Unknown.QuantityMicro, row.UnitCode),
+			UnknownUSD: v.usd(row.Unknown.NetUSDMinor), UnknownLocal: v.local(row.Unknown.NetLocalMinor),
+		})
+	}
+	return dto, nil
 }
 
 func cost(micro int64) string { return numinput.FormatFixed(micro, 6, 2) }
@@ -353,41 +368,46 @@ func (v reportView) stockLines(lines []domain.StockLine) []StockLineDTO {
 // Stock is the stock on the range's last date, the range's movements reconciled, and the shelf's expected profit. Owner only.
 func (r *Reports) Stock(in RangeInput) envelope.Result[StockReportDTO] {
 	return call(r.core, "Reports.Stock", func(ctx context.Context, app *bootstrap.App) (StockReportDTO, error) {
-		s, err := app.Reports.Stock(ctx, in.From, in.To)
-		if err != nil {
-			return StockReportDTO{}, err
-		}
-		v, err := newReportView(ctx, app)
-		if err != nil {
-			return StockReportDTO{}, err
-		}
-		c := s.Reconciliation
-		dto := StockReportDTO{
-			From: c.From, To: c.To, LocalCurrency: v.pair.Local.Code, Lines: v.stockLines(s.Value.Lines), TotalUSD: v.usd(s.Value.TotalUSD),
-			TotalLocal: v.local(s.Value.TotalLocal), BelowZero: v.stockLines(s.Value.BelowZero), UnknownCost: v.stockLines(s.Value.UnknownCost),
-			Reconciliation: ReconciliationDTO{From: c.From, To: c.To, Opening: v.usd(c.Opening), Received: v.usd(c.Received), Sold: v.usd(c.Sold),
-				Losses: v.usd(c.Losses), Gains: v.usd(c.Gains), Revaluation: v.usd(c.Revaluation), Packages: v.usd(c.Packages),
-				NegativeStock: v.usd(c.NegativeStock), Rounding: v.usd(c.Rounding), Closing: v.usd(c.Closing)},
-			Shelf: make([]ShelfLineDTO, 0, len(s.Shelf.Lines)), ShelfTotalUSD: v.usd(s.Shelf.TotalUSD), ShelfTotalLocal: v.local(s.Shelf.TotalLocal),
-			BelowCost: s.Shelf.BelowCost, LeftOut: make([]LeftOutDTO, 0, len(s.Shelf.LeftOut)),
-		}
-		if s.Value.RateFound {
-			dto.ValueRate = fxdomain.FormatRate(s.Value.Rate.Nano)
-		}
-		if s.Shelf.RateFound {
-			dto.ShelfRate = fxdomain.FormatRate(s.Shelf.Rate.Nano)
-		}
-		for _, l := range s.Shelf.Lines {
-			p := l.Product
-			dto.Shelf = append(dto.Shelf, ShelfLineDTO{ProductID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode,
-				OnHand: v.quantity(l.OnHandMicro, p.UnitCode), AverageCost: cost(l.AvgCostMicro), Price: numinput.FormatFixed(p.PriceMicro, 6, v.ref.Currencies[p.PriceCurrency].Decimals),
-				PriceCurrency: p.PriceCurrency, ProfitUSD: v.usd(l.ProfitUSD), ProfitLocal: v.local(l.ProfitLocal), BelowCost: l.BelowCost})
-		}
-		for _, l := range s.Shelf.LeftOut {
-			dto.LeftOut = append(dto.LeftOut, LeftOutDTO{ProductID: l.Product.ID.String(), NameAR: l.Product.NameAR, NameEN: l.Product.NameEN, Reason: l.Reason})
-		}
-		return dto, nil
+		return stockReportDTO(ctx, app, in)
 	})
+}
+
+// stockReportDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func stockReportDTO(ctx context.Context, app *bootstrap.App, in RangeInput) (StockReportDTO, error) {
+	s, err := app.Reports.Stock(ctx, in.From, in.To)
+	if err != nil {
+		return StockReportDTO{}, err
+	}
+	v, err := newReportView(ctx, app)
+	if err != nil {
+		return StockReportDTO{}, err
+	}
+	c := s.Reconciliation
+	dto := StockReportDTO{
+		From: c.From, To: c.To, LocalCurrency: v.pair.Local.Code, Lines: v.stockLines(s.Value.Lines), TotalUSD: v.usd(s.Value.TotalUSD),
+		TotalLocal: v.local(s.Value.TotalLocal), BelowZero: v.stockLines(s.Value.BelowZero), UnknownCost: v.stockLines(s.Value.UnknownCost),
+		Reconciliation: ReconciliationDTO{From: c.From, To: c.To, Opening: v.usd(c.Opening), Received: v.usd(c.Received), Sold: v.usd(c.Sold),
+			Losses: v.usd(c.Losses), Gains: v.usd(c.Gains), Revaluation: v.usd(c.Revaluation), Packages: v.usd(c.Packages),
+			NegativeStock: v.usd(c.NegativeStock), Rounding: v.usd(c.Rounding), Closing: v.usd(c.Closing)},
+		Shelf: make([]ShelfLineDTO, 0, len(s.Shelf.Lines)), ShelfTotalUSD: v.usd(s.Shelf.TotalUSD), ShelfTotalLocal: v.local(s.Shelf.TotalLocal),
+		BelowCost: s.Shelf.BelowCost, LeftOut: make([]LeftOutDTO, 0, len(s.Shelf.LeftOut)),
+	}
+	if s.Value.RateFound {
+		dto.ValueRate = fxdomain.FormatRate(s.Value.Rate.Nano)
+	}
+	if s.Shelf.RateFound {
+		dto.ShelfRate = fxdomain.FormatRate(s.Shelf.Rate.Nano)
+	}
+	for _, l := range s.Shelf.Lines {
+		p := l.Product
+		dto.Shelf = append(dto.Shelf, ShelfLineDTO{ProductID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode,
+			OnHand: v.quantity(l.OnHandMicro, p.UnitCode), AverageCost: cost(l.AvgCostMicro), Price: numinput.FormatFixed(p.PriceMicro, 6, v.ref.Currencies[p.PriceCurrency].Decimals),
+			PriceCurrency: p.PriceCurrency, ProfitUSD: v.usd(l.ProfitUSD), ProfitLocal: v.local(l.ProfitLocal), BelowCost: l.BelowCost})
+	}
+	for _, l := range s.Shelf.LeftOut {
+		dto.LeftOut = append(dto.LeftOut, LeftOutDTO{ProductID: l.Product.ID.String(), NameAR: l.Product.NameAR, NameEN: l.Product.NameEN, Reason: l.Reason})
+	}
+	return dto, nil
 }
 
 // CashEntryDTO is a line of the cash book.
@@ -482,35 +502,40 @@ func (v tillView) cashEntry(e domain.CashEntry, owner bool) CashEntryDTO {
 // Drawer is a day's drawer ("" for today). Anyone at the counter may see it.
 func (c *Cash) Drawer(date string) envelope.Result[DrawerDTO] {
 	return call(c.core, "Cash.Drawer", func(ctx context.Context, app *bootstrap.App) (DrawerDTO, error) {
-		d, err := app.Reports.Drawer(ctx, date)
-		if err != nil {
-			return DrawerDTO{}, err
-		}
-		v, err := newTillView(ctx, app)
-		if err != nil {
-			return DrawerDTO{}, err
-		}
-		dto := DrawerDTO{Date: d.Date, Today: app.Reports.Today(), OwnerView: d.OwnerView, Currencies: make([]DrawerCurrencyDTO, 0, len(d.Currencies)),
-			Entries: make([]CashEntryDTO, 0, len(d.Entries)), Categories: cashbookdomain.Categories}
-		for _, t := range d.Currencies {
-			m := func(minor int64) string { return v.money(minor, t.Currency) }
-			cur := DrawerCurrencyDTO{Currency: t.Currency, Opening: m(t.Opening), CashSalesIn: m(t.CashSalesIn), CreditPaidIn: m(t.CreditPaidIn),
-				RepaymentsIn: m(t.RepaymentsIn), DepositsIn: m(t.DepositsIn), ChangeOut: m(t.ChangeOut), RefundsOut: m(t.RefundsOut),
-				VoidReturns: m(t.VoidReturns), ExpensesOut: m(t.ExpensesOut), WithdrawalsOut: m(t.WithdrawalOut), Expected: m(t.Expected)}
-			if t.OpeningCount != nil {
-				cur.OpeningCountDate = t.OpeningCount.BusinessDate
-			}
-			if diff, counted := t.Difference(); counted {
-				cur.Counted, cur.Count, cur.CountExpected, cur.Difference = true, m(t.Count.AmountMinor), m(t.Count.ExpectedMinor), m(diff)
-				cur.CountedAt = clock.Format(t.Count.OccurredAt)
-			}
-			dto.Currencies = append(dto.Currencies, cur)
-		}
-		for _, e := range d.Entries {
-			dto.Entries = append(dto.Entries, v.cashEntry(e, d.OwnerView))
-		}
-		return dto, nil
+		return drawerDTO(ctx, app, date)
 	})
+}
+
+// drawerDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func drawerDTO(ctx context.Context, app *bootstrap.App, date string) (DrawerDTO, error) {
+	d, err := app.Reports.Drawer(ctx, date)
+	if err != nil {
+		return DrawerDTO{}, err
+	}
+	v, err := newTillView(ctx, app)
+	if err != nil {
+		return DrawerDTO{}, err
+	}
+	dto := DrawerDTO{Date: d.Date, Today: app.Reports.Today(), OwnerView: d.OwnerView, Currencies: make([]DrawerCurrencyDTO, 0, len(d.Currencies)),
+		Entries: make([]CashEntryDTO, 0, len(d.Entries)), Categories: cashbookdomain.Categories}
+	for _, t := range d.Currencies {
+		m := func(minor int64) string { return v.money(minor, t.Currency) }
+		cur := DrawerCurrencyDTO{Currency: t.Currency, Opening: m(t.Opening), CashSalesIn: m(t.CashSalesIn), CreditPaidIn: m(t.CreditPaidIn),
+			RepaymentsIn: m(t.RepaymentsIn), DepositsIn: m(t.DepositsIn), ChangeOut: m(t.ChangeOut), RefundsOut: m(t.RefundsOut),
+			VoidReturns: m(t.VoidReturns), ExpensesOut: m(t.ExpensesOut), WithdrawalsOut: m(t.WithdrawalOut), Expected: m(t.Expected)}
+		if t.OpeningCount != nil {
+			cur.OpeningCountDate = t.OpeningCount.BusinessDate
+		}
+		if diff, counted := t.Difference(); counted {
+			cur.Counted, cur.Count, cur.CountExpected, cur.Difference = true, m(t.Count.AmountMinor), m(t.Count.ExpectedMinor), m(diff)
+			cur.CountedAt = clock.Format(t.Count.OccurredAt)
+		}
+		dto.Currencies = append(dto.Currencies, cur)
+	}
+	for _, e := range d.Entries {
+		dto.Entries = append(dto.Entries, v.cashEntry(e, d.OwnerView))
+	}
+	return dto, nil
 }
 
 func (c *Cash) entryAct(method string, fn func(ctx context.Context, app *bootstrap.App) (cashbookdomain.Entry, error)) envelope.Result[CashEntryDTO] {

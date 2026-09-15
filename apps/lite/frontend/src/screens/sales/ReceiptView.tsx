@@ -5,6 +5,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
 import { formatDateTime } from "@/i18n/time";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
+import { PrintPanel } from "@/printing/PrintPanel";
 import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
@@ -15,9 +16,20 @@ import { Money, isZero } from "./Money";
 /**
  * A receipt on screen (Q-L4.7): the sale exactly as recorded, laid out at the width of an 80 mm thermal roll (Q-L4.9) so
  * the printing in L7 prints what the shopkeeper has already seen. Voiding is here — the whole sale, the owner's PIN and a
- * reason (Q-L4.4, Q-L4.5).
+ * reason (Q-L4.4, Q-L4.5). L7 adds the receipt as it prints — Go's bitmap, not this layout (D-L7.11) — and *Print*; after a sale
+ * the till passes autoPrint when the settings say the receipt prints itself (Q-L7.2).
  */
-export function ReceiptView({ sale, onClose, onVoided }: { sale: Sale; onClose: () => void; onVoided: (sale: Sale) => void }) {
+export function ReceiptView({
+  sale,
+  onClose,
+  onVoided,
+  autoPrint = false,
+}: {
+  sale: Sale;
+  onClose: () => void;
+  onVoided: (sale: Sale) => void;
+  autoPrint?: boolean;
+}) {
   const client = useClient();
   const { withOwner } = useOwner();
   const { t, tDynamic, errorText, locale } = useLocale();
@@ -25,6 +37,7 @@ export function ReceiptView({ sale, onClose, onVoided }: { sale: Sale; onClose: 
   const [reason, setReason] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<"screen" | "paper">("screen");
 
   const inSettlement = (local: string, usd: string) => (sale.settlement === "USD" ? usd : local);
   const net = (l: SaleLine) => inSettlement(l.netLocal, l.netUsd);
@@ -49,7 +62,22 @@ export function ReceiptView({ sale, onClose, onVoided }: { sale: Sale; onClose: 
 
   return (
     <Dialog title={t("receipt.title", { number: String(sale.receiptNo) })} onClose={onClose}>
-      <article data-testid="receipt" className="mx-auto w-full max-w-[80mm] space-y-2 border border-dashed border-border p-3 text-xs">
+      <div role="tablist" aria-label={t("print.views")} className="flex gap-1">
+        {(["screen", "paper"] as const).map((name) => (
+          <button
+            key={name}
+            type="button"
+            role="tab"
+            aria-selected={view === name}
+            onClick={() => setView(name)}
+            className={`rounded-md px-3 py-1 text-sm ${view === name ? "bg-primary text-primary-fg" : "border border-border hover:bg-surface"}`}
+          >
+            {name === "screen" ? t("print.view_screen") : t("print.view_paper")}
+          </button>
+        ))}
+      </div>
+
+      <article hidden={view !== "screen"} data-testid="receipt" className="mx-auto w-full max-w-[80mm] space-y-2 border border-dashed border-border p-3 text-xs">
         <header className="space-y-1 text-center">
           <p className="text-sm font-semibold">{sale.shopName}</p>
           <p>
@@ -144,6 +172,8 @@ export function ReceiptView({ sale, onClose, onVoided }: { sale: Sale; onClose: 
           <p>{t("receipt.thanks")}</p>
         </footer>
       </article>
+
+      <PrintPanel kind="sale" id={sale.id} auto={autoPrint} preview={view === "paper"} />
 
       {voiding ? (
         <form className="space-y-3" onSubmit={submitVoid}>

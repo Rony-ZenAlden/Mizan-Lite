@@ -336,3 +336,63 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L6.i13 | The Cash screen shows a past day read-only; counts and entries are made on today | approved | [L6 §17](phases/L6_REPORTS.md) |
 | D-L6.i14 | The seeder's history has no credit: L5's paper book is adopted today, as before | approved | [L6 §17](phases/L6_REPORTS.md) |
 | D-L6.i15 | The year-of-sales bounds ×10 under the race detector, rows generated in SQL (as D-L5.i11) | approved | [L6 §17](phases/L6_REPORTS.md) |
+
+## L7 — approved 2026-09-15
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| A-L7.1 | Export is in scope (the owner, 2026-09-15) | **supersedes Q-L6.9** "no export" | [L7 §2.4](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.1 | Documents laid out and rendered in Go; the webview's print dialog not used | approved | [L7 §1.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.2 | One Document model → PDF, 1-bit raster, workbook; PDF and raster share one line layout | approved | [L7 §3.1](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.3 | Every printed or exported figure isolated left to right (LRI…PDI) | approved | [L7 §3.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.4 | PDFs embed IBM Plex Sans Arabic (OFL); ToUnicode skips bidi controls; A4; repeated headings | approved | [L7 §4.3](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.5 | Workbooks by Lite: sheet per section, RTL, frozen headers, typed cells | approved | [L7 §4.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.6 | Exports and printouts built from the screen's own results; nothing re-queried | approved | [L7 §4.1](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.7 | Go builds and writes files after the OS Save dialog, atomically, through a port | approved | [L7 §4.4](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.8 | Thermal receipts as ESC/POS `GS v 0` rasters in bands | approved | [L7 §5.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.9 | Raw path by default, driver path as fallback, from the same bitmap | approved — **the default amended to the driver path** by Q-L7.1 (D-L7.i2) | [L7 §5.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.10 | Printing after commit; a failure never undoes a sale | approved | [L7 §5.4](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.11 | The receipt dialog previews the printed bitmap | approved | [L7 §5.5](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.12 | Reprints stamped as copies from an insert-only `print_jobs` log | approved | [L7 §7](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.13 | Backups daily, every few hours open, on close, before migration and restore, on demand; kept per reason | approved — **amended by Q-L7.8**: no every-few-hours backup, 7 per reason (D-L7.i3) | [L7 §6.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.14 | A verified outside copy in a folder the owner picks; its age shown and warned | approved | [L7 §6.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.15 | Restore with PIN, the loss counted, a snapshot of what is replaced, applied at start | approved | [L7 §6.4](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.16 | Modules `exports`, `printing`, `backups`; pure `documents`, `sheets`; `typeset` and `printers` confined; five new rules | approved — **built without an `exports` module** (D-L7.i1) | [L7 §8](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.17 | The edition boundary admits go-text/typesetting and x/image for `typeset` only | approved | [L7 §8.2](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.18 | Receipt header lines are settings | approved | [L7 §2.1](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.1 | **80 mm thermal printers via USB and the OS driver, printed as an image** — the driver path the default (D-L7.i2) | approved | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.2 | credit sales, payments and refunds print themselves; cash sales on a button | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.3 | shop-wide voucher numbers without gaps | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.4 | a signature line on credit receipts (and vouchers) | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.5 | a statement anyone; the debt ledger, sales history and drawer the owner | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.6 | Money in Excel as **real numbers** | approved | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.7 | **A4** — the owner's export answer names "A4 PDF" | approved | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.8 | **Daily and on-close** backups kept; an **outside destination** the owner picks; **status on Home**. No every-4-hours backup; 7 kept per reason (D-L7.i3) | approved | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.9 | **The owner PIN and the warning summary** of what was recorded since, then the safety snapshot — one confirmation, no typed shop name | approved | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.10 | not encrypted | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.11 | a setting, off by default; cash sales and payments, raw path | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+| Q-L7.12 | name, phone, address, footer; no logo | approved with L7 (2026-09-15) — built as recommended, not answered individually | [L7 §15](phases/L7_HARDWARE_BACKUP.md) |
+
+### L7 — decisions made while building (approved 2026-09-15)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L7.i1 | Exports and printouts laid out in the `api` layer from the screens' DTOs; no `exports` module; `printing` records jobs and voucher numbers only | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i2 | The driver path is the default print path; raw ESC/POS a setting | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i3 | Backups daily, on close, before migration or restore, on demand; 7 kept per reason | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i4 | A staged restore applied in `bootstrap.Start` before the database opens; the application restarts in-process | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i5 | Text the shop typed isolated (FSI…PDI) in printouts and exports, beside the figures | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i6 | The receipt's rate line has its own template, `doc.rate` | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i7 | Workbook cells carry no bidi marks | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i8 | PDF glyphs written in logical order | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i9 | The shared archlint no-float rule gains an `except` list (`typeset`, `documents`) | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i10 | `golang.org/x/image v0.40.0`, the version already in the graph | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i11 | The restore's loss counted through the modules' facts, by time recorded after the backup | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i12 | The sales history's PDF one row per sale; lines in the workbook only | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i13 | `Print.Preview` takes the document and id; the width from the settings | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i14 | Backup ages measured by Go (`ageSeconds`) | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i15 | The restore notice on Home and the Backups screen, not the boot screen | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i16 | A payment's or refund's voucher opens after it is recorded, and from a statement row | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i17 | Choosing an outside folder takes a backup at once; a missing folder warns, local backups continue | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i18 | A4 table cells a 5 pt gutter; the products table's amounts without currency names; an empty cash book a sentence | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+| D-L7.i19 | A print recorded only when a printer is named; a failed print does not consume a copy number | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |

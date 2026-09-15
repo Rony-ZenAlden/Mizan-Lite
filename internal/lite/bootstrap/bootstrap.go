@@ -17,6 +17,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/lite/backups"
+	"github.com/mizan-erp/mizan/internal/lite/bizdate"
 	"github.com/mizan-erp/mizan/internal/lite/cashbook"
 	cashbookdomain "github.com/mizan-erp/mizan/internal/lite/cashbook/domain"
 	cashbookdb "github.com/mizan-erp/mizan/internal/lite/cashbook/infra/sqlite"
@@ -34,6 +36,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/owner"
 	ownerdb "github.com/mizan-erp/mizan/internal/lite/owner/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
+	"github.com/mizan-erp/mizan/internal/lite/printing"
+	printingdb "github.com/mizan-erp/mizan/internal/lite/printing/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/reports"
 	reportsdomain "github.com/mizan-erp/mizan/internal/lite/reports/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
@@ -158,6 +162,11 @@ type App struct {
 	Customers *customers.Service
 	Cashbook  *cashbook.Service
 	Reports   *reports.Service
+	Printing  *printing.Service
+	// Safety is the backups module: the outside copy, the status, restores (L7). Backups is platform/backup beneath it.
+	Safety *backups.Service
+	// Restored is the restore applied at this start, or nil.
+	Restored *backup.Intent
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -185,6 +194,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		return nil, errs.Internal(CodeStartupFailed, "bootstrap: Options.Paths is required")
 	}
 	app := &App{Paths: opts.Paths, log: opts.Logger, opts: opts}
+
+	// A restore staged by the Backups screen is swapped in before anything opens the database (L7 A-L7.5). A failure leaves the
+	// live file where it was and stops the start with its reason.
+	if intent, applied, applyErr := backup.Apply(opts.Paths.DBFile); applyErr != nil {
+		return nil, wrapKeepingParams(applyErr, CodeStartupFailed, "applying the staged restore")
+	} else if applied {
+		app.Restored = &intent
+		opts.Logger.InfoContext(ctx, "restored a backup", slog.String("from", intent.From), slog.String("safety_snapshot", intent.SafetyBackup))
+	}
 
 	db, err := database.Open(database.Config{Path: opts.Paths.DBFile})
 	if err != nil {
@@ -233,6 +251,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		reportsRates{fx: app.FX}, reportsCatalogue{catalog: app.Catalog}, reportsCash{cashbook: app.Cashbook}, reportsGate{owner: app.Owner},
 		opts.Clock, opts.Location)
 
+	app.Printing = printing.NewService(db, printingdb.NewStore(db), opts.Clock)
+	app.Customers.SetVouchers(app.Printing)
+	if app.Restored != nil {
+		if err = app.Owner.RecordRestored(ctx, owner.Act{Action: backups.ActRestore, Before: app.Restored.SafetyBackup, After: app.Restored.From}); err != nil {
+			_ = db.Close()
+			return nil, wrapKeepingParams(err, CodeStartupFailed, "recording the restore")
+		}
+	}
+
 	scheduler, err := jobs.New(db, jobs.Options{Clock: opts.Clock, Logger: opts.Logger})
 	if err != nil {
 		_ = db.Close()
@@ -242,6 +269,9 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Backups = backup.New(backupDatabase{db: db}, backup.Options{
 		Dir: opts.Paths.Backups, Clock: opts.Clock, AppVersion: opts.AppVersion,
 	})
+	app.Safety = backups.NewService(app.Backups, backupSettings{settings: app.Settings}, backupsGate{owner: app.Owner},
+		backupActivity{app: app}, opts.Clock, backups.Config{LivePath: opts.Paths.DBFile, SchemaVersion: app.SchemaVersion,
+			IntegrityStatement: db.Dialect().IntegrityCheckStatement(), BackupDir: opts.Paths.Backups})
 	if err = app.registerBackupJob(); err != nil {
 		_ = db.Close()
 		return nil, wrapKeepingParams(err, CodeStartupFailed, "declaring the backup job")
@@ -310,9 +340,11 @@ func (a *App) registerBackupJob() error {
 		CatchUp:     jobs.RunOnce,
 		Description: "lite.jobs.scheduled_backup",
 	}, func(ctx context.Context, _ jobs.RunContext) error {
-		if _, err := a.Backups.Take(ctx, backup.Scheduled); err != nil {
+		taken, err := a.Backups.Take(ctx, backup.Scheduled)
+		if err != nil {
 			return err
 		}
+		a.copyOutside(ctx, taken)
 		if _, err := a.Backups.Prune(ctx); err != nil {
 			// The snapshot exists. Failing the run would report a backup failure for a backup that
 			// is on disk.
@@ -393,11 +425,26 @@ func (a *App) backupOnClose(ctx context.Context) {
 	case !took:
 		a.log.DebugContext(ctx, "close-time backup skipped; a recent snapshot covers this")
 	default:
+		a.copyOutside(ctx, taken)
 		if _, err := a.Backups.Prune(ctx); err != nil {
 			a.log.WarnContext(ctx, "the close-time backup was taken but old ones were not pruned",
 				slog.Any("error", err))
 		}
 		a.log.InfoContext(ctx, "close-time backup taken", slog.String("name", taken.Name))
+	}
+}
+
+// Location is the shop's time zone: the one printouts state times in.
+func (a *App) Location() *time.Location { return a.opts.Location }
+
+// Now is the graph's clock, for the "printed at" line of a document.
+func (a *App) Now() time.Time { return a.opts.Clock.Now() }
+
+// copyOutside copies a backup to the owner's outside folder. A failure is logged and shown on the Backups screen and Home; it
+// never fails the backup (D-L7.14).
+func (a *App) copyOutside(ctx context.Context, taken backup.Backup) {
+	if err := a.Safety.AfterBackup(ctx, taken); err != nil && errs.CodeOf(err) != backups.CodeNoFolder {
+		a.log.WarnContext(ctx, "the backup was taken but not copied to the outside folder", slog.String("code", errs.CodeOf(err)), slog.Any("error", err))
 	}
 }
 
@@ -904,4 +951,70 @@ func (r reportsCash) Between(ctx context.Context, from, to string) ([]reportsdom
 func (r reportsCash) LastCountBefore(ctx context.Context, businessDate, currency string) (reportsdomain.CashEntry, bool, error) {
 	e, found, err := r.cashbook.LastCountBefore(ctx, businessDate, currency)
 	return cashFact(e), found, err
+}
+
+// backupSettings satisfies the backups module's Settings port.
+type backupSettings struct{ settings *settings.Service }
+
+func (s backupSettings) BackupFolder(ctx context.Context) (string, error) {
+	current, err := s.settings.Get(ctx)
+	return current.BackupFolder, err
+}
+
+// backupsGate satisfies the backups module's OwnerGate port.
+type backupsGate struct{ owner *owner.Service }
+
+func (g backupsGate) Require(ctx context.Context, act backups.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, Before: act.Before, After: act.After})
+}
+
+func (g backupsGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
+
+// backupActivity counts what was recorded after an instant, from the facts each module already supplies the reports.
+type backupActivity struct{ app *App }
+
+func (a backupActivity) Since(ctx context.Context, at time.Time) (backups.Loss, error) {
+	from := bizdate.Date(at, a.app.opts.Location)
+	const end = "9999-12-31"
+	var loss backups.Loss
+	sales, err := a.app.Sales.Facts(ctx, from, end)
+	if err != nil {
+		return loss, err
+	}
+	for _, s := range sales {
+		if s.SoldAt.After(at) {
+			loss.Sales++
+		}
+		if !s.VoidedAt.IsZero() && s.VoidedAt.After(at) {
+			loss.Voids++
+		}
+	}
+	debts, err := a.app.Customers.EntriesBetween(ctx, from, end)
+	if err != nil {
+		return loss, err
+	}
+	for _, d := range debts {
+		if d.Entry.OccurredAt.After(at) {
+			loss.DebtEntries++
+		}
+	}
+	cash, err := a.app.Cashbook.Between(ctx, from, end)
+	if err != nil {
+		return loss, err
+	}
+	for _, c := range cash {
+		if c.Entry.OccurredAt.After(at) {
+			loss.CashEntries++
+		}
+	}
+	moves, err := a.app.Stock.Between(ctx, from, end)
+	if err != nil {
+		return loss, err
+	}
+	for _, m := range moves {
+		if m.OccurredAt.After(at) {
+			loss.StockMovements++
+		}
+	}
+	return loss, nil
 }

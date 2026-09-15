@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useClient } from "@/api/ClientContext";
-import type { Health } from "@/api/client";
+import type { BackupStatus, Health } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatInteger } from "@/i18n/numbers";
+import { BackupStatusPanel } from "@/screens/backups/BackupStatusPanel";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Spinner } from "@/ui/Spinner";
@@ -13,12 +15,14 @@ type State = { kind: "loading" } | { kind: "loaded"; health: Health } | { kind: 
  * The application's status: proof the screen reached the Go backend, and what it reached.
  *
  * L0's only screen. It exists because a skeleton whose frontend never calls its backend proves
- * nothing about the bridge — Mizan's 10.17 shipped exactly that.
+ * nothing about the bridge — Mizan's 10.17 shipped exactly that. L7 adds the backups' status (Q-L7.8).
  */
 export function HomeScreen() {
   const client = useClient();
   const { t, tDynamic, errorText, locale } = useLocale();
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [backups, setBackups] = useState<BackupStatus | null>(null);
+  const [backupsError, setBackupsError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -32,6 +36,18 @@ export function HomeScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The shop's safety (Q-L7.8): the only place a shop notices its backups stopped, so it is read on its own and a failure
+  // to read it is said, not hidden behind the health check.
+  useEffect(() => {
+    client.backups
+      .status()
+      .then((st) => {
+        setBackups(st);
+        setBackupsError(null);
+      })
+      .catch(setBackupsError);
+  }, [client]);
 
   return (
     <section className="mx-auto max-w-2xl space-y-4">
@@ -68,6 +84,17 @@ export function HomeScreen() {
           </dl>
         </>
       ) : null}
+
+      <section className="space-y-2" aria-label={t("home.backups")}>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-semibold">{t("home.backups")}</h3>
+          <Link to="/backups" className="text-sm text-primary hover:underline">
+            {t("home.backups_open")}
+          </Link>
+        </div>
+        {backupsError ? <Alert tone="danger" title={errorText(backupsError)} /> : null}
+        {backups ? <BackupStatusPanel status={backups} /> : null}
+      </section>
     </section>
   );
 }

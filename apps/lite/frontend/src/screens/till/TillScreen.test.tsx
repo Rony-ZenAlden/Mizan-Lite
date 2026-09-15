@@ -401,3 +401,63 @@ describe("TillScreen — on credit", () => {
     expect(screen.getByRole("button", { name: "Pay" })).toBeDisabled();
   });
 });
+
+describe("TillScreen — printing the receipt (Q-L7.2)", () => {
+  const sell = async (client: ReturnType<typeof fakeClient>, rendered: { unmount?: () => void } = {}) => {
+    rendered.unmount = renderWithProviders(<TillScreen />, { client, locale: "en" }).unmount;
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await settle();
+    return screen.findByRole("dialog", { name: "Receipt No. 7" });
+  };
+
+  it("a cash sale waits for its button when only credit prints itself", async () => {
+    const sale = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }));
+    const receipt = await sell(fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale } }));
+    await settle();
+    expect(sale).not.toHaveBeenCalled();
+    await userEvent.click(within(receipt).getByRole("button", { name: "Print the receipt" }));
+    await settle();
+    expect(sale).toHaveBeenCalledWith(aSale().id);
+  });
+
+  it("a credit sale prints itself, once", async () => {
+    const sale = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }));
+    const checkout = async () => aSale({ payment: "credit", creditCustomerId: aCustomer().id, creditCustomerName: "أبو محمد", creditCurrency: "USD", creditAmount: "4.88", creditBalanceAfter: "14.46" });
+    const receipt = await sell(fakeClient({ catalog: { products }, till: { scan: scanJam, checkout }, print: { sale } }));
+    await settle();
+    expect(sale).toHaveBeenCalledTimes(1);
+    expect(within(receipt).getByText("Sent to Xprinter XP-80")).toBeInTheDocument();
+    expect(within(receipt).getByRole("button", { name: "Print a copy" })).toBeInTheDocument();
+  });
+
+  it("with everything printing itself a cash sale prints; with no printer chosen nothing does", async () => {
+    const sale = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }));
+    const all = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" });
+    const first: { unmount?: () => void } = {};
+    await sell(fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale }, printers: { settings: all } }), first);
+    await settle();
+    expect(sale).toHaveBeenCalledTimes(1);
+
+    first.unmount!();
+    sale.mockClear();
+    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" });
+    await sell(fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale }, printers: { settings: none } }));
+    await settle();
+    expect(sale).not.toHaveBeenCalled();
+  });
+
+  it("a failed automatic print leaves the sale on screen with Print again", async () => {
+    const sale = vi.fn(async () => {
+      throw new BindingError({ code: "lite.printers.send_failed", messageKey: "lite.printers.send_failed" });
+    });
+    const checkout = async () => aSale({ payment: "credit", creditCustomerId: aCustomer().id, creditCustomerName: "أبو محمد", creditCurrency: "USD", creditAmount: "4.88", creditBalanceAfter: "14.46" });
+    const receipt = await sell(fakeClient({ catalog: { products }, till: { scan: scanJam, checkout }, print: { sale } }));
+    await settle();
+    expect(within(receipt).getByRole("alert")).toHaveTextContent("The receipt was not printed");
+    expect(within(receipt).getByTestId("receipt")).toHaveTextContent("Total");
+    expect(within(receipt).getByRole("button", { name: "Print again" })).toBeInTheDocument();
+  });
+});

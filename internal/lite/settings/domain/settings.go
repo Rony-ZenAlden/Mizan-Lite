@@ -168,12 +168,16 @@ type Settings struct {
 	CashNote int64
 	// DebtCurrency is the currency a credit sale is charged in by default: USD or LocalCurrency (L5).
 	DebtCurrency string
+	// Receipt is the receipt printer and the receipt's header and footer (L7).
+	Receipt Receipt
+	// BackupFolder is where every backup is also copied — a USB drive or a synced folder — or empty (L7 §6.2).
+	BackupFolder string
 }
 
 // Defaults is what a fresh installation uses.
 func Defaults() Settings {
 	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote,
-		DebtCurrency: DefaultDebtCurrency}
+		DebtCurrency: DefaultDebtCurrency, Receipt: DefaultReceipt()}
 }
 
 // ProblemKind says what was wrong with a stored row.
@@ -246,7 +250,15 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 			}
 			out.DebtCurrency = value
 		default:
-			problems = append(problems, Problem{Key: key, Value: value, Kind: UnknownKey})
+			handled, err := out.storedPrinting(key, value)
+			switch {
+			case !handled:
+				problems = append(problems, Problem{Key: key, Value: value, Kind: UnknownKey})
+			case err != nil:
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				defaults := Defaults()
+				out.Receipt = mergeDefault(out.Receipt, defaults.Receipt, key)
+			}
 		}
 	}
 	// Only now is the local currency known: a debt currency must be it or dollars (rows arrive in no order).
@@ -269,6 +281,7 @@ type Update struct {
 	ShopName *string
 	RateMode *string
 	CashNote *string
+	Printing PrintingUpdate
 }
 
 // Apply validates an update against the current settings and returns the result and the rows that
@@ -316,7 +329,7 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 			changes = append(changes, Change{Key: KeyCashNote, Value: strconv.FormatInt(note, 10)})
 		}
 	}
-	return next, changes, nil
+	return next.applyPrinting(u.Printing, changes)
 }
 
 // isCurrencyCode reports three upper-case ASCII letters — a code's shape; whether it exists is the database's to say.

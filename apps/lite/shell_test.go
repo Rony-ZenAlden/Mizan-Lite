@@ -165,3 +165,41 @@ func TestTheShellPassesItsRateSourceToTheGraph(t *testing.T) {
 		t.Fatal("the shell did not pass its rate source to bootstrap")
 	}
 }
+
+// TestARestartAppliesAStagedRestore: the shell's restart closes the graph, starts again, and the new graph is the restored
+// shop — the bindings refuse in between and answer after.
+func TestARestartAppliesAStagedRestore(t *testing.T) {
+	set := api.New("v", litetest.Logger())
+	p := testPaths(t)
+	s := newShell(set, p, litetest.Logger(), "v", bootstrap.Start)
+	reloaded := 0
+	s.reload = func(context.Context) { reloaded++ }
+	s.startup(context.Background())
+	waitBooted(t, s)
+	s.mu.Lock()
+	first := s.app
+	s.mu.Unlock()
+	taken, err := first.Backups.Take(context.Background(), backup.OnDemand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = first.Backups.Prepare(context.Background(), taken.Name, p.DBFile, first.SchemaVersion); err != nil {
+		t.Fatal(err)
+	}
+	s.restart()
+	waitBooted(t, s)
+	s.mu.Lock()
+	second := s.app
+	s.mu.Unlock()
+	if second == nil || second == first || second.Restored == nil || second.Restored.From != taken.Name || reloaded != 1 {
+		t.Fatalf("after the restart: %+v, reloaded %d", second, reloaded)
+	}
+	if err = first.DB.WriterPool().PingContext(context.Background()); err == nil {
+		t.Fatal("the old graph's database is still open")
+	}
+	if status := set.Backups.Status(); !status.OK || status.Data.Restored == nil {
+		t.Fatalf("the bindings answer the new graph: %+v", status)
+	}
+	s.shutdown(context.Background())
+	s.restart() // after the window closed: nothing happens
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { DayReport, MonthReport, ProductsReport, StockReport } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { ExportButtons } from "@/exports/ExportButtons";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
@@ -86,6 +87,9 @@ export function ReportsScreen() {
     setTab("day");
   };
 
+  // The export is of the report on screen, so it is offered once that report is there.
+  const shown = { day, month: monthReport, products, stock }[tab] !== null;
+
   const rangeFields = (
     <>
       <div className="w-44">
@@ -130,6 +134,21 @@ export function ReportsScreen() {
         ) : null}
         {tab === "products" || tab === "stock" ? rangeFields : null}
       </div>
+
+      {!hidden && shown ? (
+        <ExportButtons
+          onExport={(format) =>
+            client.exports.report({
+              kind: tab,
+              date: date || day?.date || "",
+              month: month || monthReport?.month || "",
+              from: from || products?.from || stock?.from || "",
+              to: to || products?.to || stock?.to || "",
+              format,
+            })
+          }
+        />
+      ) : null}
 
       {error ? <Alert tone="danger" title={errorText(error)} /> : null}
       {hidden ? (

@@ -342,63 +342,71 @@ func (c *Customers) SetActive(in SetCustomerActiveInput) envelope.Result[Custome
 // Statement is one customer's entries in one currency.
 func (c *Customers) Statement(q StatementQueryDTO) envelope.Result[StatementDTO] {
 	return call(c.core, "Customers.Statement", func(ctx context.Context, app *bootstrap.App) (StatementDTO, error) {
-		customerID, err := parseCustomerID(q.CustomerID)
-		if err != nil {
-			return StatementDTO{}, err
-		}
-		st, err := app.Customers.Statement(ctx, customerID, q.Currency)
-		if err != nil {
-			return StatementDTO{}, err
-		}
-		v, err := newDebtView(ctx, app)
-		if err != nil {
-			return StatementDTO{}, err
-		}
-		w, err := app.Customers.WithBalancesOf(ctx, customerID)
-		if err != nil {
-			return StatementDTO{}, err
-		}
-		dto := StatementDTO{Customer: v.customer(w), Currency: st.Currency,
-			Balance: v.money(st.Summary.BalanceMinor, st.Currency), OwedSince: st.Summary.OwedSince, LastPayment: st.Summary.LastPayment,
-			Entries: make([]EntryDTO, 0, len(st.Entries)), Rate: v.rate(), LocalCurrency: v.local}
-		// Newest first: the statement is read from the top.
-		for i := len(st.Entries) - 1; i >= 0; i-- {
-			e := st.Entries[i]
-			dto.Entries = append(dto.Entries, v.entry(e, st.Reversed[e.ID]))
-		}
-		return dto, nil
+		return statementDTO(ctx, app, q)
 	})
+}
+
+// statementDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func statementDTO(ctx context.Context, app *bootstrap.App, q StatementQueryDTO) (StatementDTO, error) {
+	customerID, err := parseCustomerID(q.CustomerID)
+	if err != nil {
+		return StatementDTO{}, err
+	}
+	st, err := app.Customers.Statement(ctx, customerID, q.Currency)
+	if err != nil {
+		return StatementDTO{}, err
+	}
+	v, err := newDebtView(ctx, app)
+	if err != nil {
+		return StatementDTO{}, err
+	}
+	w, err := app.Customers.WithBalancesOf(ctx, customerID)
+	if err != nil {
+		return StatementDTO{}, err
+	}
+	dto := StatementDTO{Customer: v.customer(w), Currency: st.Currency,
+		Balance: v.money(st.Summary.BalanceMinor, st.Currency), OwedSince: st.Summary.OwedSince, LastPayment: st.Summary.LastPayment,
+		Entries: make([]EntryDTO, 0, len(st.Entries)), Rate: v.rate(), LocalCurrency: v.local}
+	// Newest first: the statement is read from the top.
+	for i := len(st.Entries) - 1; i >= 0; i-- {
+		e := st.Entries[i]
+		dto.Entries = append(dto.Entries, v.entry(e, st.Reversed[e.ID]))
+	}
+	return dto, nil
 }
 
 // Outstanding is who owes what — by name, never totalled across currencies — and today's debt book.
 func (c *Customers) Outstanding() envelope.Result[OutstandingDTO] {
-	return call(c.core, "Customers.Outstanding", func(ctx context.Context, app *bootstrap.App) (OutstandingDTO, error) {
-		out, err := app.Customers.Outstanding(ctx)
-		if err != nil {
-			return OutstandingDTO{}, err
+	return call(c.core, "Customers.Outstanding", outstandingDTO)
+}
+
+// outstandingDTO builds the DTO the screen receives — the one exports and printouts are made from (L7 D-L7.6).
+func outstandingDTO(ctx context.Context, app *bootstrap.App) (OutstandingDTO, error) {
+	out, err := app.Customers.Outstanding(ctx)
+	if err != nil {
+		return OutstandingDTO{}, err
+	}
+	v, err := newDebtView(ctx, app)
+	if err != nil {
+		return OutstandingDTO{}, err
+	}
+	dto := OutstandingDTO{BusinessDate: out.BusinessDate, Customers: make([]CustomerDTO, 0, len(out.Customers)),
+		Today: make([]DebtDayDTO, 0, len(out.Today)), Rate: v.rate(), LocalCurrency: v.local}
+	for _, w := range out.Customers {
+		dto.Customers = append(dto.Customers, v.customer(w))
+	}
+	for code, t := range out.Today {
+		dto.Today = append(dto.Today, DebtDayDTO{Currency: code, Payments: t.Payments, Settled: v.money(t.SettledMinor, code),
+			CashIn: v.money(t.CashInMinor, code), ChangeOut: v.money(t.ChangeOutMinor, code), Refunds: t.Refunds,
+			RefundOut: v.money(t.RefundOutMinor, code), Charged: v.money(t.ChargedMinor, code), WrittenOff: v.money(t.WrittenOffMinor, code)})
+	}
+	sort.Slice(dto.Today, func(i, j int) bool {
+		if (dto.Today[i].Currency == tender.USD) != (dto.Today[j].Currency == tender.USD) {
+			return dto.Today[j].Currency == tender.USD
 		}
-		v, err := newDebtView(ctx, app)
-		if err != nil {
-			return OutstandingDTO{}, err
-		}
-		dto := OutstandingDTO{BusinessDate: out.BusinessDate, Customers: make([]CustomerDTO, 0, len(out.Customers)),
-			Today: make([]DebtDayDTO, 0, len(out.Today)), Rate: v.rate(), LocalCurrency: v.local}
-		for _, w := range out.Customers {
-			dto.Customers = append(dto.Customers, v.customer(w))
-		}
-		for code, t := range out.Today {
-			dto.Today = append(dto.Today, DebtDayDTO{Currency: code, Payments: t.Payments, Settled: v.money(t.SettledMinor, code),
-				CashIn: v.money(t.CashInMinor, code), ChangeOut: v.money(t.ChangeOutMinor, code), Refunds: t.Refunds,
-				RefundOut: v.money(t.RefundOutMinor, code), Charged: v.money(t.ChargedMinor, code), WrittenOff: v.money(t.WrittenOffMinor, code)})
-		}
-		sort.Slice(dto.Today, func(i, j int) bool {
-			if (dto.Today[i].Currency == tender.USD) != (dto.Today[j].Currency == tender.USD) {
-				return dto.Today[j].Currency == tender.USD
-			}
-			return dto.Today[i].Currency < dto.Today[j].Currency
-		})
-		return dto, nil
+		return dto.Today[i].Currency < dto.Today[j].Currency
 	})
+	return dto, nil
 }
 
 func (in PaymentInput) cash() domain.CashInput {

@@ -31,8 +31,8 @@ what is not verified — once built.
 | **L3** | Exchange rates and the currency system | [phases/L3_RATES.md](phases/L3_RATES.md) | ✅ complete — `67d72c8` |
 | **L4** | The till: sales, checkout, receipts | [phases/L4_TILL.md](phases/L4_TILL.md) | ✅ complete — `76463fd` |
 | **L5** | Customers and debts | [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) | ✅ complete — `97b7875` |
-| **L6** | Reports: profit, stock value and the cash drawer | [phases/L6_REPORTS.md](phases/L6_REPORTS.md) | ✅ complete |
-| L7 | Export (Excel, PDF), thermal printing, backup and restore | — | design note next |
+| **L6** | Reports: profit, stock value and the cash drawer | [phases/L6_REPORTS.md](phases/L6_REPORTS.md) | ✅ complete — `2c86f17` |
+| **L7** | Export (Excel, PDF), thermal printing, backup and restore | [phases/L7_HARDWARE_BACKUP.md](phases/L7_HARDWARE_BACKUP.md) | ✅ committed — printer and Excel checks with the owner |
 | L8 | Release | — | not started |
 
 ## Conventions

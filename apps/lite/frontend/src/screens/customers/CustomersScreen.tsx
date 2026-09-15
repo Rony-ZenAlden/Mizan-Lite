@@ -5,6 +5,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { formatInteger } from "@/i18n/numbers";
 import { Money } from "@/screens/sales/Money";
 import { Alert } from "@/ui/Alert";
+import { RangeExport } from "@/exports/ExportButtons";
 import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
 import { TextField } from "@/ui/Field";
@@ -142,6 +143,8 @@ export function CustomersScreen() {
           </table>
         </div>
       ) : null}
+
+      <RangeExport title={t("customers.export_ledger")} onExport={(from, to, format) => client.exports.debtLedger(from, to, format)} />
 
       {creating ? (
         <CustomerForm

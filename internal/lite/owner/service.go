@@ -240,6 +240,13 @@ func (s *Service) Require(ctx context.Context, act Act) error {
 	return s.event(ctx, domain.EventGuardedAct, act)
 }
 
+// RecordRestored writes a restore into the owner's history of the database it restored (L7 D-L7.15). The restore was guarded by
+// the PIN in the database it replaced, whose history the restore removed; recording it again here, at the first start, is how
+// the record survives. Unguarded because no owner is elevated at start, and callable only by the composition root.
+func (s *Service) RecordRestored(ctx context.Context, act Act) error {
+	return s.tx.Do(ctx, func(ctx context.Context) error { return s.event(ctx, domain.EventGuardedAct, act) })
+}
+
 type secretKind int
 
 const (

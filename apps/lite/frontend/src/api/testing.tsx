@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, Product, Profit, RateState, Sale, Statement, StockReport } from "./client";
+import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, Sale, Statement, StockReport } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -415,6 +415,30 @@ export function aDrawer(overrides: Partial<Drawer> = {}): Drawer {
   };
 }
 
+/** A backup as Go lists it: this morning's scheduled one, copied outside, with any field replaceable. */
+export function aBackup(overrides: Partial<BackupInfo> = {}): BackupInfo {
+  return {
+    name: "scheduled-20260914T060000Z.db",
+    reason: "scheduled",
+    takenAt: "2026-09-14T06:00:00.000Z",
+    sizeBytes: "2457600",
+    schemaVersion: 8,
+    outside: true,
+    ageSeconds: 10_800,
+    ...overrides,
+  };
+}
+
+/** The backup status Home shows: a backup this morning and its outside copy, nothing stale, with any field replaceable. */
+export function aBackupStatus(overrides: Partial<BackupStatus> = {}): BackupStatus {
+  return { last: aBackup(), folder: "/Volumes/USB", lastOutside: aBackup(), outsideStale: false, outsideFailed: "", restored: undefined, ...overrides } as BackupStatus;
+}
+
+/** Printer settings as Go sends them: an 80 mm printer through its driver, credit printed automatically. */
+export function printerSettings(overrides: Partial<PrinterSettings> = {}): PrinterSettings {
+  return { printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "credit", drawer: false, phone: "", address: "", footer: "", ...overrides };
+}
+
 /** A client answering as a healthy, set-up application, with any method replaceable. */
 export function fakeClient(overrides: Overrides = {}): Client {
   const base: Client = {
@@ -588,6 +612,34 @@ export function fakeClient(overrides: Overrides = {}): Client {
       count: async (input) => aCashEntry({ currency: input.currency, amount: input.counted }),
       reverse: async (entryId, reason) => aCashEntry({ id: `${entryId}-r`, kind: "reversal", note: reason, expected: "", difference: "" }),
     },
+    exports: {
+      report: async () => ({ path: "/Users/shop/Documents/report.xlsx", bytes: 4096, cancelled: false }),
+      statement: async () => ({ path: "/Users/shop/Documents/statement.pdf", bytes: 4096, cancelled: false }),
+      debtLedger: async () => ({ path: "/Users/shop/Documents/ledger.xlsx", bytes: 4096, cancelled: false }),
+      salesHistory: async () => ({ path: "/Users/shop/Documents/sales.xlsx", bytes: 4096, cancelled: false }),
+      showInFolder: async () => true,
+    },
+    print: {
+      sale: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
+      entry: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
+      preview: async () => ({ png: "iVBORw0KGgo=", width: 576, height: 600, copyNo: 1 }),
+    },
+    printers: {
+      list: async () => [{ name: "Xprinter XP-80", default: true }, { name: "Office Laser", default: false }],
+      settings: async () => printerSettings(),
+      save: async (input) => printerSettings({ ...input, paperMm: Number(input.paperMm) }),
+      test: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
+    },
+    backups: {
+      list: async () => [aBackup(), aBackup({ name: "on_close-20260913T190000Z.db", reason: "on_close", takenAt: "2026-09-13T19:00:00.000Z", outside: false })],
+      takeNow: async () => aBackup({ name: "on_demand-20260914T090000Z.db", reason: "on_demand", takenAt: "2026-09-14T09:00:00.000Z" }),
+      status: async () => aBackupStatus(),
+      lossPreview: async (name) => ({ backup: aBackup({ name }), sales: 214, voids: 2, debtEntries: 9, cashEntries: 3, stockMovements: 31 }),
+      restore: async () => ({ staged: true, restarting: true }),
+      restoreFromFile: async () => aBackup({ name: "imported-20260914T090000Z.db", reason: "imported" }),
+      saveCopy: async () => ({ path: "/Volumes/USB/copy.db", bytes: 0, cancelled: false }),
+      setOutsideFolder: async (clear) => aBackupStatus({ folder: clear ? "" : "/Volumes/USB" }),
+    },
     owner: {
       status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 0 }),
       elevate: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 120 }),
@@ -609,6 +661,10 @@ export function fakeClient(overrides: Overrides = {}): Client {
     customers: { ...base.customers, ...overrides.customers },
     reports: { ...base.reports, ...overrides.reports },
     cash: { ...base.cash, ...overrides.cash },
+    exports: { ...base.exports, ...overrides.exports },
+    print: { ...base.print, ...overrides.print },
+    printers: { ...base.printers, ...overrides.printers },
+    backups: { ...base.backups, ...overrides.backups },
   };
 }
 

@@ -116,6 +116,7 @@ type Service struct {
 	clk        clock.Clock
 	loc        *time.Location
 	newID      func() (id.ID, error)
+	vouchers   Vouchers
 }
 
 // NewService builds the service.
@@ -517,8 +518,10 @@ func (s *Service) RecordPayment(ctx context.Context, in PaymentInput) (domain.En
 		if err != nil {
 			return err
 		}
-		out, err = s.append(ctx, q.Entry(c.ID, c.Name, note), cc.Place)
-		return err
+		if out, err = s.append(ctx, q.Entry(c.ID, c.Name, note), cc.Place); err != nil {
+			return err
+		}
+		return s.numberVoucher(ctx, out)
 	})
 	return out, err
 }
@@ -550,8 +553,10 @@ func (s *Service) Refund(ctx context.Context, in RefundInput) (domain.Entry, err
 			After: money(q.SettledMinor, q.Debt) + " · " + reason}); err != nil {
 			return err
 		}
-		out, err = s.append(ctx, q.Entry(c.ID, c.Name, reason), cc.Place)
-		return err
+		if out, err = s.append(ctx, q.Entry(c.ID, c.Name, reason), cc.Place); err != nil {
+			return err
+		}
+		return s.numberVoucher(ctx, out)
 	})
 	return out, err
 }
@@ -811,6 +816,30 @@ func (s *Service) EachCharge(ctx context.Context, fn func(ChargeView) error) err
 		}
 	}
 	return nil
+}
+
+// Entry is one debt book entry, for its voucher (L7 §5.1).
+func (s *Service) Entry(ctx context.Context, entryID id.ID) (domain.Entry, error) {
+	return s.store.Entry(ctx, entryID)
+}
+
+// ─── vouchers ────────────────────────────────────────────────────────────────
+
+// Vouchers numbers a payment or refund's voucher (L7 Q-L7.3) — the printing module, reached through the composition root.
+type Vouchers interface {
+	AssignVoucher(ctx context.Context, entryID id.ID) (int64, error)
+}
+
+// SetVouchers gives the debt book its voucher numbering. Without it entries are recorded unnumbered, as before L7.
+func (s *Service) SetVouchers(v Vouchers) { s.vouchers = v }
+
+// numberVoucher assigns the entry's number inside the transaction that recorded it, so numbers have no gaps.
+func (s *Service) numberVoucher(ctx context.Context, e domain.Entry) error {
+	if s.vouchers == nil {
+		return nil
+	}
+	_, err := s.vouchers.AssignVoucher(ctx, e.ID)
+	return err
 }
 
 // ─── the reports' facts ──────────────────────────────────────────────────────

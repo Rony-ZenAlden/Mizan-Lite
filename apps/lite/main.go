@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/wailsapp/wails/v2"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
@@ -52,6 +53,9 @@ func main() {
 
 	set := api.New(version, log)
 	sh := newShell(set, resolved, log, version, bootstrap.Start)
+	sh.reload = wailsruntime.WindowReloadApp
+	set.SetFiles(wailsFiles{})
+	set.SetRestarter(sh.restart)
 	// The real rate providers, registered here and nowhere else: automatic mode's primary source (L3 §14.6).
 	sh.rates = httpsource.New(version, httpsource.Providers(), nil)
 

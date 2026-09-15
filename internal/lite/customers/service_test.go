@@ -354,3 +354,40 @@ func TestEntriesBetweenCarryTheEntryTheyReverse(t *testing.T) {
 		t.Fatalf("day 1 %+v\nday 2 %+v", day1, day2)
 	}
 }
+
+type countingVouchers struct {
+	numbers map[id.ID]int64
+	fail    bool
+}
+
+func (v *countingVouchers) AssignVoucher(_ context.Context, entryID id.ID) (int64, error) {
+	if v.fail {
+		return 0, errs.Internal("lite.test.voucher", "numbering failed")
+	}
+	v.numbers[entryID] = int64(len(v.numbers)) + 1
+	return v.numbers[entryID], nil
+}
+
+// TestPaymentsAndRefundsAreNumberedInTheirTransaction: a payment gets its voucher number; a numbering failure fails the payment
+// (Q-L7.3).
+func TestPaymentsAndRefundsAreNumberedInTheirTransaction(t *testing.T) {
+	f := newFixture()
+	v := &countingVouchers{numbers: map[id.ID]int64{}}
+	f.svc.SetVouchers(v)
+	c := f.customer(t, "سمير")
+	f.charge(t, c, "USD", 1_000)
+	p := f.pay(t, c, domain.CashInput{Currency: "USD", Amount: "4"})
+	if v.numbers[p.ID] != 1 {
+		t.Fatalf("the payment's voucher: %v", v.numbers)
+	}
+	v.fail = true
+	in := domain.CashInput{Currency: "USD", Amount: "1"}
+	q, err := f.svc.QuotePayment(ctx, c.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.svc.RecordPayment(ctx, customers.PaymentInput{CustomerID: c.ID, Cash: in, Token: q.Token}); errs.CodeOf(err) != "lite.test.voucher" {
+		t.Fatalf("a payment recorded without its number: %v", err)
+	}
+	// That the failure also rolls the payment back is the real database's to show: TestAVoucherFailureRollsThePaymentBack.
+}

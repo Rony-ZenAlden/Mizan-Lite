@@ -28,7 +28,7 @@ func NoFloat(cfg *config.Config) (*analysis.Analyzer, bool) {
 		Doc:      "forbids float32/float64 in money and domain packages (arch-rules.yml)",
 		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
-			if !match.Any(r.AppliesTo, pass.Pkg.Path()) {
+			if !match.Any(r.AppliesTo, pass.Pkg.Path()) || match.Any(r.Except, pass.Pkg.Path()) {
 				return nil, nil
 			}
 			insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)

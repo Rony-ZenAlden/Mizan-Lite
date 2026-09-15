@@ -1,6 +1,6 @@
 # Mizan Lite — Phase L6: reports — profit, stock value and cash (التقارير والأرباح والتدفق النقدي)
 
-> **Status: COMPLETE — committed 2026-09-15.** The owner approved this note, its 18 decisions and six amendments, answered
+> **Status: COMPLETE — committed `2c86f17` (2026-09-15).** The owner approved this note, its 18 decisions and six amendments, answered
 > §14.2 (recorded in §15), and approved the fifteen decisions made while building (§17). §16–§22 are the implementation record.
 > **Date:** 2026-09-14. **Base:** L5 (`97b7875`). **Design:** [../DESIGN.md](../DESIGN.md) C6 (profit when the pound
 > moves), Q3 (expected profit is the stock on the shelf), Q7 (profit reports are the owner's), §9.4 (30 days of demo
@@ -807,4 +807,4 @@ The owner approved D-L6.i1–i15 — naming D-L6.i2 (what a void hands back), D-
 D-L6.i1 (the amended cash book CHECK) — and the commit. O13 is closed in [../PROGRESS.md](../PROGRESS.md); O1, O5 and O8
 remain.
 
-**Next:** L7's design note — export (Excel and PDF), 80 mm thermal printing, backup and restore.
+**Next:** L7's design note — export (Excel and PDF), 80 mm thermal printing, backup and restore: [L7_HARDWARE_BACKUP.md](L7_HARDWARE_BACKUP.md).

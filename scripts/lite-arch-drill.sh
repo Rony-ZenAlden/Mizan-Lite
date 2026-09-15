@@ -318,4 +318,85 @@ drill lite-stock-forbids-cashbook "stock may not import another Lite module" \
   internal/lite/stock/zz_drill.go "package stock
 import _ \"$M/internal/lite/cashbook/domain\""
 
+# ── added in L7 ─────────────────────────────────────────────────────────────────────────────────────
+drill lite-printing-isolated "printing may not import another Lite module" \
+  internal/lite/printing/zz_drill.go "package printing
+import _ \"$M/internal/lite/customers\""
+
+drill lite-backups-isolated "backups may not import another Lite module" \
+  internal/lite/backups/zz_drill.go "package backups
+import _ \"$M/internal/lite/settings\""
+
+drill lite-typeset-only "only internal/lite/typeset may import go-text" \
+  internal/lite/documents/zz_drill.go "package documents
+import _ \"github.com/go-text/typesetting/shaping\""
+
+drill lite-typeset-only-image "only internal/lite/typeset may import go-text" \
+  internal/lite/api/zz_drill.go "package api
+import _ \"golang.org/x/image/vector\""
+
+drill lite-os-calls-only-in-printers "only internal/lite/printers may use os/exec" \
+  internal/lite/backups/zz_drill.go "package backups
+import _ \"os/exec\""
+
+drill lite-os-calls-syscall "only internal/lite/printers may use os/exec" \
+  internal/lite/documents/zz_drill.go "package documents
+import _ \"syscall\""
+
+drill lite-documents-pure "documents and sheets may import only" \
+  internal/lite/sheets/zz_drill.go "package sheets
+import _ \"$M/internal/kernel/clock\""
+
+drill lite-documents-pure-db "documents and sheets may import only" \
+  internal/lite/documents/zz_drill.go "package documents
+import _ \"$M/internal/platform/database\""
+
+drill no-float-still-in-lite-api "float32/float64 are forbidden" \
+  internal/lite/api/zz_drill.go "package api
+var _ float32"
+
+drill no-float-still-in-printers "float32/float64 are forbidden" \
+  internal/lite/printers/zz_drill.go "package printers
+var _ float64"
+
+drill lite-catalog-forbids-printing "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/printing\""
+
+drill lite-owner-forbids-backups "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/backups\""
+
+drill lite-settings-forbids-printing "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/printing\""
+
+drill lite-setup-forbids-backups "setup may reach other modules only through the ports it declares" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/backups\""
+
+drill lite-stock-forbids-printing "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/printing\""
+
+drill lite-fx-forbids-backups "fx may not import another Lite module" \
+  internal/lite/fx/zz_drill.go "package fx
+import _ \"$M/internal/lite/backups\""
+
+drill lite-sales-forbids-printing "sales may not import another Lite module" \
+  internal/lite/sales/zz_drill.go "package sales
+import _ \"$M/internal/lite/printing\""
+
+drill lite-customers-forbids-printing "customers may not import another Lite module" \
+  internal/lite/customers/zz_drill.go "package customers
+import _ \"$M/internal/lite/printing\""
+
+drill lite-cashbook-forbids-backups "cashbook may not import another Lite module" \
+  internal/lite/cashbook/zz_drill.go "package cashbook
+import _ \"$M/internal/lite/backups\""
+
+drill lite-reports-forbids-printing "reports may not import another Lite module" \
+  internal/lite/reports/zz_drill.go "package reports
+import _ \"$M/internal/lite/printing\""
+
 echo "every Lite architecture rule was seen failing"

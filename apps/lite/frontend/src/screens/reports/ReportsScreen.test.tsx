@@ -221,3 +221,40 @@ describe("ReportsScreen", () => {
     expect(screen.getByText("زيادة عند الجرد (تُضاف)")).toBeInTheDocument();
   });
 });
+
+describe("ReportsScreen — L7 exports", () => {
+  it("exports the report on screen: its tab, its date or range, the format pressed", async () => {
+    const report = vi.fn(async () => ({ path: "/Users/shop/report.xlsx", bytes: 1, cancelled: false }));
+    renderWithProviders(<ReportsScreen />, { client: fakeClient({ exports: { report }, owner: { status: async () => elevated } }), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Excel" }));
+    await settle();
+    expect(report).toHaveBeenLastCalledWith({ kind: "day", date: "2026-09-14", month: "", from: "", to: "", format: "xlsx" });
+
+    await userEvent.click(screen.getByRole("tab", { name: "Month" }));
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "PDF" }));
+    await settle();
+    expect(report).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "month", month: "2026-09", format: "pdf" }));
+
+    await userEvent.click(screen.getByRole("tab", { name: "Stock" }));
+    await settle();
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-09-01" } });
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2026-09-10" } });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Excel" }));
+    await settle();
+    expect(report).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "stock", from: "2026-09-01", to: "2026-09-10", format: "xlsx" }));
+  });
+
+  it("offers no export while the figures are hidden", async () => {
+    const day = vi.fn(async () => {
+      throw required();
+    });
+    renderWithProviders(<ReportsScreen />, { client: fakeClient({ reports: { day } }), locale: "en" });
+    await settle();
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    await settle();
+    expect(screen.queryByRole("button", { name: "Excel" })).not.toBeInTheDocument();
+  });
+});

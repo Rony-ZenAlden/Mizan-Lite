@@ -29,6 +29,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
+	"github.com/mizan-erp/mizan/internal/lite/printers"
 	"github.com/mizan-erp/mizan/internal/platform/migrate"
 )
 
@@ -52,13 +53,17 @@ type Set struct {
 	Customers *Customers
 	Reports   *Reports
 	Cash      *Cash
+	Export    *Export
+	Print     *Print
+	Printers  *Printers
+	Backups   *Backups
 
 	core *core
 }
 
 // New builds the façades, unattached.
 func New(version string, log *slog.Logger) *Set {
-	c := &core{version: version, log: log, ctx: context.Background(), state: stateStarting}
+	c := &core{version: version, log: log, ctx: context.Background(), state: stateStarting, printers: printers.New()}
 	return &Set{
 		App:       &App{core: c},
 		Settings:  &Settings{core: c},
@@ -71,6 +76,10 @@ func New(version string, log *slog.Logger) *Set {
 		Customers: &Customers{core: c},
 		Reports:   &Reports{core: c},
 		Cash:      &Cash{core: c},
+		Export:    &Export{core: c},
+		Print:     &Print{core: c},
+		Printers:  &Printers{core: c},
+		Backups:   &Backups{core: c},
 		core:      c,
 	}
 }
@@ -80,7 +89,7 @@ func New(version string, log *slog.Logger) *Set {
 // generate no TypeScript and therefore slip past every gate that reads the generated files — fails
 // a Go test instead.
 func (s *Set) Bindings() []any {
-	return []any{s.App, s.Settings, s.Catalog, s.Owner, s.Stock, s.FX, s.Till, s.Sales, s.Customers, s.Reports, s.Cash}
+	return []any{s.App, s.Settings, s.Catalog, s.Owner, s.Stock, s.FX, s.Till, s.Sales, s.Customers, s.Reports, s.Cash, s.Export, s.Print, s.Printers, s.Backups}
 }
 
 // SetContext installs the context the window's lifetime runs under. Every call derives from it, so
@@ -105,6 +114,38 @@ func (s *Set) Fail(err error) {
 	defer s.core.mu.Unlock()
 	s.core.state = stateFailed
 	s.core.bootErr = err
+}
+
+// SetFiles installs the operating system's file dialogs (apps/lite, through Wails). Without them an export returns
+// lite.api.no_dialogs.
+func (s *Set) SetFiles(f Files) {
+	s.core.mu.Lock()
+	defer s.core.mu.Unlock()
+	s.core.files = f
+}
+
+// SetPrinters replaces the operating system's printing — for tests.
+func (s *Set) SetPrinters(p printers.System) {
+	s.core.mu.Lock()
+	defer s.core.mu.Unlock()
+	s.core.printers = p
+}
+
+// SetRestarter installs what rebuilds the graph after a restore is staged (apps/lite's shell).
+func (s *Set) SetRestarter(fn func()) {
+	s.core.mu.Lock()
+	defer s.core.mu.Unlock()
+	s.core.restart = fn
+}
+
+// Detach returns the façades to "starting" while the graph is rebuilt after a restore: every call refuses with
+// lite.api.not_ready until Attach.
+func (s *Set) Detach() {
+	s.core.mu.Lock()
+	defer s.core.mu.Unlock()
+	s.core.app = nil
+	s.core.state = stateStarting
+	s.core.progress = migrate.Progress{}
 }
 
 // Attach makes the built graph available. Called once, when boot succeeds.
@@ -132,6 +173,9 @@ type core struct {
 	app      *bootstrap.App
 	version  string
 	log      *slog.Logger
+	files    Files
+	printers printers.System
+	restart  func()
 }
 
 // ready returns the graph and the call context, or a typed refusal.

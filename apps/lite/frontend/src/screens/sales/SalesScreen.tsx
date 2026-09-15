@@ -4,6 +4,7 @@ import type { Day, Sale, SaleFinding } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatInteger } from "@/i18n/numbers";
 import { formatDateTime } from "@/i18n/time";
+import { RangeExport } from "@/exports/ExportButtons";
 import { useOwner } from "@/owner/OwnerProvider";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
@@ -169,6 +170,8 @@ export function SalesScreen() {
           </table>
         </div>
       ) : null}
+
+      <RangeExport title={t("sales.export")} onExport={(from, to, format) => client.exports.salesHistory(from, to, format)} />
 
       {open ? <ReceiptView sale={open} onClose={() => setOpen(null)} onVoided={voided} /> : null}
     </section>

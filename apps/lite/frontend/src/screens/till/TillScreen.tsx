@@ -22,6 +22,7 @@ import { formatDecimal } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { useRate } from "@/rates/RateProvider";
 import { Money, isZero } from "@/screens/sales/Money";
+import { printsItself, usePrinterSettings } from "@/printing/PrintPanel";
 import { ReceiptView } from "@/screens/sales/ReceiptView";
 import { CustomerPicker } from "@/screens/customers/CustomerPicker";
 import { formErrors } from "@/screens/stock/forms";
@@ -80,6 +81,7 @@ export function TillScreen() {
   const [payError, setPayError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<Sale | null>(null);
+  const printer = usePrinterSettings();
   const [loadError, setLoadError] = useState<unknown>(null);
 
   const scanField = useRef<HTMLInputElement>(null);
@@ -780,6 +782,7 @@ export function TillScreen() {
       {receipt ? (
         <ReceiptView
           sale={receipt}
+          autoPrint={printsItself(printer, receipt.payment === "credit" ? "credit_sale" : "cash_sale")}
           onClose={() => {
             setReceipt(null);
             setTimeout(focusScan, 0);

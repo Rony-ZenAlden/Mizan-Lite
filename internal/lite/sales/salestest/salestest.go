@@ -79,6 +79,19 @@ func (f *Fake) Day(_ context.Context, businessDate string) ([]domain.Sale, error
 	return out, nil
 }
 
+func (f *Fake) Range(_ context.Context, from, to string) ([]domain.Sale, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []domain.Sale
+	for _, s := range f.sales {
+		if (s.BusinessDate >= from && s.BusinessDate <= to) || (s.VoidBusinessDate != "" && s.VoidBusinessDate >= from && s.VoidBusinessDate <= to) {
+			out = append(out, copySale(s))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ReceiptNo < out[j].ReceiptNo })
+	return out, nil
+}
+
 func (f *Fake) Void(_ context.Context, s domain.Sale) (domain.Sale, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

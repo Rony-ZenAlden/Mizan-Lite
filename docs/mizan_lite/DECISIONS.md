@@ -284,3 +284,55 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L5.i10 | Statements newest first; a charge links to its receipt | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
 | D-L5.i11 | The 50,000-entry timing test: 1 s, 10 s under the race detector | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
 | D-L5.i12 | The seeder's sold figure includes credit; its summary counts credit sales and both voids | approved | [L5 §17](phases/L5_CUSTOMERS.md) |
+
+## L6 — approved 2026-09-14, with the owner's answers
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L6.1 | Profit read from what each sale stored, never re-priced; the C6 table a fixture | approved | [L6 §3.1](phases/L6_REPORTS.md) |
+| D-L6.2 | Dollars primary; pounds at each sale's own rate beside; a pounds sale's rounding is pounds revenue only | approved | [L6 §3.1](phases/L6_REPORTS.md) |
+| D-L6.3 | A day's profit = sales rung up that day − sales voided that day; ranges sum days | approved | [L6 §3.3](phases/L6_REPORTS.md) |
+| D-L6.4 | Per-product from line nets, one reconciling row for whole-sale discounts and rounding | approved | [L6 §3.4](phases/L6_REPORTS.md) |
+| D-L6.5 | Net profit = gross − stock losses + count gains − bad debts − expenses; openings, revaluations, package openings not profit | approved | [L6 §4.1](phases/L6_REPORTS.md) |
+| D-L6.6 | Stock losses and gains at the unit cost each ledger row moved at, by reason | approved | [L6 §4.2](phases/L6_REPORTS.md) |
+| D-L6.7 | Events without a rate convert at the rate of their business day, never today's, never by clock | approved | [L6 §4.3](phases/L6_REPORTS.md) |
+| D-L6.8 | Takings per day and month per currency | approved | [L6 §5](phases/L6_REPORTS.md) |
+| D-L6.9 | Stock value on a past date from each product's last ledger row; negative stock no value | approved | [L6 §6.2](phases/L6_REPORTS.md) |
+| D-L6.10 | A period's stock movements reconciled opening to closing, difference shown with causes | approved | [L6 §6.3](phases/L6_REPORTS.md) |
+| D-L6.11 | Expected profit on the shelf (Q3), naming what it leaves out | approved | [L6 §6.4](phases/L6_REPORTS.md) |
+| D-L6.12 | The drawer per currency sums money in the currency it moved in; nothing converted | approved | [L6 §7.1](phases/L6_REPORTS.md) |
+| D-L6.13 | A void's cash return derived from the sale and shown in the void dialog | approved | [L6 §7.2](phases/L6_REPORTS.md) |
+| D-L6.14 | A cash book (expenses, withdrawals, deposits, counts, reversals), insert-only, seq-ordered, money entries snapshot their rate | approved | [L6 §7.3](phases/L6_REPORTS.md) |
+| D-L6.15 | A count closes its day | approved | [L6 §7.3](phases/L6_REPORTS.md) |
+| D-L6.16 | Read-only `reports` module over facts ports; `cashbook` module; both isolated | approved | [L6 §9](phases/L6_REPORTS.md) |
+| D-L6.17 | The Sales screen's `refunded` renamed `voided` | approved | [L6 §1.2](phases/L6_REPORTS.md) |
+| D-L6.18 | A year of sales within stated bounds before done | approved | [L6 §12.1](phases/L6_REPORTS.md) |
+| Q-L6.1 | Credit sale profit counts **when the goods are sold** | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.2 | Sales with no recorded cost **shown apart**, left out of profit and margins | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.3 | Expenses **recorded in the app**, with the owner PIN | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.4 | The drawer kept: **expected cash, closing counts and the difference** | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.5 | A void **states the cash to hand back**, matching what was paid at the counter (D-L6.i2) | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.6 | **Dollars first**, pounds beside at each sale's historic rate | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.7 | Profit, margins, costs, stock value and expenses **owner only**; the cash count **at the counter** | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.8 | **Calendar months** by business date | approved | [L6 §15](phases/L6_REPORTS.md) |
+| Q-L6.9 | **On screen** in L6; printing in L7; no export | approved | [L6 §15](phases/L6_REPORTS.md) |
+
+### L6 — decisions made while building (approved 2026-09-15)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L6.i1 | `ck_cash_money_is_positive` amended from the verified draft to `amount_minor >= 0 AND (kind IN ('count','reversal') OR amount_minor > 0)`: a reversal copies its entry's amount, and a count may be zero | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i2 | Q-L6.5 as built: a cash sale hands back its total, a credit sale what was paid now (total − the debt added), both in the currency the sale was charged in — one rule, `Sale.VoidReturn()`, shown before the PIN and summed by the drawer | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i3 | A reversed debt payment or refund moves its cash back on the reversal's day, as a void does | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i4 | At the counter the drawer shows drawer-paid expenses together with withdrawals as *taken out by the owner*, and the cash book only its counts | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i5 | A count records the drawer's expected figure at the moment of counting; the day's count is the newest not reversed; a reversed count no longer opens the next day | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i6 | `Reports.Stock` takes a range (month to date by default): value on its last day, the range reconciled, the shelf now | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i7 | The reconciliation's classes are exact value changes that telescope, so its only possible differences are stock below zero and rounding (bounded and shown) | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i8 | Shelf profit counts products priced below cost (negative, marked and counted); leaves out inactive, no stock, no cost, and pounds prices with no rate | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i9 | Reports read their facts without a transaction, so a year's report never holds the till's single writer | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i10 | A month lists only days with activity; its totals are the sum of all its days | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i11 | Takings net each reversal (collected, refunded, written off) on the reversal's day | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i12 | Reports use their own fact types; the composition root copies each module's records, and a test holds the kind strings equal | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i13 | The Cash screen shows a past day read-only; counts and entries are made on today | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i14 | The seeder's history has no credit: L5's paper book is adopted today, as before | approved | [L6 §17](phases/L6_REPORTS.md) |
+| D-L6.i15 | The year-of-sales bounds ×10 under the race detector, rows generated in SQL (as D-L5.i11) | approved | [L6 §17](phases/L6_REPORTS.md) |

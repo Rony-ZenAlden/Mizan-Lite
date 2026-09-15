@@ -39,8 +39,8 @@ const aDay = (overrides: Partial<Day> = {}): Day => ({
   businessDate: "2026-09-14",
   sales: [aSale(), dollarSale],
   totals: [
-    { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 1, refunded: "15000", onCredit: "0" },
-    { currency: "USD", sales: 1, charged: "10.50", cashIn: "20.00", changeOut: "9.50", voids: 0, refunded: "0.00", onCredit: "0.00" },
+    { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 1, voided: "15000", onCredit: "0" },
+    { currency: "USD", sales: 1, charged: "10.50", cashIn: "20.00", changeOut: "9.50", voids: 0, voided: "0.00", onCredit: "0.00" },
   ],
   ...overrides,
 });
@@ -111,6 +111,7 @@ describe("SalesScreen", () => {
     await userEvent.click(within(screen.getAllByRole("row")[1]!).getByRole("button", { name: "Receipt" }));
     const dialog = await screen.findByRole("dialog", { name: "Receipt No. 7" });
     await userEvent.click(within(dialog).getByRole("button", { name: "Void sale" }));
+    expect(within(dialog).getByTestId("void-hand-back")).toHaveTextContent("Hand back 73,000 SYP");
     expect(within(dialog).getByRole("button", { name: "Void the whole sale" })).toBeDisabled();
     await userEvent.type(within(dialog).getByLabelText("Reason for the void"), "wrong quantity");
     await userEvent.click(within(dialog).getByRole("button", { name: "Void the whole sale" }));
@@ -184,5 +185,21 @@ describe("ReceiptView — on credit", () => {
     expect(block).toHaveTextContent("The debt was reversed with the void.");
     expect(within(dialog).getByTestId("receipt")).toHaveTextContent("Paid now20,000 SYP");
     expect(within(dialog).getByTestId("receipt")).not.toHaveTextContent("Change");
+  });
+});
+
+describe("ReceiptView — what a void hands back", () => {
+  it("says the cash to hand back before the PIN: a credit sale's paid now, in the currency it was charged in (Q-L6.5)", async () => {
+    // 76,000 pounds on credit, $2.00 handed over and worth 30,000: the void hands back 30,000 pounds, not the $2 note.
+    const credit = aSale({ payment: "credit", total: "76000", tenderCurrency: "USD", tendered: "2.00", creditCustomerId: "c1", creditCustomerName: "أبو محمد",
+      creditCurrency: "SYP", creditAmount: "46000", creditBalanceAfter: "46000", voidReturn: "30000", voidReturnCurrency: "SYP" });
+    renderWithProviders(<SalesScreen />, { client: fakeClient({ sales: { list: async () => aDay({ sales: [credit] }), receipt: async () => credit } }), locale: "en" });
+    await settle();
+    await userEvent.click(within(screen.getAllByRole("row")[1]!).getByRole("button", { name: "Receipt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Receipt No. 7" });
+    expect(within(dialog).queryByTestId("void-hand-back")).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Void sale" }));
+    expect(within(dialog).getByTestId("void-hand-back")).toHaveTextContent("Hand back 30,000 SYP");
+    expect(within(dialog).getByTestId("void-hand-back")).not.toHaveTextContent("USD");
   });
 });

@@ -1,7 +1,7 @@
 # Mizan Lite — progress
 
 > **The resume point.** Read this first when picking Lite back up.
-> **Last updated:** 2026-09-14 (L5 committed; L6 design note next). **Branch:** `lite/l0-skeleton`.
+> **Last updated:** 2026-09-15 (L6 committed). **Branch:** `lite/l0-skeleton`.
 
 ---
 
@@ -10,7 +10,9 @@
 **L0, L1 and L2 are complete and committed** (L2: `407fdbb`; its building decisions D-L2.i1–i14 approved 2026-09-14).
 **L3 is complete and committed** (`67d72c8`) — internet and manual exchange rates, **manual mode by default** (owner, 2026-09-14): [phases/L3_RATES.md](phases/L3_RATES.md).
 **L4 is complete and committed** (`76463fd`) — the till, sales, receipts, voids, discounts with the PIN, cash rounding to 500: [phases/L4_TILL.md](phases/L4_TILL.md) §14–§21; D-L4.i1–i11 approved 2026-09-14.
-**L5 is complete and committed** — customers, credit sales, a debt book per customer and currency, repayments at the day's rate, openings, write-offs, refunds, reversals: [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) §15–§22; D-L5.i1–i12 approved 2026-09-14.
+**L5 is complete and committed** (`97b7875`) — customers, credit sales, a debt book per customer and currency, repayments at the day's rate, openings, write-offs, refunds, reversals: [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) §15–§22; D-L5.i1–i12 approved 2026-09-14.
+**L6 is complete and committed** — reports (a day, a month, products, stock value reconciled, the profit on the shelf), a cash book and the cash drawer per currency; a void states the cash to hand back: [phases/L6_REPORTS.md](phases/L6_REPORTS.md) §15–§22; D-L6.i1–i15 approved 2026-09-15.
+**Next: L7's design note** — export to Excel and PDF, 80 mm thermal printing, backup and one-click restore.
 
 | Phase | Status | Record |
 |---|---|---|
@@ -19,8 +21,10 @@
 | L2 — stock, weighted-average cost, opening packages | ✅ committed `407fdbb` | [phases/L2_STOCK.md](phases/L2_STOCK.md) |
 | L3 — exchange rates and the currency system | ✅ committed `67d72c8` | [phases/L3_RATES.md](phases/L3_RATES.md) |
 | L4 — the till: sales, checkout, receipts | ✅ committed `76463fd` | [phases/L4_TILL.md](phases/L4_TILL.md) |
-| L5 — customers and debts | ✅ committed | [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) |
-| L6–L8 | not started | [DESIGN.md §10](DESIGN.md); scope restated in [L5_CUSTOMERS.md §2.3](phases/L5_CUSTOMERS.md) |
+| L5 — customers and debts | ✅ committed `97b7875` | [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) |
+| L6 — reports: profit, stock value, cash drawer | ✅ committed | [phases/L6_REPORTS.md](phases/L6_REPORTS.md) |
+| L7 — export, printing, backup and restore | design note next | — |
+| L8 — release | not started | [DESIGN.md §10](DESIGN.md) |
 
 ## 2. How to verify the current state
 
@@ -30,14 +34,15 @@ make lite-build-macos     # universal .app → apps/lite/build/bin/
 make lite-build-windows   # .exe → apps/lite/build/bin/  (builds here; cannot be run here)
 ```
 
-Last full run: 2026-09-14 (L5) — see [L5 §19.1](phases/L5_CUSTOMERS.md): 376 Lite Go test functions (race), 351 frontend
-tests, 50 architecture rules seen failing, golangci-lint v2 0 issues; 26 behaviour drills caught. Mizan's `scripts/check.sh`
-green (100 packages) after L5's archlint change. The packaged app upgraded a real L4 shop to schema 6 with every row intact.
+Last full run: 2026-09-15 (L6) — see [L6 §19.1](phases/L6_REPORTS.md): 424 Lite Go test functions (race), 391 frontend
+tests, 65 architecture rules seen failing, golangci-lint v2 0 issues; 35 behaviour drills caught; a year of sales reports a
+month in 32 ms. Mizan's `scripts/check.sh` green (106 packages) after L6's archlint change. The packaged app upgraded a real
+L5 shop to schema 7 with every row intact.
 
 Try the seeded shop:
 
 ```bash
-MIZAN_LITE_DATA_DIR=~/Desktop/lite-demo go run ./cmd/lite-demoseed      # prints the PIN, recovery code and the day's takings
+MIZAN_LITE_DATA_DIR=~/Desktop/lite-demo go run ./cmd/lite-demoseed      # 30 days of history by default (-days 0 for today only); prints the PIN
 make lite-build-macos && MIZAN_LITE_DATA_DIR=~/Desktop/lite-demo "apps/lite/build/bin/Mizan Lite.app/Contents/MacOS/Mizan Lite"
 ```
 
@@ -49,14 +54,16 @@ make lite-build-macos && MIZAN_LITE_DATA_DIR=~/Desktop/lite-demo "apps/lite/buil
 | ~~O2~~ | ~~Nobody has visually confirmed the app~~ — **closed 2026-09-13**: the owner confirmed the interface lays out and runs correctly on macOS | — | L0 |
 | O3 | WebView2 on a Windows 10 machine without it, offline — embed the runtime in the installer. | L8 | L0 |
 | ~~O4~~ | ~~SYP cash-rounding denomination~~ — **closed 2026-09-14**: 500 pounds, to the nearest (Q-L4.1); the owner can change it with the PIN | — | approval |
-| O5 | **The L1–L5 screens (products, PIN dialog, first run, owner, stock, rates, the Till, Sales, receipt and cash rounding, and now Customers, the statement, payments and the till's credit) have not been looked at** — screenshots blocked here. | owner | L1–L5 |
+| O5 | **The L1–L6 screens (products, PIN dialog, first run, owner, stock, rates, the Till, Sales, receipt and cash rounding, Customers, the statement, payments and the till's credit, and now Reports, the Cash drawer and the void form's *Hand back*) have not been looked at** — screenshots blocked here. | owner | L1–L6 |
 | O6 | Argon2id verify time on low-end Windows hardware not measured (it holds the single writer while it runs). | L8 | L1 |
 | ~~O7~~ | ~~Nullable comparisons in CHECKs pass on NULL~~ — **closed 2026-09-14**: guarded in `sales` (L4) and `debt_entries` (L5), NULL cases refused by name through the runner; DESIGN §5's debt draft confirmed to accept a NULL amount (L5 R4). | — | L2 note |
-| O8 | The verifiers' and the customer list's cost at scale is partly measured: who owes what over 50,000 debt entries takes 43 ms; the stock and sales verifiers over a year of sales, and `Search`/statements over thousands of customers, are not. | L6 or L8 | L2 |
+| O8 | Cost at scale is partly measured: who owes what over 50,000 debt entries takes 43 ms; a year of sales reports a month in 32 ms and a year of products in 356 ms (L6). The stock and sales verifiers over a year, `Search`/statements over thousands of customers, and the drawer of a shop never counted over years (it reads every day since the first) are not. | L8 | L2 |
 | O9 | Quitting the packaged app through AppleScript reports "User cancelled (-128)" although it quits cleanly (L2 R8). | L8 | L2 |
 | ~~O10~~ | ~~The internet rate is official-style, not the market rate~~ — **closed 2026-09-14**: the owner set manual mode as the default; the internet rate is shown for reference | — | L3 |
 | O11 | The free rate providers have no agreement; a change of scale or coverage is caught by the 20% guard and the opt-in live test, not prevented. | L8 | L3 |
 | ~~O12~~ | **Closed 2026-09-14** — the rebuild ran through the runner in `TestTheLedgerRebuildKeepsEveryRow` and on a real L3 shop in the packaged app, every row intact (L4 §18). L2's planned ledger rebuild (A-L2.3) fails as written — `stock_levels` and the self-reference block the drop under the runner's foreign keys. The working order is designed and verified on real data in L4 §6.2; it must be proven through the runner in L4's migration test. | L4 | L4 note |
+
+**Closed in L6:** O13 — a void's cash return is now derived from the receipt (`Sale.VoidReturn()`), stated in the void form before the PIN and summed by the drawer; receipt 12 of the seeded shop hands back 20,000 SYP (L6 D-L6.i2, §19).
 
 ## 4. Findings for Mizan (not fixed in Mizan)
 
@@ -75,5 +82,5 @@ editions, with five small Mizan fixes its first honest run found (F2).
 
 ## 5. Next
 
-1. L6's design note — reports, profit and cash — written and presented for approval.
-2. Owner looks at the seeded shop — the till on credit, Customers and a statement — in both languages (O5): seed with the command in §2, PIN 481537.
+1. L7's design note: export of reports, statements, sales history and debt ledgers to Excel and PDF (the owner's requirement of 2026-09-15, replacing Q-L6.9's "no export"); 80 mm thermal receipts, credit receipts and payment vouchers; automated backup and one-click restore.
+2. Owner looks at the seeded month — Reports, the Cash drawer, a count, an expense, and a void's *Hand back* — in both languages (O5): seed with the command in §2, PIN 481537.

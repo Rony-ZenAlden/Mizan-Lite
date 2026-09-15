@@ -7,10 +7,12 @@
 // Types are not written by hand: each result type is inferred from the file Wails generated from the Go
 // struct, so a field renamed in Go is a compile error here.
 import * as App from "../../wailsjs/go/api/App";
+import * as Cash from "../../wailsjs/go/api/Cash";
 import * as Catalog from "../../wailsjs/go/api/Catalog";
 import * as Customers from "../../wailsjs/go/api/Customers";
 import * as FX from "../../wailsjs/go/api/FX";
 import * as Owner from "../../wailsjs/go/api/Owner";
+import * as Reports from "../../wailsjs/go/api/Reports";
 import * as Sales from "../../wailsjs/go/api/Sales";
 import * as Settings from "../../wailsjs/go/api/Settings";
 import * as Stock from "../../wailsjs/go/api/Stock";
@@ -82,6 +84,19 @@ export type PaymentQuote = Plain<api.PaymentQuoteDTO>;
 export type DebtAmountInput = Plain<api.DebtAmountInput>;
 export type RefundInput = Plain<api.RefundInput>;
 export type ReverseEntryInput = Plain<api.ReverseEntryInput>;
+export type Amount = Plain<api.AmountDTO>;
+export type Profit = Plain<api.ProfitDTO>;
+export type Takings = Plain<api.TakingsDTO>;
+export type DayReport = Plain<api.DayReportDTO>;
+export type MonthReport = Plain<api.MonthReportDTO>;
+export type ProductRow = Plain<api.ProductRowDTO>;
+export type ProductsReport = Plain<api.ProductsReportDTO>;
+export type StockReport = Plain<api.StockReportDTO>;
+export type Drawer = Plain<api.DrawerDTO>;
+export type DrawerCurrency = Plain<api.DrawerCurrencyDTO>;
+export type CashEntry = Plain<api.CashEntryDTO>;
+export type CashRecordInput = Plain<api.CashRecordInput>;
+export type CashCountInput = Plain<api.CashCountInput>;
 
 export function createClient() {
   return {
@@ -163,6 +178,18 @@ export function createClient() {
       writeOff: (input: DebtAmountInput) => unwrap(() => Customers.WriteOff(api.DebtAmountInput.createFrom(input))),
       refund: (input: RefundInput) => unwrap(() => Customers.Refund(api.RefundInput.createFrom(input))),
       reverse: (input: ReverseEntryInput) => unwrap(() => Customers.Reverse(api.ReverseEntryInput.createFrom(input))),
+    },
+    reports: {
+      day: (date: string) => unwrap(() => Reports.Day(date)),
+      month: (month: string) => unwrap(() => Reports.Month(month)),
+      products: (from: string, to: string) => unwrap(() => Reports.Products(api.RangeInput.createFrom({ from, to }))),
+      stock: (from: string, to: string) => unwrap(() => Reports.Stock(api.RangeInput.createFrom({ from, to }))),
+    },
+    cash: {
+      drawer: (date: string) => unwrap(() => Cash.Drawer(date)),
+      record: (input: CashRecordInput) => unwrap(() => Cash.Record(api.CashRecordInput.createFrom(input))),
+      count: (input: CashCountInput) => unwrap(() => Cash.Count(api.CashCountInput.createFrom(input))),
+      reverse: (entryId: string, reason: string) => unwrap(() => Cash.Reverse(api.ReverseCashInput.createFrom({ entryId, reason }))),
     },
     owner: {
       status: () => unwrap(Owner.Status),

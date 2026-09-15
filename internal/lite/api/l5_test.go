@@ -48,7 +48,7 @@ func TestTheDebtBookThroughTheBindings(t *testing.T) {
 		t.Fatalf("Outstanding = %+v", out)
 	}
 	bal := out.Data.Customers[0].Balances
-	if len(bal) != 1 || bal[0] != (api.BalanceDTO{Currency: "USD", Balance: "10.00", OwedSince: "2026-09-14", Reference: "150000", ReferenceCurrency: "SYP"}) {
+	if len(bal) != 1 || bal[0] != (api.BalanceDTO{Currency: "USD", Balance: "10.00", OwedSince: out.Data.BusinessDate, Reference: "150000", ReferenceCurrency: "SYP"}) {
 		t.Fatalf("balances = %+v", bal)
 	}
 	if found := set.Customers.Search(api.CustomerQueryDTO{Text: "٠٩٣٣", OwingOnly: true}); !found.OK || len(found.Data) != 1 {
@@ -92,6 +92,9 @@ func TestTheDebtBookThroughTheBindings(t *testing.T) {
 	}
 
 	// Voiding the repaid credit sale leaves the shop owing $10; refunded all in pounds.
+	if r := set.Sales.Receipt(sold.Data.ID); !r.OK || r.Data.VoidReturn != "3.00" || r.Data.VoidReturnCurrency != "USD" {
+		t.Fatalf("a credit sale's void hands back what was paid now = %+v", r.Data)
+	}
 	if r := set.Sales.Void(api.VoidInput{SaleID: sold.Data.ID, Reason: "أعاد الزيت"}); !r.OK || !r.Data.CreditReversed {
 		t.Fatalf("Void = %+v", r)
 	}

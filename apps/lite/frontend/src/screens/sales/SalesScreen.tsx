@@ -118,7 +118,7 @@ export function SalesScreen() {
               </dd>
               <dt>{t("sales.totals.voids", { count: formatInteger(total.voids, locale) })}</dt>
               <dd>
-                <Money value={total.refunded} currency={total.currency} />
+                <Money value={total.voided} currency={total.currency} />
               </dd>
             </dl>
           ))}

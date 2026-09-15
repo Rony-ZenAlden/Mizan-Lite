@@ -202,6 +202,43 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 		}
 	})
 
+	t.Run("a range holds its business dates, and the last place on or before a date is by place, not clock", func(t *testing.T) {
+		sub := newSubject(t)
+		s := sub.Store
+		a, b := sub.NewProduct(t), sub.NewProduct(t)
+		levels := map[id.ID]domain.Level{a: {ProductID: a}, b: {ProductID: b}}
+		receive := func(p id.ID, date string, qty int64) {
+			t.Helper()
+			st := stampFor(t)
+			st.BusinessDate = date
+			m, after, err := domain.Receive(levels[p], st, qty*unit, dollar, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			levels[p] = write(t, s)(m, after)
+		}
+		receive(a, "2026-09-12", 1)
+		receive(a, "2026-09-13", 2)
+		receive(b, "2026-09-13", 5)
+		receive(a, "2026-09-15", 4)
+		in, err := s.Between(ctx, "2026-09-13", "2026-09-14")
+		if err != nil || len(in) != 2 {
+			t.Fatalf("Between 13–14 = %+v, %v", in, err)
+		}
+		last, err := s.LastOnOrBefore(ctx, "2026-09-14")
+		if err != nil || len(last) != 2 {
+			t.Fatalf("LastOnOrBefore = %+v, %v", last, err)
+		}
+		for _, m := range last {
+			if m.ProductID == a && (m.Seq != 2 || m.OnHandAfterMicro != 3*unit) || m.ProductID == b && m.OnHandAfterMicro != 5*unit {
+				t.Fatalf("last on or before the 14th = %+v", m)
+			}
+		}
+		if before, _ := s.LastOnOrBefore(ctx, "2026-09-11"); len(before) != 0 {
+			t.Fatalf("before anything moved = %+v", before)
+		}
+	})
+
 	t.Run("a missing movement is NotFound", func(t *testing.T) {
 		missing, _ := id.New()
 		if _, err := newSubject(t).Store.Movement(ctx, missing); errs.CodeOf(err) != domain.CodeMovementNotFound {

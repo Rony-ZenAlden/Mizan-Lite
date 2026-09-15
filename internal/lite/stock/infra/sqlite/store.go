@@ -201,6 +201,23 @@ func (s *Store) EachMovement(ctx context.Context, fn func(domain.Movement) error
 	return s.each(ctx, `SELECT `+movementColumns+` FROM stock_ledger ORDER BY product_id, seq`, fn)
 }
 
+func (s *Store) collect(ctx context.Context, q string, args ...any) ([]domain.Movement, error) {
+	var out []domain.Movement
+	err := s.each(ctx, q, func(m domain.Movement) error { out = append(out, m); return nil }, args...)
+	return out, err
+}
+
+func (s *Store) Between(ctx context.Context, from, to string) ([]domain.Movement, error) {
+	return s.collect(ctx, `SELECT `+movementColumns+` FROM stock_ledger WHERE business_date BETWEEN ? AND ? ORDER BY product_id, seq`, from, to)
+}
+
+// LastOnOrBefore reads each product's highest place on or before the date through the (product_id, seq) index.
+func (s *Store) LastOnOrBefore(ctx context.Context, businessDate string) ([]domain.Movement, error) {
+	return s.collect(ctx, `SELECT `+movementColumns+` FROM stock_ledger l
+		 WHERE l.seq = (SELECT MAX(x.seq) FROM stock_ledger x WHERE x.product_id = l.product_id AND x.business_date <= ?)
+		 ORDER BY l.product_id`, businessDate)
+}
+
 func (s *Store) each(ctx context.Context, q string, fn func(domain.Movement) error, args ...any) error {
 	rows, err := s.db.Reader(ctx).QueryContext(ctx, q, args...)
 	if err != nil {

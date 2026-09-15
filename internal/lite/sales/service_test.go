@@ -297,8 +297,8 @@ func TestTheDaysTotalsPerCurrency(t *testing.T) {
 		t.Fatalf("day = %+v, %v", day, err)
 	}
 	syp, usd := day.Totals["SYP"], day.Totals["USD"]
-	// The voided sale was rung up today and voided today: charged and refunded both.
-	if syp.Sales != 2 || syp.ChargedMinor != 135_000 || syp.CashInMinor != 50_000 || syp.ChangeOutMinor != 65_000 || syp.Voids != 1 || syp.RefundedMinor != 90_000 {
+	// The voided sale was rung up today and voided today: charged and voided both.
+	if syp.Sales != 2 || syp.ChargedMinor != 135_000 || syp.CashInMinor != 50_000 || syp.ChangeOutMinor != 65_000 || syp.Voids != 1 || syp.VoidedMinor != 90_000 {
 		t.Fatalf("SYP = %+v", *syp)
 	}
 	if usd.Sales != 1 || usd.ChargedMinor != 650 || usd.CashInMinor != 2_000 || usd.ChangeOutMinor != 350 || usd.Voids != 0 {
@@ -332,7 +332,7 @@ func TestAVoidBelongsToTheDayItWasMade(t *testing.T) {
 	if err != nil || voided.BusinessDate != "2026-09-15" || len(voided.Sales) != 1 || voided.Sales[0].ID != sale.ID {
 		t.Fatalf("the day of the void = %+v, %v", voided, err)
 	}
-	if v := voided.Totals["SYP"]; v.Sales != 0 || v.ChargedMinor != 0 || v.CashInMinor != 0 || v.Voids != 1 || v.RefundedMinor != 45_000 {
+	if v := voided.Totals["SYP"]; v.Sales != 0 || v.ChargedMinor != 0 || v.CashInMinor != 0 || v.Voids != 1 || v.VoidedMinor != 45_000 {
 		t.Fatalf("the void's day = %+v", *v)
 	}
 }

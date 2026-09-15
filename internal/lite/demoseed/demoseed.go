@@ -15,15 +15,21 @@
 // a pounds total paid in dollars, a dollar sale, a sale beyond the shelf, two discounts and a void through the owner's PIN —
 // and then the stock verifier and the sales verifier, both of which must find nothing (L4 §11). L5: eight customers from
 // the paper book, credit sales in both currencies with part paid now, repayments both ways — pay all of a dollar debt in
-// pounds — a voided repaid credit sale refunded, and a write-off; then the debt book's verifier too (L5 §12).
+// pounds — a voided repaid credit sale refunded, and a write-off; then the debt book's verifier too (L5 §12). L6: with Days,
+// that many days of history before today under a clock the seeder steps — drifting rates, weekly deliveries, sales and voids,
+// losses, expenses and closing counts (history.go) — and then the reports' own reconciliations, which must hold (L6 §11).
 package demoseed
 
 import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
+	"math/rand"
 	"strconv"
+	"time"
 
+	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
@@ -32,6 +38,7 @@ import (
 	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	reportsdomain "github.com/mizan-erp/mizan/internal/lite/reports/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
@@ -48,6 +55,10 @@ const CodeSalesInconsistent = "lite.demoseed.sales_inconsistent"
 
 // CodeDebtsInconsistent fails a run whose debt book the verifier finds anything wrong with.
 const CodeDebtsInconsistent = "lite.demoseed.debts_inconsistent"
+
+// CodeReportsInconsistent fails a run whose reports do not reconcile: a month that is not the sum of its days, stock
+// movements that do not add up to the closing value, or a count recorded against another figure than the drawer's.
+const CodeReportsInconsistent = "lite.demoseed.reports_inconsistent"
 
 // CodeAlreadySetUp refuses an installation that has completed first run. Re-seeding means deleting the data
 // directory — a decision for whoever runs this, not something a seeder should do on their behalf.
@@ -186,6 +197,11 @@ type Options struct {
 	PIN string
 	// Locale is the interface language; Arabic by default.
 	Locale string
+	// Days is how many days of history come before today (L6 §11); 0 seeds today only. History needs Clock — the clock the
+	// graph was started with, which the seeder steps — and Now, today's instant.
+	Days  int
+	Clock *clock.Fixed
+	Now   time.Time
 }
 
 // Result is what a run produced, for the command to print.
@@ -200,7 +216,7 @@ type Result struct {
 	StockValue string
 	// Rate is the exchange rate in force after seeding.
 	Rate string
-	// Sales and Voids are the day at the till; Takings is what was charged less what was refunded, per currency, as Go
+	// Sales and Voids are the day at the till; Takings is what was charged less what voids took back, per currency, as Go
 	// formats it.
 	Sales   int
 	Voids   int
@@ -210,7 +226,22 @@ type Result struct {
 	DebtOpenings int
 	CreditSales  int
 	Payments     int
+	// HistoryDays and the rest are L6's month before today.
+	HistoryDays     int
+	HistorySales    int
+	HistoryVoids    int
+	HistoryReceipts int
+	Expenses        int
+	Counts          int
+	// HistoryProfitUSD and HistoryProfitLocal are the history's net profit in each reading, as Go formats it — dollars at
+	// cost, pounds at each sale's rate — which diverge as the pound moves (DESIGN §9.4).
+	HistoryProfitUSD   string
+	HistoryProfitLocal string
 }
+
+// NewClock is a clock fixed on now, for the graph the seeder steps through its history: the command wires Lite and imports
+// nothing else (lite-cmd-entry).
+func NewClock() *clock.Fixed { return clock.NewFixed(clock.System().Now()) }
 
 // Run seeds app. It refuses an installation that has completed first run.
 func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) {
@@ -246,7 +277,16 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 		return Result{}, err
 	}
 
+	if opts.Days > 0 && opts.Clock == nil {
+		return Result{}, errs.Internal(CodeReportsInconsistent, "history needs the clock the graph was started with")
+	}
 	res := Result{ShopName: cat.ShopName}
+	start := opts.Now
+	if opts.Days > 0 {
+		now := opts.Now.In(time.Local)
+		start = time.Date(now.Year(), now.Month(), now.Day()-opts.Days, 0, 0, 0, 0, time.Local)
+		opts.Clock.Current = start.Add(7 * time.Hour)
+	}
 	if res.RecoveryCode, err = app.Setup.Run(ctx, setup.Input{ShopName: cat.ShopName, Locale: opts.Locale, PIN: opts.PIN, Rate: rates.FirstRun}); err != nil {
 		return Result{}, err
 	}
@@ -270,6 +310,12 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 		res.Products++
 	}
 
+	if opts.Days > 0 {
+		if err := seedHistory(ctx, app, opts, cat, stk, byName, start, &res); err != nil {
+			return Result{}, err
+		}
+	}
+
 	// One price change through the owner's guard, entered with the PIN exactly as a person would — so the
 	// seeder meets the same rule every caller meets, and the owner's history is not empty.
 	if _, err := app.Owner.Elevate(ctx, opts.PIN); err != nil {
@@ -281,7 +327,13 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}); err != nil {
 		return Result{}, err
 	}
-	// The count and the write-off lower stock, so they are the owner's too (Q-L2.3) — seeded in the same owner mode.
+	// The count and the write-off lower stock, so they are the owner's too (Q-L2.3) — seeded in the same owner mode. With
+	// history the openings were entered on its first day.
+	if opts.Days == 0 {
+		if err := seedOpenings(ctx, app, stk, byName, &res); err != nil {
+			return Result{}, err
+		}
+	}
 	if err := seedStock(ctx, app, stk, rates, byName, &res); err != nil {
 		return Result{}, err
 	}
@@ -296,6 +348,11 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}
 	if err := check(ctx, app, opts.PIN, &res); err != nil {
 		return Result{}, err
+	}
+	if opts.Days > 0 {
+		if err := checkReports(ctx, app, opts.PIN, start.Format("2006-01-02"), &res); err != nil {
+			return Result{}, err
+		}
 	}
 	return res, nil
 }
@@ -537,7 +594,7 @@ func check(ctx context.Context, app *bootstrap.App, pin string, res *Result) err
 	res.Takings = map[string]string{}
 	for _, c := range currencies {
 		if t, ok := day.Totals[c.Code]; ok {
-			res.Takings[c.Code] = fxdomain.FormatMinor(t.ChargedMinor-t.RefundedMinor, c.Decimals)
+			res.Takings[c.Code] = fxdomain.FormatMinor(t.ChargedMinor-t.VoidedMinor, c.Decimals)
 		}
 	}
 	_, err = app.Owner.EndElevation(ctx)
@@ -546,45 +603,59 @@ func check(ctx context.Context, app *bootstrap.App, pin string, res *Result) err
 
 // seedStock runs L2's part of the demo in the order a shop adopting Lite would: what opens into what, the stock on
 // the shelves, the week's deliveries, a count, a write-off, and a tin opened for loose sale. Then it checks.
-func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, rates ratesData, byName map[string]domain.Product, res *Result) error {
-	product := func(name string) (domain.Product, error) {
-		p, ok := byName[name]
-		if !ok {
-			return domain.Product{}, errs.Internal(CodeStockInconsistent, "the demo stock names a product the catalogue lacks").WithParam("product", name)
-		}
-		return p, nil
+func stockProduct(byName map[string]domain.Product, name string) (domain.Product, error) {
+	p, ok := byName[name]
+	if !ok {
+		return domain.Product{}, errs.Internal(CodeStockInconsistent, "the demo stock names a product the catalogue lacks").WithParam("product", name)
 	}
-	tin, err := product(stk.Package.Package)
+	return p, nil
+}
+
+func receiveLine(ctx context.Context, byName map[string]domain.Product, line costLine, act func(context.Context, stock.ReceiveInput) (stockdomain.Movement, error)) error {
+	p, err := stockProduct(byName, line.Product)
 	if err != nil {
 		return err
 	}
-	oil, err := product(stk.Package.Content)
+	_, err = act(ctx, stock.ReceiveInput{
+		ProductID: p.ID, Quantity: line.Quantity, Note: line.Note,
+		Cost: stockdomain.CostInput{Mode: stockdomain.CostTotal, Amount: line.Cost, Currency: line.Currency, Rate: line.Rate},
+	})
+	if err != nil {
+		return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "seeding stock of "+line.Product)
+	}
+	return nil
+}
+
+// seedOpenings links the tin to its oil and enters the stock on the shelves — the first thing a shop adopting Lite does.
+func seedOpenings(ctx context.Context, app *bootstrap.App, stk stockData, byName map[string]domain.Product, res *Result) error {
+	tin, err := stockProduct(byName, stk.Package.Package)
+	if err != nil {
+		return err
+	}
+	oil, err := stockProduct(byName, stk.Package.Content)
 	if err != nil {
 		return err
 	}
 	if _, err = app.Catalog.SetPackage(ctx, catalog.SetPackageInput{PackageProductID: tin.ID, ContentProductID: oil.ID, ContentQuantity: stk.Package.ContentQuantity}); err != nil {
 		return err
 	}
-
-	receive := func(line costLine, act func(context.Context, stock.ReceiveInput) (stockdomain.Movement, error)) error {
-		p, lookupErr := product(line.Product)
-		if lookupErr != nil {
-			return lookupErr
-		}
-		_, actErr := act(ctx, stock.ReceiveInput{
-			ProductID: p.ID, Quantity: line.Quantity, Note: line.Note,
-			Cost: stockdomain.CostInput{Mode: stockdomain.CostTotal, Amount: line.Cost, Currency: line.Currency, Rate: line.Rate},
-		})
-		if actErr != nil {
-			return errs.Wrap(actErr, errs.CategoryInternal, errs.CodeOf(actErr), "seeding stock of "+line.Product)
-		}
-		return nil
-	}
 	for _, line := range stk.Openings {
-		if err = receive(line, app.Stock.Opening); err != nil {
+		if err = receiveLine(ctx, byName, line, app.Stock.Opening); err != nil {
 			return err
 		}
 		res.Openings++
+	}
+	return nil
+}
+
+func seedStock(ctx context.Context, app *bootstrap.App, stk stockData, rates ratesData, byName map[string]domain.Product, res *Result) error {
+	product := func(name string) (domain.Product, error) { return stockProduct(byName, name) }
+	receive := func(line costLine, act func(context.Context, stock.ReceiveInput) (stockdomain.Movement, error)) error {
+		return receiveLine(ctx, byName, line, act)
+	}
+	tin, err := product(stk.Package.Package)
+	if err != nil {
+		return err
 	}
 	// The day's rate, then its correction: the history shows both, and the correction is in force (L3 §11.2).
 	for _, r := range []rateLine{rates.Later, rates.Correction} {
@@ -628,4 +699,117 @@ func readData(name string, into any) error {
 		return err
 	}
 	return json.Unmarshal(raw, into)
+}
+
+// seedHistory enters the openings on the first day of history, then runs the days before today (history.go), and leaves the
+// clock on today.
+func seedHistory(ctx context.Context, app *bootstrap.App, opts Options, cat catalogue, stk stockData, byName map[string]domain.Product,
+	start time.Time, res *Result) error {
+	if _, err := app.Owner.Elevate(ctx, opts.PIN); err != nil {
+		return err
+	}
+	if err := seedOpenings(ctx, app, stk, byName, res); err != nil {
+		return err
+	}
+	ref, err := app.Catalog.Reference(ctx)
+	if err != nil {
+		return err
+	}
+	h := &history{ctx: ctx, app: app, pin: opts.PIN, clk: opts.Clock, rng: rand.New(rand.NewSource(6)), byName: byName, units: map[string]int{}, res: res} //nolint:gosec // a demo, reproducible
+	for _, item := range cat.Products {
+		h.names = append(h.names, item.NameAR)
+	}
+	for code, u := range ref.Units {
+		h.units[code] = u.InputDecimals
+	}
+	if err = h.days(start, opts.Days); err != nil {
+		return err
+	}
+	opts.Clock.Current = opts.Now
+	for _, c := range h.counts {
+		d, drawerErr := app.Reports.Drawer(ctx, c.BusinessDate)
+		if drawerErr != nil {
+			return drawerErr
+		}
+		for _, terms := range d.Currencies {
+			if terms.Currency == c.Currency && (terms.Count == nil || terms.Count.ExpectedMinor != terms.Expected) {
+				return errs.Internal(CodeReportsInconsistent, "a closing count was recorded against another figure than the drawer's").
+					WithParam("date", c.BusinessDate).WithParam("currency", c.Currency)
+			}
+		}
+	}
+	_, err = app.Owner.EndElevation(ctx)
+	return err
+}
+
+// checkReports holds the seeded history to the reports' reconciliations (L6 §12.2): each month is the sum of its days, the
+// stock's movements add up from the first day's value to today's within the rounding they carry, and today's value is the
+// stock screen's.
+func checkReports(ctx context.Context, app *bootstrap.App, pin, from string, res *Result) error {
+	if _, err := app.Owner.Elevate(ctx, pin); err != nil {
+		return err
+	}
+	today := app.Reports.Today()
+	var all []reportsdomain.Day
+	for month := from[:7]; month <= today[:7]; {
+		m, err := app.Reports.Month(ctx, month)
+		if err != nil {
+			return err
+		}
+		var days []reportsdomain.Day
+		for _, date := range reportsdomain.Dates(m.From, m.To) {
+			d, err := app.Reports.Day(ctx, date)
+			if err != nil {
+				return err
+			}
+			days = append(days, d)
+			if date >= from && date <= today {
+				all = append(all, d)
+			}
+		}
+		if fmt.Sprintf("%+v", reportsdomain.Total(m.From, days)) != fmt.Sprintf("%+v", m.Total) {
+			return errs.Internal(CodeReportsInconsistent, "a month is not the sum of its days").WithParam("month", month)
+		}
+		next, _ := time.Parse("2006-01", month)
+		month = next.AddDate(0, 1, 0).Format("2006-01")
+	}
+	stockReport, err := app.Reports.Stock(ctx, from, today)
+	if err != nil {
+		return err
+	}
+	c := stockReport.Reconciliation
+	sum := c.Opening + c.Received + c.Sold + c.Losses + c.Gains + c.Revaluation + c.Packages + c.NegativeStock + c.Rounding
+	if sum != c.Closing || 2*absolute(c.Rounding) > int64(c.Rounded) {
+		return errs.Internal(CodeReportsInconsistent, "the stock movements do not reconcile").WithParam("rounding", strconv.FormatInt(c.Rounding, 10))
+	}
+	valuation, err := app.Stock.Valuation(ctx)
+	if err != nil {
+		return err
+	}
+	var negative int64
+	for _, l := range valuation.Lines {
+		if l.OnHandMicro < 0 {
+			negative += l.ValueMinor
+		}
+	}
+	if valuation.TotalMinor-negative != c.Closing {
+		return errs.Internal(CodeReportsInconsistent, "today's stock value is not the stock screen's").
+			WithParam("report", strconv.FormatInt(c.Closing, 10)).WithParam("screen", strconv.FormatInt(valuation.TotalMinor, 10))
+	}
+	total := reportsdomain.Total(from, all)
+	pair, err := app.Reports.Pair(ctx)
+	if err != nil {
+		return err
+	}
+	res.HistoryProfitUSD = fxdomain.FormatMinor(total.NetUSD(), pair.USD.Decimals)
+	res.HistoryProfitLocal = fxdomain.FormatMinor(total.NetLocal(), pair.Local.Decimals)
+	_, err = app.Owner.EndElevation(ctx)
+	return err
+}
+
+func absolute(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

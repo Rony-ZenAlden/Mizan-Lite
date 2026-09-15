@@ -17,6 +17,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/lite/cashbook"
+	cashbookdomain "github.com/mizan-erp/mizan/internal/lite/cashbook/domain"
+	cashbookdb "github.com/mizan-erp/mizan/internal/lite/cashbook/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	catalogdb "github.com/mizan-erp/mizan/internal/lite/catalog/infra/sqlite"
@@ -31,6 +34,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/owner"
 	ownerdb "github.com/mizan-erp/mizan/internal/lite/owner/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
+	"github.com/mizan-erp/mizan/internal/lite/reports"
+	reportsdomain "github.com/mizan-erp/mizan/internal/lite/reports/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	salesdb "github.com/mizan-erp/mizan/internal/lite/sales/infra/sqlite"
@@ -151,6 +156,8 @@ type App struct {
 	FX        *fx.Service
 	Sales     *sales.Service
 	Customers *customers.Service
+	Cashbook  *cashbook.Service
+	Reports   *reports.Service
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
 	// from the migration list: what the file holds and what the binary targets can differ.
 	SchemaVersion int64
@@ -217,6 +224,13 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	// The till is built last: its adapters hold the services above, so each must already exist.
 	app.Sales = sales.NewService(db, salesdb.NewStore(db, opts.Clock), salesCatalogue{catalog: app.Catalog}, salesStock{stock: app.Stock},
 		salesDebts{customers: app.Customers}, salesRates{fx: app.FX}, salesSettings{settings: app.Settings}, salesGate{owner: app.Owner},
+		opts.Clock, opts.Location)
+	// The cash book records a count against the reports' expected figure, and the reports read the cash book: the cash
+	// book reaches the reports through an adapter holding the app, filled in on the next line.
+	app.Cashbook = cashbook.NewService(db, cashbookdb.NewStore(db, opts.Clock), customersRates{fx: app.FX}, cashbookCurrencies{catalog: app.Catalog},
+		cashbookGate{owner: app.Owner}, cashbookExpected{app: app}, opts.Clock, opts.Location)
+	app.Reports = reports.NewService(reportsSales{sales: app.Sales}, reportsStock{stock: app.Stock}, reportsDebts{customers: app.Customers},
+		reportsRates{fx: app.FX}, reportsCatalogue{catalog: app.Catalog}, reportsCash{cashbook: app.Cashbook}, reportsGate{owner: app.Owner},
 		opts.Clock, opts.Location)
 
 	scheduler, err := jobs.New(db, jobs.Options{Clock: opts.Clock, Logger: opts.Logger})
@@ -714,3 +728,180 @@ func (g customersGate) Require(ctx context.Context, act customers.GuardedAct) er
 }
 
 func (g customersGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
+
+// cashbookCurrencies satisfies the cash book's Currencies port with the catalogue.
+type cashbookCurrencies struct{ catalog *catalog.Service }
+
+func (c cashbookCurrencies) Currencies(ctx context.Context) ([]cashbookdomain.Currency, error) {
+	currencies, err := c.catalog.Currencies(ctx)
+	out := make([]cashbookdomain.Currency, 0, len(currencies))
+	for _, cur := range currencies {
+		out = append(out, cashbookdomain.Currency{Code: cur.Code, Decimals: cur.Decimals})
+	}
+	return out, err
+}
+
+// cashbookGate satisfies the cash book's OwnerGate port with the owner service.
+type cashbookGate struct{ owner *owner.Service }
+
+func (g cashbookGate) Require(ctx context.Context, act cashbook.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After})
+}
+
+// cashbookExpected satisfies the cash book's Expected port with the reports, reached through the app because the reports
+// are built after the cash book they read.
+type cashbookExpected struct{ app *App }
+
+func (e cashbookExpected) ExpectedCash(ctx context.Context, businessDate, currency string) (int64, error) {
+	return e.app.Reports.ExpectedCash(ctx, businessDate, currency)
+}
+
+// reportsGate satisfies the reports' OwnerGate port.
+type reportsGate struct{ owner *owner.Service }
+
+func (g reportsGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
+
+// reportsSales copies the till's sales into the reports' facts.
+type reportsSales struct{ sales *sales.Service }
+
+func (r reportsSales) Facts(ctx context.Context, from, to string) ([]reportsdomain.Sale, error) {
+	all, err := r.sales.Facts(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.Sale, 0, len(all))
+	for _, s := range all {
+		returnCurrency, returnMinor := s.VoidReturn()
+		f := reportsdomain.Sale{ID: s.ID, ReceiptNo: s.ReceiptNo, BusinessDate: s.BusinessDate, Voided: s.Status == salesdomain.StatusVoided,
+			VoidBusinessDate: s.VoidBusinessDate, Credit: s.Payment == salesdomain.PaymentCredit, SettlementCurrency: s.SettlementCurrency,
+			RateNano: s.RateNano, DiscountLocalMinor: s.DiscountLocalMinor, DiscountUSDMinor: s.DiscountUSDMinor, RoundingMinor: s.RoundingMinor,
+			TotalMinor: s.TotalMinor, TenderedCurrency: s.TenderedCurrency, TenderedMinor: s.TenderedMinor, ChangeCurrency: s.ChangeCurrency,
+			ChangeMinor: s.ChangeMinor, CreditMinor: s.Credit.AmountMinor, VoidReturnCurrency: returnCurrency, VoidReturnMinor: returnMinor,
+			Lines: make([]reportsdomain.Line, 0, len(s.Lines))}
+		for _, l := range s.Lines {
+			f.Lines = append(f.Lines, reportsdomain.Line{ProductID: l.ProductID, NameAR: l.NameAR, NameEN: l.NameEN, UnitCode: l.UnitCode,
+				QuantityMicro: l.QuantityMicro, NetLocalMinor: l.NetLocalMinor(), NetUSDMinor: l.NetUSDMinor(), DiscountLocalMinor: l.DiscountLocalMinor,
+				DiscountUSDMinor: l.DiscountUSDMinor, CostKnown: l.CostKnown, CostUSDMinor: l.CostUSDMinor, CostLocalMinor: l.CostLocalMinor})
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+// reportsStock copies stock ledger rows into the reports' facts.
+type reportsStock struct{ stock *stock.Service }
+
+func movementFacts(rows []stockdomain.Movement) []reportsdomain.Movement {
+	out := make([]reportsdomain.Movement, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, reportsdomain.Movement{ProductID: m.ProductID, Seq: m.Seq, BusinessDate: m.BusinessDate, Kind: string(m.Kind),
+			Reason: string(m.Reason), QuantityMicro: m.QuantityMicro, UnitCostMicro: m.UnitCostMicro, OnHandBeforeMicro: m.OnHandBeforeMicro,
+			AvgCostBeforeMicro: m.AvgCostBeforeMicro, OnHandAfterMicro: m.OnHandAfterMicro, AvgCostAfterMicro: m.AvgCostAfterMicro})
+	}
+	return out
+}
+
+func (r reportsStock) Between(ctx context.Context, from, to string) ([]reportsdomain.Movement, error) {
+	rows, err := r.stock.Between(ctx, from, to)
+	return movementFacts(rows), err
+}
+
+func (r reportsStock) LastOnOrBefore(ctx context.Context, businessDate string) ([]reportsdomain.Movement, error) {
+	rows, err := r.stock.LastOnOrBefore(ctx, businessDate)
+	return movementFacts(rows), err
+}
+
+// reportsDebts copies debt book entries into the reports' facts.
+type reportsDebts struct{ customers *customers.Service }
+
+func debtCash(c customersdomain.Cash) reportsdomain.DebtCash {
+	return reportsdomain.DebtCash{TenderedCurrency: c.TenderedCurrency, TenderedMinor: c.TenderedMinor, ChangeCurrency: c.ChangeCurrency, ChangeMinor: c.ChangeMinor}
+}
+
+func (r reportsDebts) EntriesBetween(ctx context.Context, from, to string) ([]reportsdomain.DebtEntry, error) {
+	facts, err := r.customers.EntriesBetween(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.DebtEntry, 0, len(facts))
+	for _, f := range facts {
+		e := f.Entry
+		out = append(out, reportsdomain.DebtEntry{ID: e.ID, CustomerName: e.CustomerName, Currency: e.Currency, BusinessDate: e.BusinessDate,
+			Kind: string(e.Kind), AmountMinor: e.AmountMinor, Cash: debtCash(e.Cash), ReversesKind: string(f.Reverses.Kind),
+			ReversesCash: debtCash(f.Reverses.Cash), ReversesMinor: f.Reverses.AmountMinor})
+	}
+	return out, nil
+}
+
+// reportsRates copies the recorded rates into the reports' facts.
+type reportsRates struct{ fx *fx.Service }
+
+func (r reportsRates) AllRates(ctx context.Context) ([]reportsdomain.Rate, string, error) {
+	rates, local, err := r.fx.AllRates(ctx)
+	out := make([]reportsdomain.Rate, 0, len(rates))
+	for _, rate := range rates {
+		out = append(out, reportsdomain.Rate{ID: rate.ID, Seq: rate.Seq, Nano: rate.Nano, BusinessDate: rate.BusinessDate})
+	}
+	return out, local, err
+}
+
+// reportsCatalogue copies products and currencies into the reports' facts.
+type reportsCatalogue struct{ catalog *catalog.Service }
+
+func (c reportsCatalogue) Products(ctx context.Context) ([]reportsdomain.Product, error) {
+	all, err := c.catalog.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := c.catalog.Reference(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.Product, 0, len(all))
+	for _, p := range all {
+		out = append(out, reportsdomain.Product{ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode,
+			UnitDecimals: ref.Units[p.UnitCode].InputDecimals, PriceCurrency: p.PriceCurrency, PriceMicro: p.PriceMicro, Active: p.Active})
+	}
+	return out, nil
+}
+
+func (c reportsCatalogue) Currencies(ctx context.Context) ([]reportsdomain.Currency, error) {
+	currencies, err := c.catalog.Currencies(ctx)
+	out := make([]reportsdomain.Currency, 0, len(currencies))
+	for _, cur := range currencies {
+		out = append(out, reportsdomain.Currency{Code: cur.Code, Decimals: cur.Decimals})
+	}
+	return out, err
+}
+
+// reportsCash copies the cash book into the reports' facts.
+type reportsCash struct{ cashbook *cashbook.Service }
+
+func cashFact(e cashbookdomain.Entry) reportsdomain.CashEntry {
+	return reportsdomain.CashEntry{ID: e.ID, Seq: e.Seq, BusinessDate: e.BusinessDate, OccurredAt: e.OccurredAt, Kind: string(e.Kind),
+		Currency: e.Currency, AmountMinor: e.AmountMinor, ExpectedMinor: e.ExpectedMinor, Category: e.Category, FromDrawer: e.FromDrawer,
+		RateNano: e.RateNano, Note: e.Note}
+}
+
+func (r reportsCash) Between(ctx context.Context, from, to string) ([]reportsdomain.CashEntry, error) {
+	facts, err := r.cashbook.Between(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.CashEntry, 0, len(facts))
+	for _, f := range facts {
+		e := cashFact(f.Entry)
+		e.Reversed = f.Reversed
+		if f.Entry.Kind == cashbookdomain.KindReversal {
+			original := cashFact(f.Reverses)
+			e.Reverses = &original
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func (r reportsCash) LastCountBefore(ctx context.Context, businessDate, currency string) (reportsdomain.CashEntry, bool, error) {
+	e, found, err := r.cashbook.LastCountBefore(ctx, businessDate, currency)
+	return cashFact(e), found, err
+}

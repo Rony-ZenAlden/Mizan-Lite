@@ -151,6 +151,23 @@ type HistoryRow struct {
 }
 
 // History returns the newest rates first, each with its change from the rate before it.
+// AllRates returns every recorded rate in place order, oldest first, with the local currency — what the reports read to
+// find the rate of a business day (L6 §4.3). A shop records a handful of rates a day; a year is a few thousand rows.
+func (s *Service) AllRates(ctx context.Context) ([]domain.Rate, string, error) {
+	local, err := s.settings.LocalCurrency(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	rates, err := s.store.Rates(ctx, local, allRates)
+	for i, j := 0, len(rates)-1; i < j; i, j = i+1, j-1 {
+		rates[i], rates[j] = rates[j], rates[i]
+	}
+	return rates, local, err
+}
+
+// allRates is a limit no shop reaches.
+const allRates = 1 << 30
+
 func (s *Service) History(ctx context.Context, limit int) ([]HistoryRow, error) {
 	local, err := s.settings.LocalCurrency(ctx)
 	if err != nil {

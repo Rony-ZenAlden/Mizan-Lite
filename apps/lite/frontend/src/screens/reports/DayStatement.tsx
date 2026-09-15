@@ -1,0 +1,139 @@
+import type { Amount, DayReport, Takings } from "@/api/client";
+import { useLocale } from "@/i18n/LocaleProvider";
+import { formatDecimal, formatInteger } from "@/i18n/numbers";
+import { Money, isZero } from "@/screens/sales/Money";
+import { Alert } from "@/ui/Alert";
+
+/** A row of the statement: a label, the dollar reading and the pounds reading. */
+function Row({ label, usd, local, localCurrency, strong = false, sub = false, testId }: {
+  label: string;
+  usd: string;
+  local: string;
+  localCurrency: string;
+  strong?: boolean;
+  sub?: boolean;
+  testId?: string;
+}) {
+  return (
+    <tr data-testid={testId} className={`border-t border-border ${strong ? "font-semibold" : ""}`}>
+      <th scope="row" className={`p-2 text-start font-normal ${sub ? "ps-6 text-text-muted" : ""} ${strong ? "font-semibold" : ""}`}>
+        {label}
+      </th>
+      <td className="p-2">
+        <Money value={usd} currency="USD" />
+      </td>
+      <td className="p-2">
+        <Money value={local} currency={localCurrency} />
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * A day's (or a range's) statement read top to bottom (L6 §10.2): revenue, cost, gross profit, losses, bad debts,
+ * expenses, net profit — in dollars, and in pounds at each sale's own rate (Q-L6.6). Every figure is Go's.
+ */
+export function DayStatement({ report }: { report: DayReport }) {
+  const { t, tDynamic, locale } = useLocale();
+  const p = report.profit;
+  const cur = report.localCurrency;
+  const amountRow = (key: Parameters<typeof t>[0], a: Amount, sub = true) =>
+    isZero(a.usd) && isZero(a.local) ? null : <Row key={key} label={t(key)} usd={a.usd} local={a.local} localCurrency={cur} sub={sub} />;
+  const margin = (m: string) => (m ? t("reports.margin", { margin: formatDecimal(m, locale) }) : "");
+
+  return (
+    <div className="space-y-4">
+      {p.unknownLines > 0 ? (
+        <Alert
+          tone="danger"
+          title={t("reports.unknown_cost", {
+            count: formatInteger(p.unknownLines, locale),
+            usd: formatDecimal(p.unknownUsd, locale),
+            local: formatDecimal(p.unknownLocal, locale),
+            currency: tDynamic(`currency.short.${cur}`),
+          })}
+        >
+          {t("reports.unknown_cost_hint")}
+        </Alert>
+      ) : null}
+      {report.unconverted > 0 ? <Alert tone="danger" title={t("reports.unconverted", { count: formatInteger(report.unconverted, locale) })} /> : null}
+
+      <div className="overflow-x-auto rounded-md border border-border bg-surface-raised">
+        <table className="w-full text-sm" data-testid="statement">
+          <thead className="bg-surface text-text-muted">
+            <tr>
+              <th className="p-2 text-start">{t("reports.col.line")}</th>
+              <th className="p-2 text-start">{t("reports.col.usd")}</th>
+              <th className="p-2 text-start">{t("reports.col.local")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <Row label={t("reports.sales_count", { count: formatInteger(p.sales, locale) })} usd={p.revenueUsd} local={p.revenueLocal} localCurrency={cur} testId="revenue" />
+            {!isZero(p.discountUsd) || !isZero(p.discountLocal) ? (
+              <Row label={t("reports.sale_discounts")} usd={p.discountUsd} local={p.discountLocal} localCurrency={cur} sub />
+            ) : null}
+            {!isZero(p.roundingLocal) ? <Row label={t("reports.rounding")} usd="0.00" local={p.roundingLocal} localCurrency={cur} sub /> : null}
+            <Row label={t("reports.cost")} usd={p.costUsd} local={p.costLocal} localCurrency={cur} />
+            <Row label={t("reports.gross_profit")} usd={p.profitUsd} local={p.profitLocal} localCurrency={cur} strong testId="gross" />
+            {p.marginUsd || p.marginLocal ? (
+              <tr className="text-text-muted">
+                <th scope="row" className="p-2 ps-6 text-start font-normal">
+                  {t("reports.col.margin")}
+                </th>
+                <td className="p-2">{margin(p.marginUsd)}</td>
+                <td className="p-2">{margin(p.marginLocal)}</td>
+              </tr>
+            ) : null}
+            <Row label={t("reports.losses")} usd={report.losses.out.usd} local={report.losses.out.local} localCurrency={cur} testId="losses" />
+            {amountRow("reports.losses.spoiled", report.losses.spoiled)}
+            {amountRow("reports.losses.own_use", report.losses.ownUse)}
+            {amountRow("reports.losses.other", report.losses.other)}
+            {amountRow("reports.losses.shortfall", report.losses.shortfall)}
+            {amountRow("reports.losses.surplus", report.losses.surplus, false)}
+            <Row label={t("reports.bad_debts")} usd={report.badDebts.usd} local={report.badDebts.local} localCurrency={cur} />
+            <Row label={t("reports.expenses")} usd={report.expenses.usd} local={report.expenses.local} localCurrency={cur} testId="expenses" />
+            {report.categories.map((c) => (
+              <Row key={c.category} label={tDynamic(`cash.category.${c.category}`)} usd={c.amount.usd} local={c.amount.local} localCurrency={cur} sub />
+            ))}
+            <Row label={t("reports.net_profit")} usd={report.netUsd} local={report.netLocal} localCurrency={cur} strong testId="net" />
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-text-muted">
+        {report.rate ? t("reports.rate_note", { rate: formatDecimal(report.rate, locale) }) : t("reports.rate_note_range")}
+      </p>
+
+      <h3 className="font-semibold">{t("reports.takings")}</h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {report.takings.map((k) => (
+          <TakingsCard key={k.currency} takings={k} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TakingsCard({ takings: k }: { takings: Takings }) {
+  const { t, tDynamic, locale } = useLocale();
+  const line = (label: string, value: string) => (
+    <>
+      <dt>{label}</dt>
+      <dd>
+        <Money value={value} currency={k.currency} />
+      </dd>
+    </>
+  );
+  return (
+    <dl data-testid={`takings-${k.currency}`} className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-lg border border-border bg-surface-raised p-4 text-sm">
+      <dt className="col-span-2 font-semibold">{tDynamic(`currency.${k.currency}`)}</dt>
+      {line(t("reports.takings.sales", { count: formatInteger(k.sales, locale) }), k.charged)}
+      {line(t("reports.takings.credit", { count: formatInteger(k.creditSales, locale) }), k.credit)}
+      {line(t("reports.takings.discounts"), k.discounts)}
+      {line(t("reports.takings.rounding"), k.rounding)}
+      {line(t("reports.takings.voids", { count: formatInteger(k.voids, locale) }), k.voided)}
+      {line(t("reports.takings.collected"), k.collected)}
+      {line(t("reports.takings.refunded"), k.refunded)}
+      {line(t("reports.takings.written_off"), k.writtenOff)}
+    </dl>
+  );
+}

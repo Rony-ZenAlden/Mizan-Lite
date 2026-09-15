@@ -21,6 +21,7 @@ import (
 func main() {
 	pin := flag.String("pin", "481537", "the owner PIN the seeded shop gets (6-12 digits)")
 	locale := flag.String("locale", "ar", "the interface language: ar or en")
+	days := flag.Int("days", 30, "days of history before today (L6): drifting rates, deliveries, sales, expenses and counts")
 	flag.Parse()
 
 	ctx := context.Background()
@@ -30,11 +31,14 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	app, err := bootstrap.Start(ctx, bootstrap.Options{Paths: resolved, Logger: log, AppVersion: "demoseed"})
+	// The graph runs on a clock the seeder steps through the history, then leaves on now.
+	clk := demoseed.NewClock()
+	now := clk.Now()
+	app, err := bootstrap.Start(ctx, bootstrap.Options{Paths: resolved, Logger: log, AppVersion: "demoseed", Clock: clk})
 	if err != nil {
 		fail(err)
 	}
-	res, runErr := demoseed.Run(ctx, app, demoseed.Options{PIN: *pin, Locale: *locale})
+	res, runErr := demoseed.Run(ctx, app, demoseed.Options{PIN: *pin, Locale: *locale, Days: *days, Clock: clk, Now: now})
 	if err := app.Shutdown(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: shutdown:", err)
 	}
@@ -48,6 +52,11 @@ func main() {
 	fmt.Printf("  rate:          1 USD = %s SYP (manual mode: the app shows the internet rate for reference)\n", res.Rate)
 	fmt.Printf("  till:          %d sales today (%d of them on credit), %d voided; sold %s SYP and %s USD\n", res.Sales+res.CreditSales, res.CreditSales, res.Voids, res.Takings["SYP"], res.Takings["USD"])
 	fmt.Printf("  debts:         %d customers, %d opening balances, %d credit sales, %d payments\n", res.Customers, res.DebtOpenings, res.CreditSales, res.Payments)
+	if res.HistoryDays > 0 {
+		fmt.Printf("  history:       %d days before today: %d sales, %d voided, %d deliveries, %d expenses, %d drawer counts\n",
+			res.HistoryDays, res.HistorySales, res.HistoryVoids, res.HistoryReceipts, res.Expenses, res.Counts)
+		fmt.Printf("  net profit:    %s USD at cost, %s SYP at each sale's rate, over the history and today\n", res.HistoryProfitUSD, res.HistoryProfitLocal)
+	}
 	fmt.Printf("  owner PIN:     %s\n", *pin)
 	fmt.Printf("  recovery code: %s\n", res.RecoveryCode)
 }

@@ -257,4 +257,65 @@ drill lite-setup-forbids-customers "setup may reach other modules only through t
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/customers\""
 
+# ── added in L6 ─────────────────────────────────────────────────────────────────────────────────────
+drill lite-reports-isolated "reports may not import another Lite module" \
+  internal/lite/reports/zz_drill.go "package reports
+import _ \"$M/internal/lite/sales\""
+
+drill lite-reports-domain-isolated "reports may not import another Lite module" \
+  internal/lite/reports/domain/zz_drill.go "package domain
+import _ \"$M/internal/lite/stock/domain\""
+
+drill lite-reports-forbids-cashbook "reports may not import another Lite module" \
+  internal/lite/reports/reportstest/zz_drill.go "package reportstest
+import _ \"$M/internal/lite/cashbook\""
+
+drill lite-cashbook-isolated "cashbook may not import another Lite module" \
+  internal/lite/cashbook/zz_drill.go "package cashbook
+import _ \"$M/internal/lite/reports\""
+
+drill lite-cashbook-isolated-from-fx "cashbook may not import another Lite module" \
+  internal/lite/cashbook/infra/sqlite/zz_drill.go "package sqlite
+import _ \"$M/internal/lite/fx/domain\""
+
+drill lite-catalog-forbids-reports "catalog may not import another Lite module" \
+  internal/lite/catalog/zz_drill.go "package catalog
+import _ \"$M/internal/lite/reports\""
+
+drill lite-owner-forbids-cashbook "owner may not import another Lite module" \
+  internal/lite/owner/zz_drill.go "package owner
+import _ \"$M/internal/lite/cashbook\""
+
+drill lite-settings-forbids-reports "settings may not import another Lite module" \
+  internal/lite/settings/zz_drill.go "package settings
+import _ \"$M/internal/lite/reports\""
+
+drill lite-setup-forbids-cashbook "setup may reach other modules only through the ports it declares" \
+  internal/lite/setup/zz_drill.go "package setup
+import _ \"$M/internal/lite/cashbook\""
+
+drill lite-stock-forbids-reports "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/reports\""
+
+drill lite-fx-forbids-cashbook "fx may not import another Lite module" \
+  internal/lite/fx/zz_drill.go "package fx
+import _ \"$M/internal/lite/cashbook\""
+
+drill lite-sales-forbids-reports "sales may not import another Lite module" \
+  internal/lite/sales/zz_drill.go "package sales
+import _ \"$M/internal/lite/reports\""
+
+drill lite-customers-forbids-cashbook "customers may not import another Lite module" \
+  internal/lite/customers/zz_drill.go "package customers
+import _ \"$M/internal/lite/cashbook\""
+
+drill lite-sales-forbids-cashbook "sales may not import another Lite module" \
+  internal/lite/sales/zz_drill.go "package sales
+import _ \"$M/internal/lite/cashbook\""
+
+drill lite-stock-forbids-cashbook "stock may not import another Lite module" \
+  internal/lite/stock/zz_drill.go "package stock
+import _ \"$M/internal/lite/cashbook/domain\""
+
 echo "every Lite architecture rule was seen failing"

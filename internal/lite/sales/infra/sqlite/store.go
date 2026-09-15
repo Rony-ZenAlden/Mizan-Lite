@@ -158,6 +158,10 @@ func (s *Store) Day(ctx context.Context, businessDate string) ([]domain.Sale, er
 	return s.sales(ctx, `WHERE business_date = ? OR void_business_date = ?`, businessDate, businessDate)
 }
 
+func (s *Store) Range(ctx context.Context, from, to string) ([]domain.Sale, error) {
+	return s.sales(ctx, `WHERE business_date BETWEEN ? AND ? OR void_business_date BETWEEN ? AND ?`, from, to, from, to)
+}
+
 func (s *Store) Each(ctx context.Context, fn func(domain.Sale) error) error {
 	all, err := s.sales(ctx, "")
 	if err != nil {

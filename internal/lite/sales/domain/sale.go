@@ -220,5 +220,15 @@ func (s Sale) Void(at time.Time, businessDate, reason string) (Sale, error) {
 	return s, nil
 }
 
+// VoidReturn is the cash a void hands back (L6 §7.2, Q-L6.5): what the receipt says was paid, in the currency it was
+// charged in — a cash sale's total; a credit sale's paid now, as the total less the debt it added. It needs the sale's
+// Credit filled for a credit sale.
+func (s Sale) VoidReturn() (string, int64) {
+	if s.Payment == PaymentCredit {
+		return s.SettlementCurrency, s.TotalMinor - s.Credit.AmountMinor
+	}
+	return s.SettlementCurrency, s.TotalMinor
+}
+
 // ErrNotFound reports a sale that does not exist.
 func ErrNotFound() error { return errs.NotFound(CodeSaleNotFound, "no such sale") }

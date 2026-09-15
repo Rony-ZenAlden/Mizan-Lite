@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
@@ -19,6 +21,7 @@ import (
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
+	reportsdomain "github.com/mizan-erp/mizan/internal/lite/reports/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
@@ -28,18 +31,81 @@ import (
 
 func start(t *testing.T) *bootstrap.App {
 	t.Helper()
+	return startWith(t, nil)
+}
+
+func startWith(t *testing.T, clk *clock.Fixed) *bootstrap.App {
+	t.Helper()
 	p := paths.Layout(filepath.Join(t.TempDir(), "demo"))
 	for _, dir := range []string{p.Data, p.Backups, p.Logs, p.WebView} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	app, err := bootstrap.Start(context.Background(), bootstrap.Options{Paths: p, Logger: litetest.Logger(), PINHasher: ownertest.Hasher()})
+	app, err := bootstrap.Start(context.Background(), bootstrap.Options{Paths: p, Logger: litetest.Logger(), PINHasher: ownertest.Hasher(), Clock: optionalClock(clk)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = app.Shutdown(context.Background()) })
 	return app
+}
+
+func optionalClock(clk *clock.Fixed) clock.Clock {
+	if clk == nil {
+		return nil
+	}
+	return clk
+}
+
+// TestTheSeederBuildsAMonthOfHistory is L6 §11: thirty days before today through the real services, every verifier clean
+// and every reconciliation of the reports holding — the seeder fails on any finding, so a nil error is the assertion.
+func TestTheSeederBuildsAMonthOfHistory(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 9, 14, 7, 30, 0, 0, time.Local)
+	clk := clock.NewFixed(now)
+	app := startWith(t, clk)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537", Days: 30, Clock: clk, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.HistoryDays != 30 || res.HistorySales < 300 || res.HistoryVoids != 3 || res.HistoryReceipts != 24 || res.Expenses != 6 || res.Counts < 40 {
+		t.Fatalf("history = %+v", res)
+	}
+	if res.Openings != 40 || res.Sales != 10 || res.CreditSales != 3 || res.HistoryProfitUSD == "" {
+		t.Fatalf("today on top of the history = %+v", res)
+	}
+	if app.Reports.Today() != "2026-09-14" || !clk.Now().Equal(now) {
+		t.Fatalf("the seeder left the clock on %s", clk.Now())
+	}
+	if _, err = app.Owner.Elevate(ctx, "481537"); err != nil {
+		t.Fatal(err)
+	}
+	month, err := app.Reports.Month(ctx, "2026-08")
+	if err != nil || len(month.Days) < 15 || month.Total.Losses.Spoiled.USD == 0 || month.Total.Expenses.USD == 0 {
+		t.Fatalf("August = %+v, %v", month.Total, err)
+	}
+	september, err := app.Reports.Month(ctx, "2026-09")
+	if err != nil || september.Total.Losses.Shortfall.USD == 0 {
+		t.Fatalf("September's count shortfall = %+v, %v", september.Total.Losses, err)
+	}
+	if month.Days[0].Rate.Nano == september.Days[len(september.Days)-1].Rate.Nano {
+		t.Fatal("the rate did not drift over the month")
+	}
+	shortDay := false
+	for _, date := range reportsdomain.Dates("2026-08-15", "2026-09-13") {
+		d, err := app.Reports.Drawer(ctx, date)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range d.Currencies {
+			if diff, counted := c.Difference(); counted && diff == -5_000 && c.Currency == "SYP" {
+				shortDay = true
+			}
+		}
+	}
+	if !shortDay {
+		t.Fatal("no closing count with a difference in the history")
+	}
 }
 
 func TestTheSeederBuildsAShop(t *testing.T) {

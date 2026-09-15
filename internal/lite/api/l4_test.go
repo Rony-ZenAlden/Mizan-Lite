@@ -95,8 +95,8 @@ func TestTheTillThroughTheBindings(t *testing.T) {
 		t.Fatalf("List = %+v", day)
 	}
 	syp, usd := day.Data.Totals[0], day.Data.Totals[1]
-	if syp != (api.DayTotalsDTO{Currency: "SYP", Sales: 1, Charged: "73000", CashIn: "0", ChangeOut: "2000", Refunded: "0", OnCredit: "0"}) ||
-		usd != (api.DayTotalsDTO{Currency: "USD", Charged: "0.00", CashIn: "5.00", ChangeOut: "0.00", Refunded: "0.00", OnCredit: "0.00"}) {
+	if syp != (api.DayTotalsDTO{Currency: "SYP", Sales: 1, Charged: "73000", CashIn: "0", ChangeOut: "2000", Voided: "0", OnCredit: "0"}) ||
+		usd != (api.DayTotalsDTO{Currency: "USD", Charged: "0.00", CashIn: "5.00", ChangeOut: "0.00", Voided: "0.00", OnCredit: "0.00"}) {
 		t.Fatalf("totals = %+v", day.Data.Totals)
 	}
 	if r := set.Sales.List("14/09/2026"); codeOf(t, r) != "lite.sales.invalid_date" {
@@ -119,6 +119,9 @@ func TestTheTillThroughTheBindings(t *testing.T) {
 	}
 
 	elevate(t, set)
+	if sold.Data.VoidReturn != "73000" || sold.Data.VoidReturnCurrency != "SYP" {
+		t.Fatalf("a cash sale's void hands back its total = %+v", sold.Data)
+	}
 	if r := set.Sales.Void(api.VoidInput{SaleID: sold.Data.ID}); codeOf(t, r) != salesdomain.CodeVoidReasonRequired {
 		t.Fatal("a void without a reason")
 	}

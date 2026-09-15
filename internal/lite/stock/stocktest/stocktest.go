@@ -115,6 +115,39 @@ func (f *Fake) EachSaleMovement(ctx context.Context, fn func(domain.Movement) er
 	})
 }
 
+func (f *Fake) Between(ctx context.Context, from, to string) ([]domain.Movement, error) {
+	var out []domain.Movement
+	err := f.EachMovement(ctx, func(m domain.Movement) error {
+		if m.BusinessDate >= from && m.BusinessDate <= to {
+			out = append(out, m)
+		}
+		return nil
+	})
+	return out, err
+}
+
+func (f *Fake) LastOnOrBefore(ctx context.Context, businessDate string) ([]domain.Movement, error) {
+	last := map[id.ID]domain.Movement{}
+	var order []id.ID
+	err := f.EachMovement(ctx, func(m domain.Movement) error {
+		if m.BusinessDate > businessDate {
+			return nil
+		}
+		if _, seen := last[m.ProductID]; !seen {
+			order = append(order, m.ProductID)
+		}
+		if m.Seq > last[m.ProductID].Seq {
+			last[m.ProductID] = m
+		}
+		return nil
+	})
+	out := make([]domain.Movement, 0, len(order))
+	for _, p := range order {
+		out = append(out, last[p])
+	}
+	return out, err
+}
+
 func (f *Fake) EachMovement(_ context.Context, fn func(domain.Movement) error) error {
 	f.mu.Lock()
 	ordered := append([]domain.Movement(nil), f.movements...)

@@ -39,6 +39,8 @@ type Store interface {
 	Get(ctx context.Context, saleID id.ID) (domain.Sale, error)
 	// Day returns, with their lines, the sales sold on a business date and those voided on it, by receipt number.
 	Day(ctx context.Context, businessDate string) ([]domain.Sale, error)
+	// Range returns, with their lines, the sales sold or voided on a business date from..to inclusive, by receipt number.
+	Range(ctx context.Context, from, to string) ([]domain.Sale, error)
 	// Void writes a sale's void if the stored sale is still posted at its row version.
 	Void(ctx context.Context, s domain.Sale) (domain.Sale, error)
 	// Each calls fn with every sale and its lines, by receipt number.
@@ -324,7 +326,7 @@ type Day struct {
 // CurrencyTotals is one currency's side of a day.
 //
 // A void belongs to the day it is made (§8.1, D-L4.14): a day's sales stay what the till charged that day even when one is
-// voided later, and the void is counted on its own day. So a closed day's totals never change, and charged less refunded
+// voided later, and the void is counted on its own day. So a closed day's totals never change, and charged less voided
 // is the day's takings.
 type CurrencyTotals struct {
 	// Sales and ChargedMinor count every sale rung up that day, by settlement currency, whatever happened to it since.
@@ -333,9 +335,10 @@ type CurrencyTotals struct {
 	// CashInMinor and ChangeOutMinor are what the drawer took and gave back for every sale made that day.
 	CashInMinor    int64
 	ChangeOutMinor int64
-	// Voids and RefundedMinor count the voids made that day, by settlement currency, whenever the sale was.
-	Voids         int
-	RefundedMinor int64
+	// Voids and VoidedMinor count the voids made that day and the value they took back, by settlement currency, whenever
+	// the sale was — a sales figure, not cash (L6 H9, A-L6.6).
+	Voids       int
+	VoidedMinor int64
 	// OnCreditMinor is what the day's credit sales added to debts, in the currency they were charged in (L5 §5.7).
 	OnCreditMinor int64
 }
@@ -377,10 +380,27 @@ func (s *Service) Day(ctx context.Context, businessDate string) (Day, error) {
 		if sale.Status == domain.StatusVoided && sale.VoidBusinessDate == businessDate {
 			t := totals(sale.SettlementCurrency)
 			t.Voids++
-			t.RefundedMinor += sale.TotalMinor
+			t.VoidedMinor += sale.TotalMinor
 		}
 	}
 	return d, nil
+}
+
+// Facts returns the sales sold or voided on business dates from..to, each credit sale with its charge — what the
+// reports read (L6 §9.1). It writes nothing.
+func (s *Service) Facts(ctx context.Context, from, to string) ([]domain.Sale, error) {
+	sales, err := s.store.Range(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	for i, sale := range sales {
+		if sale.Payment == domain.PaymentCredit {
+			if sales[i], err = s.withCredit(ctx, sale); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return sales, nil
 }
 
 // Receipt returns a sale as it was recorded — a credit sale with its charge from the debt book.

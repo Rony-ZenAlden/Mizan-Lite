@@ -75,6 +75,9 @@ type SaleDTO struct {
 	CreditAmount       string `json:"creditAmount"`
 	CreditBalanceAfter string `json:"creditBalanceAfter"`
 	CreditReversed     bool   `json:"creditReversed"`
+	// VoidReturn is the cash a void of this sale hands back, in VoidReturnCurrency (L6 §7.2): shown before the PIN.
+	VoidReturn         string `json:"voidReturn"`
+	VoidReturnCurrency string `json:"voidReturnCurrency"`
 }
 
 // DayTotalsDTO is one currency's side of a day.
@@ -85,7 +88,8 @@ type DayTotalsDTO struct {
 	CashIn    string `json:"cashIn"`
 	ChangeOut string `json:"changeOut"`
 	Voids     int    `json:"voids"`
-	Refunded  string `json:"refunded"`
+	// Voided is the value the day's voids took back — a sales figure, not the cash handed back (L6 A-L6.6).
+	Voided string `json:"voided"`
 	// OnCredit is what the day's credit sales added to debts in this currency (L5 §5.7).
 	OnCredit string `json:"onCredit"`
 }
@@ -149,6 +153,8 @@ func (v tillView) sale(s salesdomain.Sale) SaleDTO {
 	if !s.VoidedAt.IsZero() {
 		dto.VoidedAt = clock.Format(s.VoidedAt)
 	}
+	returnCurrency, returnMinor := s.VoidReturn()
+	dto.VoidReturnCurrency, dto.VoidReturn = returnCurrency, v.money(returnMinor, returnCurrency)
 	if s.Payment == salesdomain.PaymentCredit && s.Credit.CustomerID != "" {
 		c := s.Credit
 		dto.CreditCustomerID, dto.CreditCustomerName, dto.CreditCurrency = c.CustomerID.String(), c.CustomerName, c.Currency
@@ -178,7 +184,7 @@ func (s *Sales) List(businessDate string) envelope.Result[DayDTO] {
 		for code, t := range day.Totals {
 			out.Totals = append(out.Totals, DayTotalsDTO{
 				Currency: code, Sales: t.Sales, Charged: v.money(t.ChargedMinor, code), CashIn: v.money(t.CashInMinor, code),
-				ChangeOut: v.money(t.ChangeOutMinor, code), Voids: t.Voids, Refunded: v.money(t.RefundedMinor, code),
+				ChangeOut: v.money(t.ChangeOutMinor, code), Voids: t.Voids, Voided: v.money(t.VoidedMinor, code),
 				OnCredit: v.money(t.OnCreditMinor, code),
 			})
 		}

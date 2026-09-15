@@ -144,6 +144,16 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if len(order) != 3 || order[0] != 1 || order[2] != 3 {
 			t.Fatalf("Each order = %v", order)
 		}
+		// A range holds the sales sold in it and those voided in it — yesterday's sale voided today is in today's range.
+		if r, err := sub.Store.Range(ctx, "2026-09-14", "2026-09-15"); err != nil || len(r) != 3 || len(r[2].Lines) != 2 {
+			t.Fatalf("Range 14–15 = %d sales, %v", len(r), err)
+		}
+		if r, _ := sub.Store.Range(ctx, "2026-09-15", "2026-09-15"); len(r) != 1 || r[0].ReceiptNo != 3 {
+			t.Fatalf("Range 15 = %+v", r)
+		}
+		if r, _ := sub.Store.Range(ctx, "2026-09-10", "2026-09-12"); len(r) != 0 {
+			t.Fatalf("an empty range = %+v", r)
+		}
 	})
 }
 

@@ -1,6 +1,6 @@
 # Mizan Lite — Phase L5: customers and debts (العملاء والديون)
 
-> **Status: COMPLETE — committed 2026-09-14.** The owner approved this note, its 18 decisions and five amendments, answered
+> **Status: COMPLETE — committed `97b7875` (2026-09-14).** The owner approved this note, its 18 decisions and five amendments, answered
 > §14.2 (recorded in §15), and approved the twelve decisions made while building (§17). §16–§22 are the implementation record.
 > **Date:** 2026-09-14. **Base:** L4 (`76463fd`). **Design:** [../DESIGN.md](../DESIGN.md) §3.3 (debt repayment), §4.5
 > step 7, §4.7, §5 `customers` and `debt_entries`, C7, §10 (L5), with §13's amendments — Q2 (debts in USD **or** SYP,
@@ -847,5 +847,5 @@ tests and gates, production build, G5 on the bundle — **every step passed, non
 The owner approved D-L5.i1–i12 — naming D-L5.i1 (the smallest note recorded on payments and refunds) and D-L5.i2 (each
 balance with its labelled reference) — and the commit. O7 is closed in [../PROGRESS.md](../PROGRESS.md); O1, O5 and O8 remain.
 
-**Next:** L6's design note — reports, profit and cash (`L6_REPORTS.md`).
+**Next:** L6's design note — reports, profit and cash: [L6_REPORTS.md](L6_REPORTS.md).
 

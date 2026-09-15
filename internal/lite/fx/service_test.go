@@ -370,3 +370,16 @@ func TestTheSameRateAgainIsRecordedAndClearsStale(t *testing.T) {
 		t.Fatalf("re-confirmed = %+v", c)
 	}
 }
+
+// TestAllRatesAreInPlaceOrderWithTheirBusinessDates: what L6's rate of the business day reads.
+func TestAllRatesAreInPlaceOrderWithTheirBusinessDates(t *testing.T) {
+	f := newFixture()
+	f.withRate(t, "14800")
+	f.clk.Advance(24 * time.Hour)
+	f.withRate(t, "15000")
+	rates, local, err := f.svc.AllRates(ctx)
+	if err != nil || local != "SYP" || len(rates) != 2 || rates[0].Seq != 1 || rates[1].Seq != 2 ||
+		rates[0].BusinessDate != "2026-09-14" || rates[1].BusinessDate != "2026-09-15" {
+		t.Fatalf("AllRates = %+v, %q, %v", rates, local, err)
+	}
+}

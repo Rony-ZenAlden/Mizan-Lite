@@ -30,9 +30,9 @@ what is not verified — once built.
 | **L2** | Stock: receipts, adjustments, weighted-average cost, opening packages | [phases/L2_STOCK.md](phases/L2_STOCK.md) | ✅ complete — `407fdbb` |
 | **L3** | Exchange rates and the currency system | [phases/L3_RATES.md](phases/L3_RATES.md) | ✅ complete — `67d72c8` |
 | **L4** | The till: sales, checkout, receipts | [phases/L4_TILL.md](phases/L4_TILL.md) | ✅ complete — `76463fd` |
-| **L5** | Customers and debts | [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) | ✅ complete — committed 2026-09-14 |
-| L6 | Profit | — | not started |
-| L7 | Receipt printing and a backups screen (proposed in L4 §2.3) | — | not started |
+| **L5** | Customers and debts | [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) | ✅ complete — `97b7875` |
+| **L6** | Reports: profit, stock value and the cash drawer | [phases/L6_REPORTS.md](phases/L6_REPORTS.md) | ✅ complete |
+| L7 | Export (Excel, PDF), thermal printing, backup and restore | — | design note next |
 | L8 | Release | — | not started |
 
 ## Conventions

@@ -147,6 +147,9 @@ export function ReceiptView({ sale, onClose, onVoided }: { sale: Sale; onClose: 
 
       {voiding ? (
         <form className="space-y-3" onSubmit={submitVoid}>
+          <p role="status" data-testid="void-hand-back" className="rounded-md border border-border bg-surface p-2 text-sm font-semibold">
+            {t("receipt.void_hand_back", { amount: formatDecimal(sale.voidReturn, locale), currency: tDynamic(`currency.short.${sale.voidReturnCurrency}`) })}
+          </p>
           <TextField
             label={t("receipt.void_reason")}
             value={reason}

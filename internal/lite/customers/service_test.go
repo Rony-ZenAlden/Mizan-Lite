@@ -331,3 +331,26 @@ func TestARepaymentConvertsAtTodaysRate(t *testing.T) {
 		t.Fatalf("pay all at 18,000 = %+v, %v", q, err)
 	}
 }
+
+// TestEntriesBetweenCarryTheKindTheyReverse: what L6's bad debts read — a write-off reversed on a later day gives it back
+// on that day.
+func TestEntriesBetweenCarryTheEntryTheyReverse(t *testing.T) {
+	f := newFixture()
+	c := f.customer(t, "سمير")
+	f.charge(t, c, "USD", 1_000)
+	f.gate.Elevated = true
+	w, err := f.svc.WriteOff(ctx, customers.AmountInput{CustomerID: c.ID, Currency: "USD", All: true, Note: "سافر"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.clk.Advance(24 * time.Hour)
+	if _, err = f.svc.Reverse(ctx, w.ID, "عاد"); err != nil {
+		t.Fatal(err)
+	}
+	day1, _ := f.svc.EntriesBetween(ctx, "2026-09-14", "2026-09-14")
+	day2, _ := f.svc.EntriesBetween(ctx, "2026-09-15", "2026-09-15")
+	both, _ := f.svc.EntriesBetween(ctx, "2026-09-14", "2026-09-15")
+	if len(day1) != 2 || len(day2) != 1 || day2[0].Entry.Kind != domain.KindReversal || day2[0].Reverses.ID != w.ID || day2[0].Reverses.Kind != domain.KindWriteOff || len(both) != 3 {
+		t.Fatalf("day 1 %+v\nday 2 %+v", day1, day2)
+	}
+}

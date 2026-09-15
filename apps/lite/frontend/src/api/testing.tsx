@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { CartQuote, Client, Customer, Entry, Movement, Product, RateState, Sale, Statement } from "./client";
+import type { Amount, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, Product, Profit, RateState, Sale, Statement, StockReport } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -183,6 +183,8 @@ export function aSale(overrides: Partial<Sale> = {}): Sale {
     creditAmount: "",
     creditBalanceAfter: "",
     creditReversed: false,
+    voidReturn: "73000",
+    voidReturnCurrency: "SYP",
     lines: q.lines.map((l, i) => ({
       id: `line-${i + 1}`,
       lineNo: i + 1,
@@ -260,6 +262,155 @@ export function aStatement(overrides: Partial<Statement> = {}): Statement {
     ],
     rate: "15000",
     localCurrency: "SYP",
+    ...overrides,
+  };
+}
+
+/** A figure in both readings, with any field replaceable. */
+export function anAmount(usd = "0.00", local = "0", overrides: Partial<Amount> = {}): Amount {
+  return { usd, local, unconverted: 0, ...overrides };
+}
+
+/** A gross profit as Go sends it: one sale of 2 L of olive oil, $6.50 at a $4.00 cost, with any field replaceable. */
+export function aProfit(overrides: Partial<Profit> = {}): Profit {
+  return {
+    sales: 1,
+    revenueUsd: "6.50",
+    costUsd: "4.00",
+    profitUsd: "2.50",
+    marginUsd: "38.5",
+    revenueLocal: "97500",
+    costLocal: "60000",
+    profitLocal: "37500",
+    marginLocal: "38.5",
+    discountUsd: "0.00",
+    discountLocal: "0",
+    roundingLocal: "0",
+    unknownLines: 0,
+    unknownUsd: "0.00",
+    unknownLocal: "0",
+    ...overrides,
+  };
+}
+
+/** A day's statement as Go sends it — the sale above, a spoiled jar and the electricity bill — with any field replaceable. */
+export function aDayReport(overrides: Partial<DayReport> = {}): DayReport {
+  return {
+    date: "2026-09-14",
+    localCurrency: "SYP",
+    profit: aProfit(),
+    losses: {
+      spoiled: anAmount("0.40", "6000"),
+      ownUse: anAmount(),
+      other: anAmount(),
+      shortfall: anAmount(),
+      surplus: anAmount(),
+      out: anAmount("0.40", "6000"),
+    },
+    badDebts: anAmount(),
+    expenses: anAmount("1.00", "15000"),
+    categories: [{ category: "electricity", amount: anAmount("1.00", "15000") }],
+    netUsd: "1.10",
+    netLocal: "16500",
+    unconverted: 0,
+    takings: [
+      { currency: "USD", sales: 0, charged: "0.00", creditSales: 0, credit: "0.00", discounts: "0.00", rounding: "0.00", voids: 0, voided: "0.00", collected: "0.00", refunded: "0.00", writtenOff: "0.00" },
+      { currency: "SYP", sales: 1, charged: "97500", creditSales: 0, credit: "0", discounts: "0", rounding: "0", voids: 0, voided: "0", collected: "0", refunded: "0", writtenOff: "0" },
+    ],
+    rate: "15000",
+    ...overrides,
+  };
+}
+
+/** A stock report as Go sends it: 8 L of olive oil left of 10, with any field replaceable. */
+export function aStockReport(overrides: Partial<StockReport> = {}): StockReport {
+  const line = { productId: aProduct().id, nameAr: "زيت زيتون", nameEn: "Olive oil", unitCode: "l", onHand: "8.000", averageCost: "2.00", valueUsd: "16.00", valueLocal: "240000" };
+  return {
+    from: "2026-09-01",
+    to: "2026-09-14",
+    localCurrency: "SYP",
+    lines: [line],
+    totalUsd: "16.00",
+    totalLocal: "240000",
+    valueRate: "15000",
+    belowZero: [],
+    unknownCost: [],
+    reconciliation: {
+      from: "2026-09-01",
+      to: "2026-09-14",
+      opening: "0.00",
+      received: "20.00",
+      sold: "-4.00",
+      losses: "0.00",
+      gains: "0.00",
+      revaluation: "0.00",
+      packages: "0.00",
+      negativeStock: "0.00",
+      rounding: "0.00",
+      closing: "16.00",
+    },
+    shelf: [{ ...line, price: "3.25", priceCurrency: "USD", profitUsd: "10.00", profitLocal: "150000", belowCost: false }],
+    shelfTotalUsd: "10.00",
+    shelfTotalLocal: "150000",
+    shelfRate: "15000",
+    belowCost: 0,
+    leftOut: [],
+    ...overrides,
+  };
+}
+
+/** A cash book entry as Go sends it: the counter's pounds count, 500 short, with any field replaceable. */
+export function aCashEntry(overrides: Partial<CashEntry> = {}): CashEntry {
+  return {
+    id: "0190a1b2-0000-7000-8000-0000000cash1",
+    seq: 1,
+    businessDate: "2026-09-14",
+    occurredAt: "2026-09-14T17:00:00.000Z",
+    kind: "count",
+    currency: "SYP",
+    amount: "97000",
+    expected: "97500",
+    difference: "-500",
+    category: "",
+    fromDrawer: false,
+    note: "",
+    reversesKind: "",
+    reversed: false,
+    reversible: false,
+    ...overrides,
+  };
+}
+
+/** A day's drawer as Go sends it at the counter: 97,500 pounds expected, not counted yet, with any field replaceable. */
+export function aDrawer(overrides: Partial<Drawer> = {}): Drawer {
+  const zero = (c: string) => (c === "USD" ? "0.00" : "0");
+  const currency = (c: string) => ({
+    currency: c,
+    opening: zero(c),
+    openingCountDate: "",
+    cashSalesIn: c === "USD" ? "0.00" : "97500",
+    creditPaidIn: zero(c),
+    repaymentsIn: zero(c),
+    depositsIn: zero(c),
+    changeOut: zero(c),
+    refundsOut: zero(c),
+    voidReturns: zero(c),
+    expensesOut: zero(c),
+    withdrawalsOut: zero(c),
+    expected: c === "USD" ? "0.00" : "97500",
+    counted: false,
+    count: "",
+    countExpected: "",
+    difference: "",
+    countedAt: "",
+  });
+  return {
+    date: "2026-09-14",
+    today: "2026-09-14",
+    ownerView: false,
+    currencies: [currency("USD"), currency("SYP")],
+    entries: [],
+    categories: ["rent", "electricity", "wages", "transport", "supplies", "other"],
     ...overrides,
   };
 }
@@ -349,8 +500,8 @@ export function fakeClient(overrides: Overrides = {}): Client {
         businessDate: businessDate || "2026-09-14",
         sales: [aSale()],
         totals: [
-          { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 0, refunded: "0", onCredit: "0" },
-          { currency: "USD", sales: 0, charged: "0.00", cashIn: "0.00", changeOut: "0.00", voids: 0, refunded: "0.00", onCredit: "0.00" },
+          { currency: "SYP", sales: 1, charged: "73000", cashIn: "73000", changeOut: "0", voids: 0, voided: "0", onCredit: "0" },
+          { currency: "USD", sales: 0, charged: "0.00", cashIn: "0.00", changeOut: "0.00", voids: 0, voided: "0.00", onCredit: "0.00" },
         ],
       }),
       receipt: async () => aSale(),
@@ -389,6 +540,54 @@ export function fakeClient(overrides: Overrides = {}): Client {
       refund: async (input) => anEntry({ kind: "refund", note: input.reason }),
       reverse: async (input) => anEntry({ kind: "reversal", reversesId: input.entryId, note: input.reason }),
     },
+    reports: {
+      day: async (date) => aDayReport({ date: date || "2026-09-14" }),
+      month: async (month) => ({
+        month: month || "2026-09",
+        from: "2026-09-01",
+        to: "2026-09-30",
+        localCurrency: "SYP",
+        days: [aDayReport()],
+        total: aDayReport({ rate: "" }),
+      }),
+      products: async (from, to) => ({
+        from: from || "2026-09-01",
+        to: to || "2026-09-14",
+        localCurrency: "SYP",
+        rows: [
+          {
+            productId: aProduct().id,
+            nameAr: "زيت زيتون",
+            nameEn: "Olive oil",
+            unitCode: "l",
+            quantity: "2.000",
+            revenueUsd: "6.50",
+            costUsd: "4.00",
+            profitUsd: "2.50",
+            marginUsd: "38.5",
+            revenueLocal: "97500",
+            costLocal: "60000",
+            profitLocal: "37500",
+            marginLocal: "38.5",
+            unknownLines: 0,
+            unknownQuantity: "0.000",
+            unknownUsd: "0.00",
+            unknownLocal: "0",
+          },
+        ],
+        discountUsd: "0.00",
+        discountLocal: "0",
+        roundingLocal: "0",
+        total: aProfit(),
+      }),
+      stock: async () => aStockReport(),
+    },
+    cash: {
+      drawer: async (date) => aDrawer({ date: date || "2026-09-14" }),
+      record: async (input) => aCashEntry({ kind: input.kind, currency: input.currency, amount: input.amount, category: input.category, fromDrawer: input.fromDrawer, note: input.note, expected: "", difference: "" }),
+      count: async (input) => aCashEntry({ currency: input.currency, amount: input.counted }),
+      reverse: async (entryId, reason) => aCashEntry({ id: `${entryId}-r`, kind: "reversal", note: reason, expected: "", difference: "" }),
+    },
     owner: {
       status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 0 }),
       elevate: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: 120 }),
@@ -408,6 +607,8 @@ export function fakeClient(overrides: Overrides = {}): Client {
     till: { ...base.till, ...overrides.till },
     sales: { ...base.sales, ...overrides.sales },
     customers: { ...base.customers, ...overrides.customers },
+    reports: { ...base.reports, ...overrides.reports },
+    cash: { ...base.cash, ...overrides.cash },
   };
 }
 

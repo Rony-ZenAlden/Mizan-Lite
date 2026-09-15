@@ -40,6 +40,10 @@ type Store interface {
 	Movements(ctx context.Context, productID id.ID, limit int) ([]domain.Movement, error)
 	// EachMovement calls fn with every movement ordered by product, then place — the verifier's walk.
 	EachMovement(ctx context.Context, fn func(domain.Movement) error) error
+	// Between returns the movements of business dates from..to inclusive, by product then place (L6).
+	Between(ctx context.Context, from, to string) ([]domain.Movement, error)
+	// LastOnOrBefore returns, for every product that had moved by then, its highest place on or before a business date.
+	LastOnOrBefore(ctx context.Context, businessDate string) ([]domain.Movement, error)
 	// SaleMovement returns a sale line's movement of kind sale or sale_void, or found=false (L4).
 	SaleMovement(ctx context.Context, saleLineID id.ID, kind domain.Kind) (domain.Movement, bool, error)
 	// EachSaleMovement calls fn with every sale and sale-void movement.
@@ -460,6 +464,17 @@ func (s *Service) Stocked(ctx context.Context, productID id.ID) (Stocked, error)
 		return Stocked{}, err
 	}
 	return Stocked{OnHandMicro: l.OnHandMicro, CostKnown: l.CostKnown(), AvgCostMicro: l.AvgCostMicro}, nil
+}
+
+// Between returns the movements of business dates from..to — what the reports read (L6 §9.1).
+func (s *Service) Between(ctx context.Context, from, to string) ([]domain.Movement, error) {
+	return s.store.Between(ctx, from, to)
+}
+
+// LastOnOrBefore returns each product's last movement on or before a business date — its quantity and average cost then
+// (L6 §6.2).
+func (s *Service) LastOnOrBefore(ctx context.Context, businessDate string) ([]domain.Movement, error) {
+	return s.store.LastOnOrBefore(ctx, businessDate)
 }
 
 // EachSaleMovement streams every sale and sale-void movement, for the sales verifier.

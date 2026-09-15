@@ -177,3 +177,21 @@ func TestTheSalesVerifierKnowsCreditSales(t *testing.T) {
 		})
 	}
 }
+
+// TestAVoidReturnsWhatTheReceiptSaysWasPaid is L6 §7.2 and Q-L6.5: a cash sale hands back its total, a credit sale what was
+// paid now, both in the currency the receipt was charged in.
+func TestAVoidReturnsWhatTheReceiptSaysWasPaid(t *testing.T) {
+	cash := domain.Sale{Payment: domain.PaymentCash, SettlementCurrency: "SYP", TotalMinor: 73_000, TenderedCurrency: "USD", TenderedMinor: 500}
+	if cur, minor := cash.VoidReturn(); cur != "SYP" || minor != 73_000 {
+		t.Fatalf("cash = %s %d", cur, minor)
+	}
+	credit := domain.Sale{Payment: domain.PaymentCredit, SettlementCurrency: "SYP", TotalMinor: 76_000, TenderedMinor: 20_000,
+		Credit: domain.Credit{Currency: "SYP", AmountMinor: 56_000}}
+	if cur, minor := credit.VoidReturn(); cur != "SYP" || minor != 20_000 {
+		t.Fatalf("credit = %s %d", cur, minor)
+	}
+	nothingPaid := domain.Sale{Payment: domain.PaymentCredit, SettlementCurrency: "USD", TotalMinor: 1_625, Credit: domain.Credit{AmountMinor: 1_625}}
+	if cur, minor := nothingPaid.VoidReturn(); cur != "USD" || minor != 0 {
+		t.Fatalf("credit with nothing paid = %s %d", cur, minor)
+	}
+}

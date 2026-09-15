@@ -813,6 +813,41 @@ func (s *Service) EachCharge(ctx context.Context, fn func(ChargeView) error) err
 	return nil
 }
 
+// ─── the reports' facts ──────────────────────────────────────────────────────
+
+// EntryFact is a debt entry as the reports read it: for a reversal, the entry it reverses — its kind for bad debts, its
+// cash for the drawer.
+type EntryFact struct {
+	Entry    domain.Entry
+	Reverses domain.Entry
+}
+
+// EntriesBetween returns the debt entries of business dates from..to (L6 §9.1). The debt book is small beside the ledgers;
+// it is read whole and filtered.
+func (s *Service) EntriesBetween(ctx context.Context, from, to string) ([]EntryFact, error) {
+	all := map[id.ID]domain.Entry{}
+	var in []domain.Entry
+	err := s.store.Each(ctx, func(e domain.Entry) error {
+		all[e.ID] = e
+		if e.BusinessDate >= from && e.BusinessDate <= to {
+			in = append(in, e)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EntryFact, 0, len(in))
+	for _, e := range in {
+		f := EntryFact{Entry: e}
+		if e.ReversesID != "" {
+			f.Reverses = all[e.ReversesID]
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
 // ─── the verifier ────────────────────────────────────────────────────────────
 
 // Verify checks the debt book against itself (L5 §9.1). Owner mode only.

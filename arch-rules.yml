@@ -145,6 +145,8 @@ rules:
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -161,6 +163,8 @@ rules:
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -177,6 +181,8 @@ rules:
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -191,6 +197,8 @@ rules:
           - "self/internal/lite/catalog/**"
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -207,6 +215,8 @@ rules:
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -223,6 +233,8 @@ rules:
           - "self/internal/lite/stock/**"
           - "self/internal/lite/sales/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -241,6 +253,8 @@ rules:
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
@@ -259,10 +273,52 @@ rules:
           - "self/internal/lite/settings/**"
           - "self/internal/lite/setup/**"
           - "self/internal/lite/sales/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/cashbook/**"
           - "self/internal/lite/api/**"
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
         message: "customers may not import another Lite module — declare a port (see customers.Rates and customers.OwnerGate)"
+
+      - name: lite-cashbook-isolated
+        description: >
+          The cash book imports no other Lite module. It reaches the rate, the currencies, the owner and — for a count's
+          expected figure — the reports through the ports it declares (L6 §9.2).
+        applies_to: ["self/internal/lite/cashbook/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "cashbook may not import another Lite module — declare a port (see cashbook.Expected)"
+
+      - name: lite-reports-isolated
+        description: >
+          The reports import no module. Every fact arrives through a port the reports declare, satisfied in the composition
+          root by the module that owns the table — so SQL stays with its owner and the reports cannot write (L6 §9.1, §9.3).
+        applies_to: ["self/internal/lite/reports/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
+          - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "reports may not import another Lite module — declare a facts port (see reports.Sales)"
 
       - name: lite-network-only-in-httpsource
         description: >

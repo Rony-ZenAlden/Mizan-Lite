@@ -28,6 +28,12 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
   const [unitCode, setUnitCode] = useState(product?.unitCode ?? "");
   const [priceCurrency, setPriceCurrency] = useState(product?.priceCurrency ?? "SYP");
   const [price, setPrice] = useState(product?.price ?? "");
+  // The cost price, and the margin between it and the selling price (L9). `lastTyped` remembers which box the shopkeeper
+  // touched last, because that is the one Go should work the other two out from — and only Go does that arithmetic.
+  const [costPrice, setCostPrice] = useState(product?.costPrice ?? "");
+  const [marginPercent, setMarginPercent] = useState("");
+  const [marginAmount, setMarginAmount] = useState("");
+  const [lastTyped, setLastTyped] = useState<"price" | "percent" | "amount">("price");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -65,7 +71,14 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
     setError(null);
     try {
       if (!product) {
-        onSaved(await client.catalog.createProduct({ nameAr, nameEn, barcode, unitCode, priceCurrency, price }));
+        onSaved(
+          await client.catalog.createProduct({
+            nameAr, nameEn, barcode, unitCode, priceCurrency, price,
+            costPrice,
+            marginPercent: lastTyped === "percent" ? marginPercent : "",
+            marginAmount: lastTyped === "amount" ? marginAmount : "",
+          }),
+        );
         return;
       }
       // Fresh, so the edit carries the current version rather than the one the list showed.
@@ -73,9 +86,20 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
       if (current.nameAr !== nameAr || current.nameEn !== nameEn || current.barcode !== barcode) {
         current = await client.catalog.updateProduct({ id: current.id, rowVersion: current.rowVersion, nameAr, nameEn, barcode });
       }
-      if (current.priceCurrency !== priceCurrency || current.price !== typedPrice.value) {
+      // The cost travels with the price: both live on the product, and one call keeps them consistent. "-" takes a cost
+      // off; "" leaves whatever is stored alone.
+      const cost = costPrice === "" && current.costPrice !== "" ? "-" : costPrice;
+      const marginChanged = (lastTyped === "percent" && marginPercent !== "") || (lastTyped === "amount" && marginAmount !== "");
+      if (current.priceCurrency !== priceCurrency || current.price !== typedPrice.value || cost !== "" || marginChanged) {
         const version = current.rowVersion;
-        current = await withOwner(() => client.catalog.setPrice({ id: current.id, rowVersion: version, priceCurrency, price }));
+        current = await withOwner(() =>
+          client.catalog.setPrice({
+            id: current.id, rowVersion: version, priceCurrency, price,
+            costPrice: cost,
+            marginPercent: lastTyped === "percent" ? marginPercent : "",
+            marginAmount: lastTyped === "amount" ? marginAmount : "",
+          }),
+        );
       }
       onSaved(current);
     } catch (e) {
@@ -117,13 +141,66 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
           <TextField
             label={t("product.price")}
             value={price}
-            onChange={(e) => setPrice(e.target.value)}
+            onChange={(e) => {
+              setPrice(e.target.value);
+              setLastTyped("price");
+            }}
             error={priceHint ?? fieldError("price")}
             hint={product ? t("product.price_hint") : undefined}
             inputMode="decimal"
             dir="ltr"
             required
           />
+        </div>
+
+        {/* The cost price and the margin (L9). Go does the arithmetic on save: the form never computes money. */}
+        <div className="space-y-3 rounded-md border border-border p-3" data-testid="product-cost">
+          <TextField
+            label={t("products.cost_price")}
+            value={costPrice}
+            onChange={(e) => setCostPrice(e.target.value)}
+            error={fieldError("costPrice")}
+            hint={t("products.cost_hint")}
+            inputMode="decimal"
+            dir="ltr"
+            autoComplete="off"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <TextField
+              label={t("products.margin_percent")}
+              value={marginPercent}
+              onChange={(e) => {
+                setMarginPercent(e.target.value);
+                setLastTyped("percent");
+              }}
+              error={lastTyped === "percent" ? fieldError("margin") : undefined}
+              inputMode="decimal"
+              dir="ltr"
+              autoComplete="off"
+              disabled={costPrice === ""}
+            />
+            <TextField
+              label={t("products.margin_amount")}
+              value={marginAmount}
+              onChange={(e) => {
+                setMarginAmount(e.target.value);
+                setLastTyped("amount");
+              }}
+              error={lastTyped === "amount" ? fieldError("margin") : undefined}
+              inputMode="decimal"
+              dir="ltr"
+              autoComplete="off"
+              disabled={costPrice === ""}
+            />
+          </div>
+          <p className="text-xs text-text-muted">{t("products.margin_hint")}</p>
+          {product?.marginPercent ? (
+            <p className="text-sm" data-testid="product-margin">
+              {t("products.margin")}: <bdi dir="ltr">{product.marginAmount}</bdi> ·{" "}
+              <bdi dir="ltr">{product.marginPercent}%</bdi>
+              {product.marginAmount.startsWith("-") ? <span className="ms-2 text-danger">{t("products.margin_loss")}</span> : null}
+            </p>
+          ) : null}
         </div>
         {product && units.find((u) => u.code === product.unitCode)?.kind === "count" ? (
           <PackageSection product={product} units={units} />

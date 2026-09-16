@@ -645,7 +645,8 @@ func (c salesCatalogue) product(ctx context.Context, p catalogdomain.Product) (s
 	}
 	return salesdomain.Product{
 		ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode, UnitDecimals: ref.Units[p.UnitCode].InputDecimals,
-		PriceCurrency: p.PriceCurrency, PriceMicro: p.PriceMicro, Active: p.Active, RowVersion: p.RowVersion,
+		PriceCurrency: p.PriceCurrency, PriceMicro: p.PriceMicro, CostMicro: p.CostMicro, HasCost: p.HasCost,
+		Active: p.Active, RowVersion: p.RowVersion,
 	}, nil
 }
 

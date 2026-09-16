@@ -28,6 +28,7 @@ describe("ProductForm — create", () => {
     await settle();
 
     expect(createProduct).toHaveBeenCalledWith({
+      costPrice: "", marginPercent: "", marginAmount: "",
       nameAr: "دبس رمان", nameEn: "Pomegranate molasses", barcode: "٦٢٢٣", unitCode: "jar", priceCurrency: "SYP", price: "٤٥٠٠٠",
     });
     expect(onSaved).toHaveBeenCalledWith(aProduct({ id: "new" }));
@@ -124,7 +125,7 @@ describe("ProductForm — edit", () => {
     await settle();
 
     expect(setPrice).toHaveBeenCalledTimes(2);
-    expect(setPrice).toHaveBeenLastCalledWith({ id: existing.id, rowVersion: 4, priceCurrency: "USD", price: "3.50" });
+    expect(setPrice).toHaveBeenLastCalledWith({ id: existing.id, rowVersion: 4, priceCurrency: "USD", price: "3.50", costPrice: "", marginPercent: "", marginAmount: "" });
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -220,5 +221,63 @@ describe("ProductForm — what a package opens into", () => {
     await userEvent.type(within(section).getByLabelText("Quantity in one package"), "12");
     await userEvent.click(within(section).getByRole("button", { name: "Save link" }));
     expect(await within(section).findByText(/Packages open one level only/)).toBeInTheDocument();
+  });
+});
+
+describe("ProductForm — cost price and margin (owner's request, 2026-09-16)", () => {
+  it("sends the cost and the margin the shopkeeper typed last, and lets Go do the arithmetic", async () => {
+    const createProduct = vi.fn(async () => aProduct({ price: "2.50", costPrice: "2.00", marginAmount: "0.50", marginPercent: "25.0" }));
+    renderWithProviders(<ProductForm onSaved={() => {}} onClose={() => {}} />, {
+      client: fakeClient({ catalog: { createProduct } }),
+      locale: "en",
+    });
+    await settle();
+
+    await userEvent.type(screen.getByLabelText("Arabic name"), "سمنة");
+    await userEvent.selectOptions(screen.getByLabelText("Selling unit"), "kg");
+    await userEvent.selectOptions(screen.getByLabelText("Price currency"), "USD");
+    await userEvent.type(screen.getByLabelText("Price"), "0.01");
+
+    // The margin boxes stay shut until a cost is there to take a margin of.
+    expect(screen.getByLabelText("Percent %")).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Cost price (capital)"), "2.00");
+    expect(screen.getByLabelText("Percent %")).toBeEnabled();
+
+    await userEvent.type(screen.getByLabelText("Percent %"), "25");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await settle();
+
+    // The percentage was the last box touched, so it is the one sent; the amount is left empty for Go to compute.
+    expect(createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ costPrice: "2.00", marginPercent: "25", marginAmount: "" }),
+    );
+  });
+
+  it("shows the margin Go worked out, and says when a product is sold below cost", async () => {
+    const below = aProduct({ price: "1.50", costPrice: "2.00", marginAmount: "-0.50", marginPercent: "-25.0" });
+    renderWithProviders(<ProductForm product={below} onSaved={() => {}} onClose={() => {}} />, {
+      client: fakeClient(),
+      locale: "en",
+    });
+    await settle();
+    const shown = screen.getByTestId("product-margin");
+    expect(shown).toHaveTextContent("-0.50");
+    expect(shown).toHaveTextContent("-25.0%");
+    expect(shown).toHaveTextContent("Sold below cost");
+  });
+
+  it("takes a cost price off when the box is emptied", async () => {
+    const setPrice = vi.fn(async () => aProduct());
+    const withCost = aProduct({ costPrice: "2.00", marginAmount: "0.50", marginPercent: "25.0" });
+    renderWithProviders(<ProductForm product={withCost} onSaved={() => {}} onClose={() => {}} />, {
+      client: fakeClient({ catalog: { product: async () => withCost, setPrice } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.clear(screen.getByLabelText("Cost price (capital)"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await settle();
+    // "-" is the word for "take it off"; "" would mean "leave it alone".
+    expect(setPrice).toHaveBeenCalledWith(expect.objectContaining({ costPrice: "-" }));
   });
 });

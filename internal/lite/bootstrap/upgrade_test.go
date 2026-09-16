@@ -21,7 +21,7 @@ import (
 // latestSchema is the schema this build migrates to. A new migration fails TestEveryPastSchemaUpgradesToThisRelease until its
 // phase's fixture is generated (scripts/lite-schema-fixtures.sh) — a new schema with no shop written by the phase before it is
 // an upgrade nobody tested.
-const latestSchema = 8
+const latestSchema = 9
 
 // fixtureShop copies a past schema's shop into a fresh data directory. snapshot reads every table's rows over the columns given
 // for it (all its columns when none are given), so a rebuilt table (L4's stock_ledger gained columns) is compared on the columns

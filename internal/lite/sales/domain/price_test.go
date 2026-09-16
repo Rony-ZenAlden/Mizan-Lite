@@ -443,3 +443,61 @@ func TestACartIsRefusedBeforeAnythingIsPriced(t *testing.T) {
 		t.Fatalf("no rate: %v", err)
 	}
 }
+
+// TestATypedCostPriceIsWhatASaleSnapshots is the owner's decision of 2026-09-16: where a shop has typed what a product
+// costs it, that is the figure profit is worked out from — not the weighted average of the deliveries. Where no cost has
+// been typed the average still stands, so a shop that never opens the new field sees nothing change.
+func TestATypedCostPriceIsWhatASaleSnapshots(t *testing.T) {
+	s := newShop(t)
+
+	// Untouched: olive oil has no typed cost, so the average from its deliveries is snapshotted, as before.
+	before := price(t, domain.CartInput{Lines: []domain.LineInput{line(s.oil, "2")}}, s.ctx)
+	if before.Lines[0].UnitCostMicro != 4_680_000 || !before.Lines[0].CostKnown {
+		t.Fatalf("with no typed cost the average stands: %+v", before.Lines[0])
+	}
+
+	// Typed in dollars, the product's own currency: used exactly as typed.
+	ctx := s.ctx
+	oil := ctx.Products[s.oil]
+	oil.CostMicro, oil.HasCost = 5_000_000, true // the shop says it pays $5.00, whatever the deliveries averaged
+	ctx.Products = map[id.ID]domain.Product{s.oil: oil}
+	for k, v := range s.ctx.Products {
+		if k != s.oil {
+			ctx.Products[k] = v
+		}
+	}
+	typed := price(t, domain.CartInput{Lines: []domain.LineInput{line(s.oil, "2")}}, ctx)
+	if got := typed.Lines[0]; got.UnitCostMicro != 5_000_000 || !got.CostKnown || got.CostUSDMinor != 1000 {
+		t.Fatalf("the typed cost is what the sale carries: %+v", got)
+	}
+	// 2 L at $5.00 is $10.00, which at 15,000 is 150,000 pounds — the two profit figures still agree (DESIGN C6).
+	if typed.Lines[0].CostLocalMinor != 150_000 {
+		t.Fatalf("the cost in pounds = %d", typed.Lines[0].CostLocalMinor)
+	}
+
+	// Typed in pounds on a pound-priced product: converted at THIS sale's rate, so profit stays in dollars.
+	bulgur := ctx.Products[s.bulgur]
+	bulgur.CostMicro, bulgur.HasCost = 15_000*u, true // 15,000 pounds a kilo = $1.00 at 15,000
+	ctx.Products[s.bulgur] = bulgur
+	inPounds := price(t, domain.CartInput{Lines: []domain.LineInput{line(s.bulgur, "3")}}, ctx)
+	if got := inPounds.Lines[0]; got.UnitCostMicro != 1_000_000 || !got.CostKnown {
+		t.Fatalf("a pound cost converts to dollars at the sale's rate: %+v", got)
+	}
+	if got := inPounds.Lines[0]; got.CostUSDMinor != 300 || got.CostLocalMinor != 45_000 {
+		t.Fatalf("3 kg at 15,000 = $3.00 / 45,000: %+v", got)
+	}
+
+	// A product never received, with a typed cost, is no longer an unknown: the gap the shop can now fill.
+	uncosted := ctx.Products[s.uncosted]
+	uncosted.CostMicro, uncosted.HasCost = 9_000*u, true
+	ctx.Products[s.uncosted] = uncosted
+	filled := price(t, domain.CartInput{Lines: []domain.LineInput{line(s.uncosted, "1")}}, ctx)
+	if got := filled.Lines[0]; !got.CostKnown || got.CostLocalMinor != 9_000 {
+		t.Fatalf("a typed cost fills a product that was never received: %+v", got)
+	}
+	for _, w := range filled.Lines[0].Warnings {
+		if w == domain.WarnNoCost {
+			t.Fatal("a product with a typed cost still warns that its cost is unknown")
+		}
+	}
+}

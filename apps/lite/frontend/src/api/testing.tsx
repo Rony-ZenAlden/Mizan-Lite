@@ -32,6 +32,9 @@ export function aProduct(overrides: Partial<Product> = {}): Product {
     packageContentQuantity: "",
     convertedPrice: "48750",
     convertedCurrency: "SYP",
+    costPrice: "",
+    marginAmount: "",
+    marginPercent: "",
     ...overrides,
   };
 }

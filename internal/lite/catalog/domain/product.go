@@ -85,6 +85,10 @@ type Product struct {
 	PriceCurrency string
 	// PriceMicro is the selling price per unit at 10⁻⁶ of the currency's major unit.
 	PriceMicro int64
+	// CostMicro is what the shop believes one unit costs it, in PriceCurrency, at 10⁻⁶ (L9). Meaningful only when HasCost.
+	CostMicro int64
+	// HasCost separates "costs nothing" from "nobody has said" — a shop that has never typed a cost is not claiming zero.
+	HasCost bool
 	// QuickSlot is the till button, 1–QuickSlots, or 0 for none.
 	QuickSlot  int
 	Active     bool
@@ -113,6 +117,11 @@ type Draft struct {
 	UnitCode      string
 	PriceCurrency string
 	Price         string
+	// Cost is what one unit costs the shop, in PriceCurrency (L9). Empty when the shop has not said.
+	Cost string
+	// MarginPercent or MarginAmount works Price out of Cost instead of taking it as typed; at most one of the two.
+	MarginPercent string
+	MarginAmount  string
 }
 
 // NewProduct validates a draft into a product. It is active, on no till button, at version 1.
@@ -133,6 +142,24 @@ func NewProduct(productID id.ID, d Draft, ref Reference) (Product, error) {
 	p.UnitCode = d.UnitCode
 	if p, err = p.Reprice(d.PriceCurrency, d.Price, ref); err != nil {
 		return Product{}, err
+	}
+	if d.Cost != "" {
+		if p, err = p.SetCost(d.Cost, ref); err != nil {
+			return Product{}, err
+		}
+	}
+	switch {
+	case d.MarginPercent != "" && d.MarginAmount != "":
+		return Product{}, errs.Validation(CodeMarginInvalid, "a margin is a percentage or an amount, not both").
+			WithField(FieldMargin, CodeMarginInvalid, "one or the other")
+	case d.MarginPercent != "":
+		if p, err = p.PriceFromMarginPercent(d.MarginPercent, ref); err != nil {
+			return Product{}, err
+		}
+	case d.MarginAmount != "":
+		if p, err = p.PriceFromMarginAmount(d.MarginAmount, ref); err != nil {
+			return Product{}, err
+		}
 	}
 	return p, nil
 }

@@ -24,6 +24,7 @@ PHASES=(
   "6 97b7875 -pin 481537"
   "7 2c86f17 -pin 481537 -days 7"
   "8 d356598 -pin 481537 -days 7"
+  "9 f27a440 -pin 481537 -days 7"
 )
 
 for line in "${PHASES[@]}"; do

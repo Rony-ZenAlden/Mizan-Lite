@@ -1,7 +1,7 @@
 # Mizan Lite — progress
 
 > **The resume point.** Read this first when picking Lite back up.
-> **Last updated:** 2026-09-16 (L8 committed and tagged `lite-v0.9.0`; the pilot packages built). **Branch:** `lite/l0-skeleton`.
+> **Last updated:** 2026-09-17 (0.9.1 shipped; 0.9.2 adds the cost price. The stocktake is designed, not built). **Branch:** `lite/l0-skeleton`.
 
 ---
 
@@ -16,6 +16,16 @@
 **L8 is complete and committed** — end-to-end journeys in a real browser against the real Go graph, the Arabic and English polish those journeys found, an Excel import for the first products and stock, the About screen and the support file, the shop's guides rendered into the application, the upgrade matrix over every past schema, and the two installers: [phases/L8_RELEASE.md](phases/L8_RELEASE.md) §15–§22. D-L8.1–20, the owner's five answers and D-L8.i1–i21 approved 2026-09-16. **Release 0.9.0 is the pilot** ([RELEASE.md](RELEASE.md), [phases/PILOT.md](phases/PILOT.md)); three checks remain with the owner — the Windows protocol (O1), a receipt on paper and an export in Excel (O14), and the reading of the Arabic.
 
 **The whole Definition of Done, L0 through L8, is read again in one place:** [phases/L8_DOD_REVIEW.md](phases/L8_DOD_REVIEW.md).
+
+**0.9.1 (2026-09-16)** — the owner's changes after an afternoon in a seeded shop: every product on the till grid, a backup
+schedule the shop chooses, **the owner PIN reserved for a restore and for bringing in a backup file** (26 of 28 acts opened
+at the counter, every one still recorded in the owner's history), quick pay with the detail fields collapsed, and the shop's
+header on A4 reports and workbooks. Decisions D-091.1–7 in [DECISIONS.md](DECISIONS.md).
+
+**0.9.2 (2026-09-17)** — the cost price and profit margin on the product, and **the typed cost as the profit basis**
+(D-L9.1): [phases/L9_COST_AND_AUDIT.md](phases/L9_COST_AND_AUDIT.md). **The stocktake the owner asked for alongside it is
+designed but NOT built** — its schema waits as a draft for migration 0010, because a shop's database must not carry tables
+nothing writes to (L9 §3).
 
 | Phase | Status | Record |
 |---|---|---|

@@ -24,7 +24,7 @@ type Store struct {
 func NewStore(db database.DB, clk clock.Clock) *Store { return &Store{db: db, clk: clk} }
 
 const productColumns = `id, name_ar, name_en, barcode, uom_code, price_currency, sell_price_micro,
-	quick_slot, is_active, row_version`
+	cost_price_micro, quick_slot, is_active, row_version`
 
 func (s *Store) Units(ctx context.Context) ([]domain.Unit, error) {
 	rows, err := s.db.Reader(ctx).QueryContext(ctx,
@@ -70,13 +70,16 @@ func scanProduct(row scanner) (domain.Product, error) {
 		rawID   string
 		nameEN  sql.NullString
 		barcode sql.NullString
+		cost    sql.NullInt64
 		slot    sql.NullInt64
 		active  int
 	)
 	if err := row.Scan(&rawID, &p.NameAR, &nameEN, &barcode, &p.UnitCode, &p.PriceCurrency,
-		&p.PriceMicro, &slot, &active, &p.RowVersion); err != nil {
+		&p.PriceMicro, &cost, &slot, &active, &p.RowVersion); err != nil {
 		return domain.Product{}, err
 	}
+	// NULL is "nobody has said what this costs", which is not the same as a cost of nothing (L9).
+	p.CostMicro, p.HasCost = cost.Int64, cost.Valid
 	parsed, err := id.Parse(rawID)
 	if err != nil {
 		return domain.Product{}, err
@@ -193,12 +196,12 @@ func (s *Store) Insert(ctx context.Context, p domain.Product) error {
 	now := clock.Format(s.clk.Now())
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `
 		INSERT INTO products (id, name_ar, name_en, name_key, search_text, barcode, uom_code,
-		                      price_currency, sell_price_micro, quick_slot, is_active, row_version,
-		                      created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                      price_currency, sell_price_micro, cost_price_micro, cost_currency,
+		                      quick_slot, is_active, row_version, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID.String(), p.NameAR, nullable(p.NameEN), p.NameKey(), p.SearchText(), nullable(p.Barcode),
-		p.UnitCode, p.PriceCurrency, p.PriceMicro, nullableSlot(p.QuickSlot), boolInt(p.Active),
-		p.RowVersion, now, now)
+		p.UnitCode, p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p),
+		nullableSlot(p.QuickSlot), boolInt(p.Active), p.RowVersion, now, now)
 	return s.db.Dialect().TranslateError(err)
 }
 
@@ -208,11 +211,13 @@ func (s *Store) Update(ctx context.Context, p domain.Product) (domain.Product, e
 	res, err := s.db.Writer(ctx).ExecContext(ctx, `
 		UPDATE products
 		   SET name_ar = ?, name_en = ?, name_key = ?, search_text = ?, barcode = ?,
-		       price_currency = ?, sell_price_micro = ?, quick_slot = ?, is_active = ?,
+		       price_currency = ?, sell_price_micro = ?, cost_price_micro = ?, cost_currency = ?,
+		       quick_slot = ?, is_active = ?,
 		       row_version = row_version + 1, updated_at = ?
 		 WHERE id = ? AND row_version = ?`,
 		p.NameAR, nullable(p.NameEN), p.NameKey(), p.SearchText(), nullable(p.Barcode),
-		p.PriceCurrency, p.PriceMicro, nullableSlot(p.QuickSlot), boolInt(p.Active),
+		p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p),
+		nullableSlot(p.QuickSlot), boolInt(p.Active),
 		clock.Format(s.clk.Now()), p.ID.String(), p.RowVersion)
 	if err != nil {
 		return domain.Product{}, s.db.Dialect().TranslateError(err)
@@ -313,4 +318,20 @@ func (s *Store) DeletePackage(ctx context.Context, packageProductID id.ID) error
 	_, err := s.db.Writer(ctx).ExecContext(ctx,
 		`DELETE FROM product_packages WHERE package_product_id = ?`, packageProductID.String())
 	return s.db.Dialect().TranslateError(err)
+}
+
+// nullableCost writes the cost price, or NULL where the shop has never said what the product costs (L9).
+func nullableCost(p domain.Product) any {
+	if !p.HasCost {
+		return nil
+	}
+	return p.CostMicro
+}
+
+// nullableCostCurrency keeps the pair whole: the schema refuses an amount without its currency.
+func nullableCostCurrency(p domain.Product) any {
+	if !p.HasCost {
+		return nil
+	}
+	return p.PriceCurrency
 }

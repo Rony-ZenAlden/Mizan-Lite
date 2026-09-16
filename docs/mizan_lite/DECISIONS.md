@@ -469,3 +469,28 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | ID | Decision | Status | Where |
 |---|---|---|---|
 | D-L8.i21 | **No JWT and no login.** A single-computer offline application has no server to authenticate against; the counter must never be locked out mid-sale. One-time setup, the owner PIN on the owner's actions, two minutes of owner mode, a recovery code written down once | approved — the owner chose this over three alternatives | [L8 §15](phases/L8_RELEASE.md) |
+
+## 0.9.1 — the owner's changes after using 0.9.0 (approved 2026-09-16)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-091.1 | The till grid lists **every** product, pinned ones first, scrolling in its own box — the quick-slot filter was the limit, not a number | approved | `TillScreen.tsx` |
+| D-091.2 | The shop chooses how often it is backed up by itself: daily, weekly, monthly, manual. Daily stays the default | approved | [L8 §5](phases/L8_RELEASE.md) |
+| D-091.3 | The backups on close, before a migration and before a restore ignore that setting — they are the ones that save a shop from what is about to happen | approved | `bootstrap.scheduledBackupDue` |
+| D-091.4 | **The PIN is reserved for a restore and for bringing in a backup file.** 26 of the 28 guarded acts are open at the counter; changing the PIN still needs the current one, as it always did | approved — the owner chose this over two narrower options with the trade-off stated | `owner.ReservedActs` |
+| D-091.5 | Every act is still written to the owner's history, reserved or not. The record is what survives the gate, and is what now proves each module reaches the real owner service | approved | `owner.Require` |
+| D-091.6 | Quick pay is the whole sale with no change; the tender, discount and change fields are collapsed, and closing them clears them so nothing hidden can price a sale | approved | `TillScreen.tsx` |
+| D-091.7 | The shop's name, address and telephone print on A4 reports and workbooks, not only on receipts | approved | `api.paperHeader` |
+
+## L9 — the price a shop paid (approved 2026-09-16, shipped 0.9.2)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L9.1 | The typed cost price is the profit basis, **snapshotted at checkout**; sales already made keep the cost they recorded | approved, with the departure from "recompute history" stated to the owner | [L9 §2.2](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.2 | A cost typed in pounds converts to dollars at that sale's own rate, so both profit figures still reconcile (C6) | approved | [L9 §2.3](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.3 | The margin is computed from cost and price, never stored | approved | [L9 §2.1](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.4 | The cost price is held in the product's own selling currency | approved | [L9 §2.1](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.5 | A margin that would take the price below nothing is refused; selling below cost is shown | approved | [L9 §2.1](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.6 | An audit is scoped by a free-text section, not a category scheme the catalogue does not have | approved — **designed, not built** | [L9 §3](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.7 | Only a closed audit moves stock; each line snapshots the system quantity when it is added | proposed — **designed, not built** | [L9 §3](phases/L9_COST_AND_AUDIT.md) |
+| D-L9.8 | The audit schema ships as migration 0010 with the module that uses it, not before | approved | [L9_AUDIT_DRAFT.sql](phases/L9_AUDIT_DRAFT.sql) |

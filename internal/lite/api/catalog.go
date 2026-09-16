@@ -51,6 +51,11 @@ type ProductDTO struct {
 	// ConvertedCurrency its code — both empty when there is no rate.
 	ConvertedPrice    string `json:"convertedPrice"`
 	ConvertedCurrency string `json:"convertedCurrency"`
+	// CostPrice is what the shop pays for one unit, in PriceCurrency, or "" where it has never said (L9). MarginAmount and
+	// MarginPercent are the distance between cost and price, computed in Go and never stored — both "" without a cost.
+	CostPrice     string `json:"costPrice"`
+	MarginAmount  string `json:"marginAmount"`
+	MarginPercent string `json:"marginPercent"`
 }
 
 // catalogueView is the reference data and package links a product is formatted against.
@@ -103,7 +108,27 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 		dto.PackageContentID = link.ContentProductID.String()
 		dto.PackageContentQuantity = domain.FormatMicro(link.ContentQuantityMicro, v.ref.Units[v.units[link.ContentProductID]].InputDecimals)
 	}
+	if p.HasCost {
+		decimals := 6
+		if c, ok := v.ref.Currencies[p.PriceCurrency]; ok {
+			decimals = c.Decimals
+		}
+		dto.CostPrice = domain.FormatMicro(p.CostMicro, decimals)
+		amount, percent, _ := p.Margin()
+		dto.MarginAmount = signedMicro(amount, decimals)
+		// A margin reads as a percentage with one decimal: "25" and "33.3" are what a shopkeeper recognises.
+		dto.MarginPercent = signedMicro(percent, 1)
+	}
 	return dto
+}
+
+// signedMicro formats a 10⁻⁶-scaled figure that may be below zero. domain.FormatMicro takes only non-negative values,
+// because a price and a quantity never are; a margin may be, and a shop that sells below cost needs to see the minus.
+func signedMicro(micro int64, decimals int) string {
+	if micro < 0 {
+		return "-" + domain.FormatMicro(-micro, decimals)
+	}
+	return domain.FormatMicro(micro, decimals)
 }
 
 // parseProductID reads an id from the frontend. One that does not parse names no product.
@@ -198,6 +223,10 @@ type CreateProductInput struct {
 	UnitCode      string `json:"unitCode"`
 	PriceCurrency string `json:"priceCurrency"`
 	Price         string `json:"price"`
+	// CostPrice, and a margin that works the price out of it instead of taking Price as typed (L9). At most one margin.
+	CostPrice     string `json:"costPrice"`
+	MarginPercent string `json:"marginPercent"`
+	MarginAmount  string `json:"marginAmount"`
 }
 
 // CreateProduct adds a product.
@@ -206,6 +235,7 @@ func (c *Catalog) CreateProduct(in CreateProductInput) envelope.Result[ProductDT
 		return app.Catalog.Create(ctx, domain.Draft{
 			NameAR: in.NameAR, NameEN: in.NameEN, Barcode: in.Barcode,
 			UnitCode: in.UnitCode, PriceCurrency: in.PriceCurrency, Price: in.Price,
+			Cost: in.CostPrice, MarginPercent: in.MarginPercent, MarginAmount: in.MarginAmount,
 		})
 	})
 }
@@ -238,6 +268,10 @@ type SetPriceInput struct {
 	RowVersion    int64  `json:"rowVersion"`
 	PriceCurrency string `json:"priceCurrency"`
 	Price         string `json:"price"`
+	// CostPrice is the cost to record: "" leaves it as it is, "-" takes it off (catalog.ClearCost).
+	CostPrice     string `json:"costPrice"`
+	MarginPercent string `json:"marginPercent"`
+	MarginAmount  string `json:"marginAmount"`
 }
 
 // SetPrice changes a product's price. Outside owner mode it returns lite.owner.required, which the frontend
@@ -250,6 +284,7 @@ func (c *Catalog) SetPrice(in SetPriceInput) envelope.Result[ProductDTO] {
 		}
 		return app.Catalog.SetPrice(ctx, catalog.SetPriceInput{
 			ID: parsed, RowVersion: in.RowVersion, Currency: in.PriceCurrency, Price: in.Price,
+			Cost: in.CostPrice, MarginPercent: in.MarginPercent, MarginAmount: in.MarginAmount,
 		})
 	})
 }

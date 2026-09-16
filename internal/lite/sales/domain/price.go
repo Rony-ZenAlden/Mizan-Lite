@@ -279,12 +279,30 @@ func priceLine(lineNo int, li LineInput, c Context, cur currencies, demand map[i
 	if demand[p.ID] > stocked.OnHandMicro {
 		line.Warnings = append(line.Warnings, WarnBeyondStock)
 	}
-	if !stocked.CostKnown {
+	// What one unit costs. Since 2026-09-16 the cost price typed on the product is the profit basis where the shop has
+	// typed one (the owner's decision); the weighted average of the deliveries stands where it has not. Either way the
+	// figure below is in DOLLARS, because that is the currency profit is held in — a cost typed in pounds is converted at
+	// this sale's own rate, so the two profit figures still agree (DESIGN C6).
+	unitCostMicro, costKnown := stocked.AvgCostMicro, stocked.CostKnown
+	if p.HasCost {
+		switch p.PriceCurrency {
+		case cur.usd.Code():
+			unitCostMicro, costKnown = p.CostMicro, true
+		default:
+			typed := money.UnitFromMicro(cur.local, p.CostMicro)
+			inUSD, convErr := typed.DivideByRate(rate, cur.usd, rounding)
+			if convErr != nil {
+				return PricedLine{}, lineErr(tooLarge(convErr), lineNo, FieldQuantity)
+			}
+			unitCostMicro, costKnown = inUSD.Micro(), true
+		}
+	}
+	if !costKnown {
 		line.Warnings = append(line.Warnings, WarnNoCost)
 		return line, nil
 	}
 	// Cost at the sale's rate, so the two profit figures agree (DESIGN C6).
-	avg := money.UnitFromMicro(cur.usd, stocked.AvgCostMicro)
+	avg := money.UnitFromMicro(cur.usd, unitCostMicro)
 	costUSD, err := money.LineExtension(avg, qty, rounding)
 	if err != nil {
 		return PricedLine{}, lineErr(tooLarge(err), lineNo, FieldQuantity)
@@ -293,7 +311,7 @@ func priceLine(lineNo int, li LineInput, c Context, cur currencies, demand map[i
 	if err != nil {
 		return PricedLine{}, lineErr(tooLarge(err), lineNo, FieldQuantity)
 	}
-	line.UnitCostMicro, line.CostKnown, line.CostUSDMinor, line.CostLocalMinor = stocked.AvgCostMicro, true, costUSD.Minor(), costLocal.Minor()
+	line.UnitCostMicro, line.CostKnown, line.CostUSDMinor, line.CostLocalMinor = unitCostMicro, true, costUSD.Minor(), costLocal.Minor()
 	return line, nil
 }
 

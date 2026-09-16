@@ -206,17 +206,31 @@ type SetPriceInput struct {
 	RowVersion int64
 	Currency   string
 	Price      string
+	// Cost is what the shop pays for one unit, in the same currency (L9). Empty leaves it as it is; "-" clears it.
+	Cost string
+	// MarginPercent or MarginAmount works the price out of the cost instead of taking Price as typed. At most one, and
+	// only when a cost is known. The form sends whichever box the shopkeeper typed in last.
+	MarginPercent string
+	MarginAmount  string
 }
+
+// ClearCost is what Cost carries to take a cost price off a product: an empty string means "leave it alone", so the
+// intention to remove one needs a word of its own.
+const ClearCost = "-"
 
 // SetPrice changes a product's price. It requires the owner (Q-L1.1) — unless nothing changes, because a
 // form that saves an unchanged price must not ask for a PIN.
 func (s *Service) SetPrice(ctx context.Context, in SetPriceInput) (domain.Product, error) {
 	return s.change(ctx, in.ID, in.RowVersion, func(ctx context.Context, current domain.Product, ref domain.Reference) (domain.Product, error) {
+		// The currency first: the cost is held in the same one, so it must be settled before either is read (L9).
 		next, err := current.Reprice(in.Currency, in.Price, ref)
 		if err != nil {
 			return current, err
 		}
-		if current.SamePrice(next.PriceCurrency, next.PriceMicro) {
+		if next, err = applyCost(next, in, ref); err != nil {
+			return current, err
+		}
+		if current.SamePrice(next.PriceCurrency, next.PriceMicro) && current.HasCost == next.HasCost && current.CostMicro == next.CostMicro {
 			return current, nil
 		}
 		return next, s.gate.Require(ctx, GuardedAct{
@@ -226,6 +240,35 @@ func (s *Service) SetPrice(ctx context.Context, in SetPriceInput) (domain.Produc
 			After:     next.PriceCurrency + " " + next.PriceText(ref),
 		})
 	})
+}
+
+// applyCost puts the cost price on the product and, when the form asked for one, works the selling price out of a margin
+// instead of the price typed. A margin and a typed price cannot both decide: the margin wins, because a shopkeeper who
+// typed one was watching the other being computed in front of them.
+func applyCost(p domain.Product, in SetPriceInput, ref domain.Reference) (domain.Product, error) {
+	var err error
+	switch in.Cost {
+	case "":
+		// left as it is
+	case ClearCost:
+		if p, err = p.SetCost("", ref); err != nil {
+			return p, err
+		}
+	default:
+		if p, err = p.SetCost(in.Cost, ref); err != nil {
+			return p, err
+		}
+	}
+	switch {
+	case in.MarginPercent != "" && in.MarginAmount != "":
+		return p, errs.Validation(domain.CodeMarginInvalid, "a margin is a percentage or an amount, not both").
+			WithField(domain.FieldMargin, domain.CodeMarginInvalid, "one or the other")
+	case in.MarginPercent != "":
+		return p.PriceFromMarginPercent(in.MarginPercent, ref)
+	case in.MarginAmount != "":
+		return p.PriceFromMarginAmount(in.MarginAmount, ref)
+	}
+	return p, nil
 }
 
 // SetActiveInput takes a product out of sale or returns it.

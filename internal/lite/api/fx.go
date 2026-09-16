@@ -12,6 +12,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 )
 
 // FX is the exchange rate: fetched from the internet in automatic mode, the owner's manual rate as the fallback and
@@ -30,6 +31,8 @@ type FetchDTO struct {
 	ErrorCode  string `json:"errorCode"`
 	// Change is the fetched rate's change from the rate in force, in percent ("-13.3"), or "".
 	Change string `json:"change"`
+	// EffectiveRate is what the shop's margin makes of Rate — equal to Rate when there is no margin (2026-09-17).
+	EffectiveRate string `json:"effectiveRate"`
 	// Acceptable is true when the owner may still accept this proposal.
 	Acceptable bool `json:"acceptable"`
 }
@@ -45,6 +48,8 @@ type RateDTO struct {
 	AgeSeconds    int64  `json:"ageSeconds"`
 	Stale         bool   `json:"stale"`
 	Mode          string `json:"mode"`
+	// AdjustPercent is the margin the shop puts on the internet's rate, as typed ("5", "-2.5"), or "0".
+	AdjustPercent string `json:"adjustPercent"`
 	// CanFetch is false when the application has no rate provider.
 	CanFetch  bool     `json:"canFetch"`
 	HasFetch  bool     `json:"hasFetch"`
@@ -91,7 +96,8 @@ func toFetchDTO(f fxdomain.Fetch) FetchDTO {
 }
 
 func toRateDTO(c fx.Current, canFetch bool) RateDTO {
-	dto := RateDTO{Set: c.Found, LocalCurrency: c.Local, Mode: string(c.Mode), CanFetch: canFetch, HasFetch: c.Fetched}
+	dto := RateDTO{Set: c.Found, LocalCurrency: c.Local, Mode: string(c.Mode), CanFetch: canFetch, HasFetch: c.Fetched,
+		AdjustPercent: settingsdomain.FormatRateAdjustPercent(c.AdjustPercentMicro)}
 	if c.Found {
 		dto.Rate = fxdomain.FormatRate(c.Rate.Nano)
 		dto.Source = string(c.Rate.Source)
@@ -104,6 +110,7 @@ func toRateDTO(c fx.Current, canFetch bool) RateDTO {
 		dto.LastFetch.Change = c.FetchChange
 		dto.LastFetch.AgeSeconds = ageSeconds(c.FetchAge)
 		dto.LastFetch.Acceptable = c.Acceptable
+		dto.LastFetch.EffectiveRate = fxdomain.FormatRate(c.Fetch.EffectiveNano)
 	}
 	return dto
 }
@@ -117,6 +124,33 @@ func (f *FX) current(ctx context.Context, app *bootstrap.App) (RateDTO, error) {
 // Current is the rate in force, its age, the mode and the last fetch. Everyone may read it.
 func (f *FX) Current() envelope.Result[RateDTO] {
 	return call(f.core, "FX.Current", f.current)
+}
+
+// ActRateAdjust names the margin change in the owner's history.
+const ActRateAdjust = "fx.adjust.set"
+
+// SetAdjustPercent sets the margin the shop puts on the internet's rate (the owner's request, 2026-09-17): a shop that
+// sells dollars above the published figure sets it once here instead of retyping a rate every morning.
+//
+// It changes nothing about a rate typed by hand, and nothing in manual mode — where no fetched rate is applied at all.
+func (f *FX) SetAdjustPercent(percent string) envelope.Result[RateDTO] {
+	return call(f.core, "FX.SetAdjustPercent", func(ctx context.Context, app *bootstrap.App) (RateDTO, error) {
+		value, err := settingsdomain.ParseRateAdjustPercent(percent)
+		if err != nil {
+			return RateDTO{}, err
+		}
+		text := settingsdomain.FormatRateAdjustPercent(value)
+		err = app.DB.Do(ctx, func(ctx context.Context) error {
+			if _, updateErr := app.Settings.Update(ctx, settingsdomain.Update{RateAdjustPercent: &text}); updateErr != nil {
+				return updateErr
+			}
+			return requireOwner(ctx, app, ActRateAdjust, text)
+		})
+		if err != nil {
+			return RateDTO{}, err
+		}
+		return f.current(ctx, app)
+	})
 }
 
 // History is the recorded rates, newest first, each with its change from the one before.

@@ -169,6 +169,10 @@ type ShelfLine struct {
 	AvgCostMicro int64
 	ProfitUSD    int64
 	ProfitLocal  int64
+	// RetailUSD and RetailLocal are the line at its SELLING price — what the shelf would fetch if it all sold, as against
+	// the cost valuation in Valuation (the owner's request, 2026-09-17).
+	RetailUSD   int64
+	RetailLocal int64
 	// BelowCost is true when the price is under the average cost: the line is counted, and named.
 	BelowCost bool
 }
@@ -193,10 +197,13 @@ type Shelf struct {
 	Lines      []ShelfLine
 	TotalUSD   int64
 	TotalLocal int64
-	BelowCost  int
-	LeftOut    []LeftOut
-	Rate       Rate
-	RateFound  bool
+	// RetailTotalUSD and RetailTotalLocal are the whole shelf at its selling prices (2026-09-17).
+	RetailTotalUSD   int64
+	RetailTotalLocal int64
+	BelowCost        int
+	LeftOut          []LeftOut
+	Rate             Rate
+	RateFound        bool
 }
 
 // ShelfProfit computes the shelf from each product's newest row.
@@ -238,11 +245,31 @@ func ShelfProfit(last []Movement, products []Product, rates []Rate, pair Pair) S
 			line.ProfitLocal = roundDiv(new(big.Int).Mul(new(big.Int).Mul(exact, big.NewInt(s.Rate.Nano)), pow10(pair.Local.Decimals)),
 				new(big.Int).Mul(den, pow10(21)))
 		}
+		// The same line at its selling price: on hand × price, rounded once, in both currencies.
+		var retail *big.Int
+		if p.PriceCurrency == pair.USD.Code {
+			retail = new(big.Int).Mul(mul(p.PriceMicro, m.OnHandAfterMicro), big.NewInt(1))
+			line.RetailUSD = roundDiv(new(big.Int).Mul(retail, pow10(pair.USD.Decimals)), pow10(12))
+			if s.RateFound {
+				line.RetailLocal = roundDiv(new(big.Int).Mul(new(big.Int).Mul(retail, big.NewInt(s.Rate.Nano)), pow10(pair.Local.Decimals)),
+					pow10(21))
+			}
+		} else {
+			// Priced in pounds: the pounds figure is exact, and the dollars one divides by the rate.
+			retail = mul(p.PriceMicro, m.OnHandAfterMicro)
+			line.RetailLocal = roundDiv(new(big.Int).Mul(retail, pow10(pair.Local.Decimals)), pow10(12))
+			if s.RateFound {
+				line.RetailUSD = roundDiv(new(big.Int).Mul(new(big.Int).Mul(retail, big.NewInt(1_000_000_000)), pow10(pair.USD.Decimals)),
+					new(big.Int).Mul(big.NewInt(s.Rate.Nano), pow10(12)))
+			}
+		}
 		if line.BelowCost {
 			s.BelowCost++
 		}
 		s.TotalUSD += line.ProfitUSD
 		s.TotalLocal += line.ProfitLocal
+		s.RetailTotalUSD += line.RetailUSD
+		s.RetailTotalLocal += line.RetailLocal
 		s.Lines = append(s.Lines, line)
 	}
 	sort.Slice(s.Lines, func(i, j int) bool {

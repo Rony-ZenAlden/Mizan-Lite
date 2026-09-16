@@ -24,6 +24,18 @@ const KeyShopName = "shop.name"
 // because changing it needs the owner.
 const KeyRateMode = "fx.mode"
 
+// KeyRateAdjustPercent is the margin a shop puts on the internet's rate, at 10⁻⁶ of a percentage point, signed (L9.1, the
+// owner's request of 2026-09-17). A shop that sells dollars above the published rate keeps the difference here instead of
+// retyping a rate by hand every morning. Zero, the default, leaves the internet's figure exactly as it came.
+const KeyRateAdjustPercent = "fx.adjust_percent"
+
+// MaxRateAdjustPercentMicro bounds the margin at ±50 percentage points. A shop putting half again on the published rate is
+// already extraordinary; past that a typing slip (5000 for 50) would price the whole shop wrongly.
+const MaxRateAdjustPercentMicro = 50_000_000
+
+// CodeInvalidRateAdjust is a margin that is not a number, or is past the bound.
+const CodeInvalidRateAdjust = "lite.settings.invalid_rate_adjust"
+
 // KeyLocalCurrency is the stored key for the currency the exchange rate prices (L3 §3.2). Not editable in v1: nothing
 // writes it, and a stored value must name a currency code.
 const KeyLocalCurrency = "currency.local"
@@ -174,6 +186,9 @@ type Settings struct {
 	BackupFolder string
 	// BackupEvery is how often the scheduler backs the shop up by itself: daily, weekly, monthly or manual only.
 	BackupEvery string
+	// RateAdjustPercentMicro is the margin put on a fetched rate, at 10⁻⁶ of a percentage point, signed. Zero leaves the
+	// internet's figure as it came; it applies only in automatic mode, and never to a rate typed by hand.
+	RateAdjustPercentMicro int64
 }
 
 // Defaults is what a fresh installation uses.
@@ -251,6 +266,13 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.DebtCurrency = value
+		case KeyRateAdjustPercent:
+			adjust, err := ParseRateAdjustPercent(value)
+			if err != nil {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.RateAdjustPercentMicro = adjust
 		default:
 			handled, err := out.storedPrinting(key, value)
 			switch {
@@ -282,8 +304,10 @@ type Update struct {
 	Locale   *string
 	ShopName *string
 	RateMode *string
-	CashNote *string
-	Printing PrintingUpdate
+	// RateAdjustPercent is the margin on the internet's rate, as typed ("5", "-2٫5"); "" leaves it as it is.
+	RateAdjustPercent *string
+	CashNote          *string
+	Printing          PrintingUpdate
 }
 
 // Apply validates an update against the current settings and returns the result and the rows that
@@ -319,6 +343,16 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 		if mode != s.RateMode {
 			next.RateMode = mode
 			changes = append(changes, Change{Key: KeyRateMode, Value: string(mode)})
+		}
+	}
+	if u.RateAdjustPercent != nil {
+		adjust, err := ParseRateAdjustPercent(*u.RateAdjustPercent)
+		if err != nil {
+			return s, nil, err
+		}
+		if adjust != s.RateAdjustPercentMicro {
+			next.RateAdjustPercentMicro = adjust
+			changes = append(changes, Change{Key: KeyRateAdjustPercent, Value: FormatRateAdjustPercent(adjust)})
 		}
 	}
 	if u.CashNote != nil {

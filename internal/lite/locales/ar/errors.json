@@ -180,6 +180,7 @@
   "lite.settings.invalid_locale": "اللغة المختارة غير مدعومة.",
   "lite.settings.invalid_paper": "الورق 80 مم أو 58 مم.",
   "lite.settings.invalid_print_path": "اختر طريقة إرسال الفواتير.",
+  "lite.settings.invalid_rate_adjust": "نسبة التعديل يجب أن تكون رقماً بين -50 و +50.",
   "lite.settings.invalid_rate_mode": "وضع سعر غير معروف.",
   "lite.settings.shop_name_required": "اسم المتجر مطلوب.",
   "lite.settings.shop_name_too_long": "اسم المتجر أطول من {max} حرف.",

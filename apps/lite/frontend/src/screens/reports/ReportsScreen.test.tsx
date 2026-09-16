@@ -258,3 +258,48 @@ describe("ReportsScreen — L7 exports", () => {
     expect(screen.queryByRole("button", { name: "Excel" })).not.toBeInTheDocument();
   });
 });
+
+describe("ReportsScreen — any period (owner's request, 2026-09-17)", () => {
+  it("offers a week, a year and a range of its own, and asks Go for the dates each one means", async () => {
+    const period = vi.fn(async (from: string, to: string) => ({
+      month: "", from, to, localCurrency: "SYP", days: [aDayReport()], total: aDayReport({ rate: "" }),
+    }));
+    renderWithProviders(<ReportsScreen />, { client: fakeClient({ reports: { period } }), locale: "en" });
+    await settle();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Period" }));
+    await settle();
+
+    const picker = screen.getByLabelText("Period");
+    expect([...picker.querySelectorAll("option")].map((o) => o.textContent)).toEqual([
+      "This week",
+      "This month",
+      "This year",
+      "The last 7 days",
+      "The last 30 days",
+      "A range I choose",
+    ]);
+
+    // A named span sends the dates it means; the last 7 days is 6 days back through today.
+    await userEvent.selectOptions(picker, "last7");
+    await settle();
+    const [from, to] = period.mock.lastCall!;
+    const days = (new Date(`${to}T12:00:00Z`).getTime() - new Date(`${from}T12:00:00Z`).getTime()) / 86_400_000;
+    expect(days).toBe(6);
+
+    // "A range I choose" shows the two date boxes instead.
+    await userEvent.selectOptions(picker, "custom");
+    await settle();
+    expect(screen.getByLabelText("From")).toBeInTheDocument();
+    expect(screen.getByLabelText("To")).toBeInTheDocument();
+  });
+
+  it("shows the stock at its selling price beside what it cost", async () => {
+    renderWithProviders(<ReportsScreen />, { client: fakeClient(), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("tab", { name: "Stock" }));
+    await settle();
+    expect(screen.getByTestId("stock-retail")).toHaveTextContent("Stock at its selling price");
+    expect(screen.getByTestId("stock-retail")).toHaveTextContent("26.00");
+  });
+});

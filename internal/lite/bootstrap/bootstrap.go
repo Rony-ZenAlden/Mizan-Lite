@@ -607,6 +607,11 @@ func (s fxSettings) RateMode(ctx context.Context) (fxdomain.Mode, error) {
 	return fxdomain.ParseMode(string(current.RateMode))
 }
 
+func (s fxSettings) RateAdjustPercentMicro(ctx context.Context) (int64, error) {
+	current, err := s.settings.Get(ctx)
+	return current.RateAdjustPercentMicro, err
+}
+
 func (s fxSettings) SetRateMode(ctx context.Context, mode fxdomain.Mode) error {
 	value := string(mode)
 	_, err := s.settings.Update(ctx, settingsdomain.Update{RateMode: &value})

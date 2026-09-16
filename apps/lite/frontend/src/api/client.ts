@@ -178,6 +178,7 @@ export function createClient() {
       refresh: () => unwrap(FX.Refresh),
       acceptProposal: (fetchId: string) => unwrap(() => FX.AcceptProposal(fetchId)),
       setMode: (mode: "automatic" | "manual") => unwrap(() => FX.SetMode(mode)),
+      setAdjustPercent: (percent: string) => unwrap(() => FX.SetAdjustPercent(percent)),
       fetchQuote: () => unwrap(FX.FetchQuote),
     },
     till: {
@@ -211,6 +212,7 @@ export function createClient() {
     reports: {
       day: (date: string) => unwrap(() => Reports.Day(date)),
       month: (month: string) => unwrap(() => Reports.Month(month)),
+      period: (from: string, to: string) => unwrap(() => Reports.Period(api.RangeInput.createFrom({ from, to }))),
       products: (from: string, to: string) => unwrap(() => Reports.Products(api.RangeInput.createFrom({ from, to }))),
       stock: (from: string, to: string) => unwrap(() => Reports.Stock(api.RangeInput.createFrom({ from, to }))),
     },

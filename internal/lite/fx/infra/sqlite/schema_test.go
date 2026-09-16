@@ -176,6 +176,9 @@ func TestAnAppliedFetchAndItsRateCommitTogether(t *testing.T) {
 	if _, err := ok.SetRate(ctx, fx.SetRateInput{Rate: "13000"}); err != nil {
 		t.Fatal(err)
 	}
+	// Typing a rate now puts the shop in manual mode (2026-09-17). This test is about a fetch and its rate committing
+	// together, so the shop is put back into automatic to let one apply.
+	settings.Mode = domain.ModeAutomatic
 	clk.Advance(24 * time.Hour)
 	source.Answer("p", 13_100_000_000_000)
 

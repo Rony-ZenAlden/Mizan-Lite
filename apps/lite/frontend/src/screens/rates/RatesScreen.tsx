@@ -35,6 +35,8 @@ export function RatesScreen() {
   const [confirm, setConfirm] = useState<{ inForce: string; typed: string; percent: string } | null>(null);
   const [message, setMessage] = useState<{ tone: "danger" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // The margin the shop puts on the internet's rate (2026-09-17). Empty until the screen has read what Go holds.
+  const [adjust, setAdjust] = useState<string | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -137,6 +139,11 @@ export function RatesScreen() {
                 {t("rates.mode")}: {tDynamic(`rates.mode.${rate.mode}`)}
               </p>
               <p className="text-xs text-text-muted">{tDynamic(`rates.mode_hint.${rate.mode}`)}</p>
+              {rate.mode === "manual" ? (
+                <p className="text-xs text-text-muted" data-testid="rates-manual-locked">
+                  {t("rates.manual_locked")}
+                </p>
+              ) : null}
             </div>
             <Button
               disabled={busy}
@@ -145,6 +152,43 @@ export function RatesScreen() {
               {rate.mode === "automatic" ? t("rates.switch_to_manual") : t("rates.switch_to_automatic")}
             </Button>
           </div>
+
+          {/* The margin on the internet's rate — automatic mode only, since nothing is fetched into force in manual. */}
+          {rate.mode === "automatic" ? (
+            <div className="space-y-2 border-t border-border pt-3" data-testid="rates-adjust">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="w-40">
+                  <TextField
+                    label={t("rates.adjust")}
+                    value={adjust ?? rate.adjustPercent}
+                    onChange={(e) => setAdjust(e.target.value)}
+                    inputMode="decimal"
+                    dir="ltr"
+                    autoComplete="off"
+                  />
+                </div>
+                <Button
+                  disabled={busy || (adjust ?? rate.adjustPercent) === rate.adjustPercent}
+                  onClick={() =>
+                    void run(async () => {
+                      const saved = await withOwner(() => client.fx.setAdjustPercent(adjust ?? rate.adjustPercent));
+                      setAdjust(null);
+                      setMessage({ tone: "success", text: t("rates.adjust_saved") });
+                      return saved;
+                    })
+                  }
+                >
+                  {t("rates.adjust_save")}
+                </Button>
+              </div>
+              <p className="text-xs text-text-muted">{t("rates.adjust_hint")}</p>
+              {last && last.rate && last.effectiveRate !== last.rate ? (
+                <p className="text-sm" data-testid="rates-effective">
+                  {t("rates.effective")}: <bdi dir="ltr">{formatDecimal(last.effectiveRate, locale)}</bdi>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             <div className="space-y-1 text-sm">

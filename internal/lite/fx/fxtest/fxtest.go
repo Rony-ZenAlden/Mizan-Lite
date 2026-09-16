@@ -142,10 +142,18 @@ type Settings struct {
 	mu    sync.Mutex
 	Mode  domain.Mode
 	Local string
+	// AdjustPercentMicro is the shop's margin on the internet's rate, at 10⁻⁶ of a percentage point (2026-09-17).
+	AdjustPercentMicro int64
 }
 
 // NewSettings returns manual mode for SYP — the application's default (settings.Defaults).
 func NewSettings() *Settings { return &Settings{Mode: domain.ModeManual, Local: "SYP"} }
+
+func (s *Settings) RateAdjustPercentMicro(context.Context) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.AdjustPercentMicro, nil
+}
 
 func (s *Settings) RateMode(context.Context) (domain.Mode, error) {
 	s.mu.Lock()

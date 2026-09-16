@@ -6,14 +6,49 @@ import { ExportButtons } from "@/exports/ExportButtons";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
-import { TextField } from "@/ui/Field";
+import { SelectField, TextField } from "@/ui/Field";
 import { DayStatement } from "./DayStatement";
 import { MonthTable } from "./MonthTable";
 import { ProductsTable } from "./ProductsTable";
 import { StockSection } from "./StockSection";
 
-type Tab = "day" | "month" | "products" | "stock";
-const TABS: Tab[] = ["day", "month", "products", "stock"];
+type Tab = "day" | "month" | "period" | "products" | "stock";
+const TABS: Tab[] = ["day", "month", "period", "products", "stock"];
+
+/** The spans a shop asks for by name (the owner's request, 2026-09-17); "custom" is the two date boxes. */
+type Preset = "week" | "month" | "year" | "last7" | "last30" | "custom";
+const PRESETS: Preset[] = ["week", "month", "year", "last7", "last30", "custom"];
+
+/**
+ * presetRange is the from/to a named span means today. The week starts on Saturday, as a Syrian shop's week does; the
+ * bounds are computed at midday so no time zone can slide a date across midnight (the same care the drawer's day
+ * navigation takes).
+ */
+function presetRange(preset: Preset, today: string): { from: string; to: string } {
+  const at = new Date(`${today}T12:00:00Z`);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const back = (days: number) => {
+    const d = new Date(at);
+    d.setUTCDate(d.getUTCDate() - days);
+    return d;
+  };
+  switch (preset) {
+    case "week": {
+      const saturday = back((at.getUTCDay() + 1) % 7);
+      return { from: iso(saturday), to: today };
+    }
+    case "month":
+      return { from: `${today.slice(0, 8)}01`, to: today };
+    case "year":
+      return { from: `${today.slice(0, 4)}-01-01`, to: today };
+    case "last7":
+      return { from: iso(back(6)), to: today };
+    case "last30":
+      return { from: iso(back(29)), to: today };
+    default:
+      return { from: "", to: "" };
+  }
+}
 
 /**
  * The owner's reports (L6 §10.2): Day, Month, Products and Stock. Every figure is Go's. Profit, costs, stock value and
@@ -29,6 +64,8 @@ export function ReportsScreen() {
   const [month, setMonth] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [preset, setPreset] = useState<Preset>("month");
+  const [period, setPeriod] = useState<MonthReport | null>(null);
   const [day, setDay] = useState<DayReport | null>(null);
   const [monthReport, setMonthReport] = useState<MonthReport | null>(null);
   const [products, setProducts] = useState<ProductsReport | null>(null);
@@ -41,6 +78,7 @@ export function ReportsScreen() {
     setMonthReport(null);
     setProducts(null);
     setStock(null);
+    setPeriod(null);
   };
 
   const load = useCallback(async () => {
@@ -52,6 +90,9 @@ export function ReportsScreen() {
           break;
         case "month":
           setMonthReport(await withOwner(() => client.reports.month(month)));
+          break;
+        case "period":
+          setPeriod(await withOwner(() => client.reports.period(from, to)));
           break;
         case "products":
           setProducts(await withOwner(() => client.reports.products(from, to)));
@@ -88,7 +129,7 @@ export function ReportsScreen() {
   };
 
   // The export is of the report on screen, so it is offered once that report is there.
-  const shown = { day, month: monthReport, products, stock }[tab] !== null;
+  const shown = { day, month: monthReport, period, products, stock }[tab] !== null;
 
   const rangeFields = (
     <>
@@ -132,6 +173,30 @@ export function ReportsScreen() {
             <TextField label={t("reports.month")} type="month" value={month || monthReport?.month || ""} onChange={(e) => setMonth(e.target.value)} dir="ltr" />
           </div>
         ) : null}
+        {tab === "period" ? (
+          <>
+            <div className="w-48">
+              <SelectField
+                label={t("reports.period_preset")}
+                value={preset}
+                onChange={(e) => {
+                  const next = e.target.value as Preset;
+                  setPreset(next);
+                  const span = presetRange(next, period?.to || new Date().toISOString().slice(0, 10));
+                  setFrom(span.from);
+                  setTo(span.to);
+                }}
+              >
+                {PRESETS.map((name) => (
+                  <option key={name} value={name}>
+                    {tDynamic(`reports.period.${name}`)}
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+            {preset === "custom" ? rangeFields : null}
+          </>
+        ) : null}
         {tab === "products" || tab === "stock" ? rangeFields : null}
       </div>
 
@@ -162,6 +227,7 @@ export function ReportsScreen() {
 
       {!hidden && tab === "day" && day ? <DayStatement report={day} /> : null}
       {!hidden && tab === "month" && monthReport ? <MonthTable report={monthReport} onOpenDay={openDay} /> : null}
+      {!hidden && tab === "period" && period ? <MonthTable report={period} onOpenDay={openDay} /> : null}
       {!hidden && tab === "products" && products ? <ProductsTable report={products} /> : null}
       {!hidden && tab === "stock" && stock ? <StockSection report={stock} /> : null}
     </section>

@@ -173,6 +173,27 @@ func (s *Service) Month(ctx context.Context, month string) (domain.Month, error)
 	return domain.MonthOf(f, month, from, to), nil
 }
 
+// Period is the profit of any span of days — a week, a year, the last thirty days, or a range the shop typed (the owner's
+// request, 2026-09-17). It is the month report over different bounds: MonthOf was already written in terms of a range, so
+// what a period needed was a way to ask for one, not a second way to add days up.
+//
+// Empty bounds mean the month to date, as every other ranged report here does.
+func (s *Service) Period(ctx context.Context, from, to string) (domain.Month, error) {
+	if !s.gate.Allowed(ctx) {
+		return domain.Month{}, ownerRequired()
+	}
+	start, end, err := s.Range(from, to)
+	if err != nil {
+		return domain.Month{}, err
+	}
+	f, err := s.facts(ctx, start, end)
+	if err != nil {
+		return domain.Month{}, err
+	}
+	// The label is the range itself: a period is not a month and must not claim to be one.
+	return domain.MonthOf(f, "", start, end), nil
+}
+
 func (s *Service) productsByID(ctx context.Context) ([]domain.Product, map[id.ID]domain.Product, error) {
 	all, err := s.catalogue.Products(ctx)
 	if err != nil {

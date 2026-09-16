@@ -118,6 +118,37 @@ type Fetch struct {
 	Nano          int64  // zero when the attempt failed
 	AgainstRateID id.ID  // the rate in force when it was decided; zero when there was none
 	ErrorCode     string // set exactly when the attempt failed
+	// AdjustPercentMicro and EffectiveNano are DERIVED, not stored: the shop's margin on the internet's rate, and what
+	// that margin makes of Nano (2026-09-17). The row keeps the published figure so the log always says what the provider
+	// actually answered; these two are filled in from the setting in force when the fetch is read.
+	AdjustPercentMicro int64
+	EffectiveNano      int64
+}
+
+// Adjust puts a shop's margin on a published rate: nano × (1 + percent/100), rounded half away from zero, never below one.
+//
+// The arithmetic is in big.Int because a rate in nano on an old-pound figure is already in the tens of trillions, and
+// multiplying by a hundred million before dividing overflows int64 and comes back a plausible wrong number.
+func Adjust(nano, percentMicro int64) int64 {
+	if percentMicro == 0 || nano <= 0 {
+		return nano
+	}
+	base := big.NewInt(nano)
+	delta := new(big.Int).Mul(base, big.NewInt(percentMicro))
+	divisor := big.NewInt(100_000_000)
+	quotient, remainder := new(big.Int).QuoRem(delta, divisor, new(big.Int))
+	if new(big.Int).Abs(new(big.Int).Lsh(remainder, 1)).Cmp(divisor) >= 0 {
+		if delta.Sign() < 0 {
+			quotient.Sub(quotient, big.NewInt(1))
+		} else {
+			quotient.Add(quotient, big.NewInt(1))
+		}
+	}
+	out := new(big.Int).Add(base, quotient)
+	if !out.IsInt64() || out.Sign() <= 0 {
+		return 1 // a rate of nothing cannot price anything; the guards above keep this unreachable in practice
+	}
+	return out.Int64()
 }
 
 // Quote is what a provider answered: already scaled to the local currency and rounded to MaxDecimals.

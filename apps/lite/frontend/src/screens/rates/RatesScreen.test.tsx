@@ -193,3 +193,37 @@ describe("RatesScreen — cash rounding", () => {
     expect(await within(section).findByText("The smallest note is a whole number from 1 to 1000000.")).toBeInTheDocument();
   });
 });
+
+describe("RatesScreen — the margin on the internet's rate (owner's request, 2026-09-17)", () => {
+  it("saves a margin in automatic mode and shows what it makes of the last published rate", async () => {
+    const setAdjustPercent = vi.fn(async (adjustPercent: string) =>
+      aRate({ mode: "automatic", adjustPercent, hasFetch: true, lastFetch: aFetch({ rate: "13000", effectiveRate: "13650" }) }),
+    );
+    const current = vi.fn(async () =>
+      aRate({ mode: "automatic", adjustPercent: "0", hasFetch: true, lastFetch: aFetch({ rate: "13000", effectiveRate: "13000" }) }),
+    );
+    renderWithProviders(<RatesScreen />, { client: fakeClient({ fx: { current, setAdjustPercent } }), locale: "en" });
+    await settle();
+
+    await userEvent.clear(screen.getByLabelText("Margin on the internet's rate %"));
+    await userEvent.type(screen.getByLabelText("Margin on the internet's rate %"), "5");
+    await userEvent.click(screen.getByRole("button", { name: "Save the margin" }));
+    await settle();
+
+    expect(setAdjustPercent).toHaveBeenCalledWith("5");
+    // 13,000 published, 13,650 charged.
+    expect(screen.getByTestId("rates-effective")).toHaveTextContent("13,650");
+  });
+
+  it("hides the margin in manual mode, and says the internet will not touch the rate", async () => {
+    const current = vi.fn(async () => aRate({ mode: "manual", adjustPercent: "0" }));
+    renderWithProviders(<RatesScreen />, { client: fakeClient({ fx: { current } }), locale: "en" });
+    await settle();
+
+    // Nothing is fetched into force in manual mode, so a margin on it would be a field that does nothing.
+    expect(screen.queryByTestId("rates-adjust")).not.toBeInTheDocument();
+    expect(screen.getByTestId("rates-manual-locked")).toHaveTextContent(
+      "Manual mode: the internet will never change your rate until you switch back to automatic.",
+    );
+  });
+});

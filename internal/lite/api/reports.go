@@ -213,9 +213,13 @@ type StockReportDTO struct {
 	Shelf           []ShelfLineDTO    `json:"shelf"`
 	ShelfTotalUSD   string            `json:"shelfTotalUsd"`
 	ShelfTotalLocal string            `json:"shelfTotalLocal"`
-	ShelfRate       string            `json:"shelfRate"`
-	BelowCost       int               `json:"belowCost"`
-	LeftOut         []LeftOutDTO      `json:"leftOut"`
+	// RetailTotalUSD and RetailTotalLocal value the same shelf at its SELLING prices, against TotalUSD/TotalLocal above
+	// which value it at cost (the owner's request, 2026-09-17). Retail less the shelf profit is the cost.
+	RetailTotalUSD   string       `json:"retailTotalUsd"`
+	RetailTotalLocal string       `json:"retailTotalLocal"`
+	ShelfRate        string       `json:"shelfRate"`
+	BelowCost        int          `json:"belowCost"`
+	LeftOut          []LeftOutDTO `json:"leftOut"`
 }
 
 // reportView formats report figures in the shop's currencies.
@@ -318,6 +322,27 @@ func monthReportDTO(ctx context.Context, app *bootstrap.App, month string) (Mont
 	return dto, nil
 }
 
+// Period is the profit of any span of days — a week, a year, the last thirty days, or a range the shop typed (the owner's
+// request, 2026-09-17). It answers in the same shape as a month, because a month is one.
+func (r *Reports) Period(in RangeInput) envelope.Result[MonthReportDTO] {
+	return call(r.core, "Reports.Period", func(ctx context.Context, app *bootstrap.App) (MonthReportDTO, error) {
+		m, err := app.Reports.Period(ctx, in.From, in.To)
+		if err != nil {
+			return MonthReportDTO{}, err
+		}
+		v, err := newReportView(ctx, app)
+		if err != nil {
+			return MonthReportDTO{}, err
+		}
+		dto := MonthReportDTO{Month: m.Month, From: m.From, To: m.To, LocalCurrency: v.pair.Local.Code,
+			Days: make([]DayReportDTO, 0, len(m.Days)), Total: v.day(m.Total, false)}
+		for _, d := range m.Days {
+			dto.Days = append(dto.Days, v.day(d, true))
+		}
+		return dto, nil
+	})
+}
+
 // Products is per-product profit over a range. Owner only.
 func (r *Reports) Products(in RangeInput) envelope.Result[ProductsReportDTO] {
 	return call(r.core, "Reports.Products", func(ctx context.Context, app *bootstrap.App) (ProductsReportDTO, error) {
@@ -390,6 +415,7 @@ func stockReportDTO(ctx context.Context, app *bootstrap.App, in RangeInput) (Sto
 			Losses: v.usd(c.Losses), Gains: v.usd(c.Gains), Revaluation: v.usd(c.Revaluation), Packages: v.usd(c.Packages),
 			NegativeStock: v.usd(c.NegativeStock), Rounding: v.usd(c.Rounding), Closing: v.usd(c.Closing)},
 		Shelf: make([]ShelfLineDTO, 0, len(s.Shelf.Lines)), ShelfTotalUSD: v.usd(s.Shelf.TotalUSD), ShelfTotalLocal: v.local(s.Shelf.TotalLocal),
+		RetailTotalUSD: v.usd(s.Shelf.RetailTotalUSD), RetailTotalLocal: v.local(s.Shelf.RetailTotalLocal),
 		BelowCost: s.Shelf.BelowCost, LeftOut: make([]LeftOutDTO, 0, len(s.Shelf.LeftOut)),
 	}
 	if s.Value.RateFound {

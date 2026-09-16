@@ -42,7 +42,9 @@ func newFixture() fixture {
 	return f
 }
 
-// withRate records a rate as the owner would, then leaves owner mode off.
+// withRate records a rate as the owner would, then leaves owner mode off. Since 2026-09-17 typing a rate also puts the shop
+// into manual mode, so a test that wants the fetch rules exercised afterwards calls automatic() to put it back — which is
+// what a shop does when it wants the internet's rate again.
 func (f fixture) withRate(t *testing.T, rate string) domain.Rate {
 	t.Helper()
 	f.gate.Elevated = true
@@ -53,6 +55,9 @@ func (f fixture) withRate(t *testing.T, rate string) domain.Rate {
 	f.gate.Elevated = false
 	return r
 }
+
+// automatic puts the shop back into automatic mode after a typed rate locked it to manual.
+func (f fixture) automatic() { f.settings.Mode = domain.ModeAutomatic }
 
 func (f fixture) current(t *testing.T) fx.Current {
 	t.Helper()
@@ -158,6 +163,7 @@ func TestEveryReadCarriesItsAge(t *testing.T) {
 func TestRefreshAppliesWhatTheDecisionAllows(t *testing.T) {
 	f := newFixture()
 	f.withRate(t, "15000")
+	f.automatic() // this test is about the fetch rules, not the manual lock
 	f.source.Answer("currency-api-jsdelivr", 13_007_535_500_000)
 
 	// The owner's rate from today holds (D-L3.18).
@@ -231,6 +237,7 @@ func TestTheFirstFetchedRateIsOnlyAProposal(t *testing.T) {
 func TestALargeFetchedChangeIsAProposalThatGoesStale(t *testing.T) {
 	f := newFixture()
 	f.withRate(t, "13000")
+	f.automatic() // this test is about a large fetched change, not the manual lock
 	f.nextDay()
 	f.source.Answer("exchangerate-api-open", 121_957_900_000) // the new pound, unscaled: 99% lower (L3 §14.3 F1)
 	proposal, _ := f.svc.Refresh(ctx)
@@ -381,5 +388,98 @@ func TestAllRatesAreInPlaceOrderWithTheirBusinessDates(t *testing.T) {
 	if err != nil || local != "SYP" || len(rates) != 2 || rates[0].Seq != 1 || rates[1].Seq != 2 ||
 		rates[0].BusinessDate != "2026-09-14" || rates[1].BusinessDate != "2026-09-15" {
 		t.Fatalf("AllRates = %+v, %q, %v", rates, local, err)
+	}
+}
+
+// TestATypedRateLocksTheShopToManualMode is the owner's request of 2026-09-17: a rate typed by hand must never be
+// overwritten by the hourly fetch. Before this it held only for the rest of its own business day, and the next morning the
+// internet's rate applied itself over the top — which is the overwriting the owner was describing.
+func TestATypedRateLocksTheShopToManualMode(t *testing.T) {
+	f := newFixture()
+	if mode, _ := f.settings.RateMode(ctx); mode != domain.ModeAutomatic {
+		t.Fatal("this test starts in automatic mode")
+	}
+
+	f.withRate(t, "15000")
+	if mode, _ := f.settings.RateMode(ctx); mode != domain.ModeManual {
+		t.Fatalf("typing a rate left the shop in %s", mode)
+	}
+
+	// Today, tomorrow, and the day after: the fetch is held every time, and the shop's own rate stands.
+	f.source.Answer("currency-api-jsdelivr", 13_007_535_500_000)
+	for day := range 3 {
+		got, err := f.svc.Refresh(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Outcome != domain.OutcomeHeldMode {
+			t.Fatalf("day %d: the fetch was %s, not held", day, got.Outcome)
+		}
+		if c := f.current(t); c.Rate.Nano != 15_000*n {
+			t.Fatalf("day %d: the typed rate was overwritten with %d", day, c.Rate.Nano)
+		}
+		f.nextDay()
+	}
+
+	// The internet's figure is still there to look at — held, not hidden (D-L3.16).
+	if c := f.current(t); !c.Fetched {
+		t.Fatal("the internet's rate is no longer shown for reference")
+	}
+
+	// And switching back is one act: the shop asks for the internet again and the next fetch applies.
+	f.gate.Elevated = true
+	if _, err := f.svc.SetMode(ctx, string(domain.ModeAutomatic)); err != nil {
+		t.Fatal(err)
+	}
+	f.gate.Elevated = false
+	got, err := f.svc.Refresh(ctx)
+	if err != nil || got.Outcome != domain.OutcomeApplied {
+		t.Fatalf("after switching back = %+v, %v", got, err)
+	}
+}
+
+// TestAMarginOnTheInternetsRateIsAppliedToWhatTheShopCharges is the owner's request of 2026-09-17: a shop that sells
+// dollars above the published rate sets the margin once, and the hourly fetch prices at it — instead of the shopkeeper
+// retyping a rate every morning.
+func TestAMarginOnTheInternetsRateIsAppliedToWhatTheShopCharges(t *testing.T) {
+	f := newFixture()
+	f.settings.AdjustPercentMicro = 5_000_000 // +5%
+	f.source.Answer("currency-api-jsdelivr", 13_000*n)
+
+	// The first rate is always a person's (D-L3.17), so one is recorded and the shop put back into automatic.
+	f.withRate(t, "13000")
+	f.automatic()
+	f.nextDay()
+
+	got, err := f.svc.Refresh(ctx)
+	if err != nil || got.Outcome != domain.OutcomeApplied {
+		t.Fatalf("refresh = %+v, %v", got, err)
+	}
+	// The log keeps what the provider actually said...
+	if got.Nano != 13_000*n {
+		t.Fatalf("the fetch log was adjusted: %d", got.Nano)
+	}
+	// ...and the shop charges at the figure its margin makes: 13,000 + 5% = 13,650.
+	if got.EffectiveNano != 13_650*n {
+		t.Fatalf("effective = %d, want 13,650", got.EffectiveNano)
+	}
+	if c := f.current(t); c.Rate.Nano != 13_650*n || c.Rate.Source != domain.SourceFetched {
+		t.Fatalf("the rate in force = %+v", c.Rate)
+	}
+}
+
+func TestTheMarginArithmeticHoldsAtBothEndsAndBothSigns(t *testing.T) {
+	for name, c := range map[string]struct{ nano, percent, want int64 }{
+		"no margin leaves it alone": {13_000 * n, 0, 13_000 * n},
+		"five per cent up":          {13_000 * n, 5_000_000, 13_650 * n},
+		"two and a half down":       {13_000 * n, -2_500_000, 12_675 * n},
+		"a fraction of a per cent":  {15_000 * n, 500_000, 15_075 * n},
+		// An old-pound rate in nano is already in the tens of trillions; multiplying by 100,000,000 before dividing
+		// overflows int64 and comes back a plausible wrong number. big.Int is why this one is right.
+		"a very large rate": {9_000_000 * n, 10_000_000, 9_900_000 * n},
+	} {
+		if got := domain.Adjust(c.nano, c.percent); got != c.want {
+			t.Errorf("%s: Adjust(%d, %d) = %d, want %d", name, c.nano, c.percent, got, c.want)
+		}
 	}
 }

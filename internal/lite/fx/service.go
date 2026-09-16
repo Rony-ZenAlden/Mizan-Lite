@@ -46,6 +46,9 @@ type Settings interface {
 	RateMode(ctx context.Context) (domain.Mode, error)
 	SetRateMode(ctx context.Context, mode domain.Mode) error
 	LocalCurrency(ctx context.Context) (string, error)
+	// RateAdjustPercentMicro is the margin the shop puts on the internet's rate, at 10⁻⁶ of a percentage point, signed.
+	// Zero leaves a fetched figure exactly as it came (the owner's request, 2026-09-17).
+	RateAdjustPercentMicro(ctx context.Context) (int64, error)
 }
 
 // Source fetches a quote from the internet. httpsource implements it; tests pass fakes.
@@ -108,6 +111,10 @@ type Current struct {
 	FetchAge time.Duration
 	// FetchChange is the last fetch's change from the rate in force it was compared with, in percent, or "".
 	FetchChange string
+	// AdjustPercentMicro is the shop's margin on the internet's rate, and EffectiveFetchNano what that margin makes of the
+	// last published figure — what the shop would charge at if the next fetch applied (2026-09-17).
+	AdjustPercentMicro int64
+	EffectiveFetchNano int64
 }
 
 // Current reads the rate in force with its age — on every path, including a rate that is years old (H5).
@@ -120,7 +127,11 @@ func (s *Service) Current(ctx context.Context) (Current, error) {
 	if err != nil {
 		return Current{}, err
 	}
-	out := Current{Local: local, Mode: mode}
+	adjust, err := s.settings.RateAdjustPercentMicro(ctx)
+	if err != nil {
+		return Current{}, err
+	}
+	out := Current{Local: local, Mode: mode, AdjustPercentMicro: adjust}
 	if out.Rate, out.Found, err = s.store.InForce(ctx, local); err != nil {
 		return Current{}, err
 	}
@@ -133,6 +144,10 @@ func (s *Service) Current(ctx context.Context) (Current, error) {
 		return Current{}, err
 	}
 	if out.Fetched {
+		// Filled in from the margin in force, not stored on the row: the log keeps the published figure (2026-09-17).
+		out.Fetch.AdjustPercentMicro = adjust
+		out.Fetch.EffectiveNano = domain.Adjust(out.Fetch.Nano, adjust)
+		out.EffectiveFetchNano = out.Fetch.EffectiveNano
 		if d := now.Sub(out.Fetch.AttemptedAt); d > 0 {
 			out.FetchAge = d
 		}
@@ -237,8 +252,20 @@ func (s *Service) SetRate(ctx context.Context, in SetRateInput) (domain.Rate, er
 		if err = s.gate.Require(ctx, GuardedAct{Action: ActSetRate, Before: before, After: domain.FormatRate(value)}); err != nil {
 			return err
 		}
-		out, err = s.appendRate(ctx, local, inForce, found, value, domain.SourceManual, "", note)
-		return err
+		if out, err = s.appendRate(ctx, local, inForce, found, value, domain.SourceManual, "", note); err != nil {
+			return err
+		}
+		// Typing a rate puts the shop in manual mode and leaves it there (the owner's request, 2026-09-17). Before this, a
+		// typed rate held only for the rest of its own business day and the hourly fetch resumed the next morning — which
+		// is exactly the overwriting the owner asked to be rid of. Switching back is one tap on the Rates screen.
+		mode, err := s.settings.RateMode(ctx)
+		if err != nil {
+			return err
+		}
+		if mode == domain.ModeAutomatic {
+			return s.settings.SetRateMode(ctx, domain.ModeManual)
+		}
+		return nil
 	})
 	return out, err
 }
@@ -324,12 +351,23 @@ func (s *Service) record(ctx context.Context, local string, quote domain.Quote, 
 			out = f
 			return s.store.AppendFetch(ctx, f)
 		}
+		// What the internet said is recorded as the internet said it. The shop's margin is applied to the rate that comes
+		// OUT of the fetch, not to the record of the fetch, so the log always shows the published figure (2026-09-17).
+		adjustMicro, err := s.settings.RateAdjustPercentMicro(ctx)
+		if err != nil {
+			return err
+		}
 		f.Provider, f.Nano = quote.Provider, quote.Nano
+		f.AdjustPercentMicro = adjustMicro
+		effective := domain.Quote{Provider: quote.Provider, Nano: domain.Adjust(quote.Nano, adjustMicro)}
+		f.EffectiveNano = effective.Nano
 		var current *domain.Rate
 		if found {
 			current = &inForce
 		}
-		f.Outcome = domain.Decide(mode, current, f.BusinessDate, quote)
+		// The decision compares the rate the shop would actually charge at, margin included: a 5% margin on a figure that
+		// barely moved must not read as a large change, and one that took it past the guard must.
+		f.Outcome = domain.Decide(mode, current, f.BusinessDate, effective)
 		if err = s.store.AppendFetch(ctx, f); err != nil {
 			return err
 		}
@@ -337,7 +375,7 @@ func (s *Service) record(ctx context.Context, local string, quote domain.Quote, 
 		if f.Outcome != domain.OutcomeApplied {
 			return nil
 		}
-		_, err = s.appendRate(ctx, local, inForce, found, quote.Nano, domain.SourceFetched, f.ID, "")
+		_, err = s.appendRate(ctx, local, inForce, found, effective.Nano, domain.SourceFetched, f.ID, "")
 		return err
 	})
 	return out, err

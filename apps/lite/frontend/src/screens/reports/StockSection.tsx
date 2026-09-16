@@ -38,6 +38,18 @@ export function StockSection({ report }: { report: StockReport }) {
             t("reports.stock.no_rate")
           )}
         </p>
+        {/* The same stock at its selling prices, beside what it cost (the owner's request, 2026-09-17). */}
+        {report.retailTotalUsd ? (
+          <p className="text-sm text-text-muted" data-testid="stock-retail">
+            {t("reports.retail_value")}: <Money value={report.retailTotalUsd} currency="USD" />
+            {report.valueRate ? (
+              <>
+                {" · "}
+                <bdi dir="ltr">{formatDecimal(report.retailTotalLocal, locale)}</bdi> {tDynamic(`currency.short.${cur}`)}
+              </>
+            ) : null}
+          </p>
+        ) : null}
         <div className="overflow-x-auto rounded-md border border-border bg-surface-raised">
           <table className="w-full text-sm">
             <thead className="bg-surface text-text-muted">

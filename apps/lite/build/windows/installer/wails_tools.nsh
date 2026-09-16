@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "Mizan Lite"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.9.1"
+    !define INFO_PRODUCTVERSION "0.9.2"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "© 2026 Mizan"

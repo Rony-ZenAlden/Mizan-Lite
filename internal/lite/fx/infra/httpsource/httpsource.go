@@ -63,7 +63,14 @@ type Client struct {
 	http      *http.Client
 	providers []Provider
 	userAgent string
+	// first is asked before every fetch for a provider to try ahead of the standard ones — the shop's own local-market
+	// endpoint (2026-09-17). It returns ok=false when the shop has not chosen one, or has not set its URL up.
+	first func(ctx context.Context) (Provider, bool)
 }
+
+// TryFirst sets the provider asked for before every fetch. Returning ok=false leaves the standard providers alone, so a
+// shop that has not configured an endpoint behaves exactly as it did before this existed.
+func (c *Client) TryFirst(first func(ctx context.Context) (Provider, bool)) { c.first = first }
 
 // New builds a client. transport nil uses a clone of the default transport, which honours the operating system's proxy
 // settings and verifies certificates against the system store on Windows and macOS.
@@ -85,7 +92,15 @@ func New(version string, providers []Provider, transport http.RoundTripper) *Cli
 // offline or failed.
 func (c *Client) Fetch(ctx context.Context, localCurrency string) (domain.Quote, error) {
 	var last error = errs.Conflict(domain.CodeFetchFailed, "no provider is configured")
-	for _, p := range c.providers {
+	providers := c.providers
+	// The shop's own endpoint goes first and the standard ones remain behind it: when a local market source fails — and a
+	// small endpoint will — the shop is priced by the published rate rather than by nothing at all (2026-09-17).
+	if c.first != nil {
+		if p, ok := c.first(ctx); ok {
+			providers = append([]Provider{p}, providers...)
+		}
+	}
+	for _, p := range providers {
 		q, err := c.fetchOne(ctx, p, localCurrency)
 		if err == nil {
 			return q, nil

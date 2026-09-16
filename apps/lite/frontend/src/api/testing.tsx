@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, Sale, Statement, StockReport } from "./client";
+import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, Sale, Statement, StockReport, SettingsState } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -14,6 +14,22 @@ import { RateProvider } from "@/rates/RateProvider";
 import { FAKE_CLIENT_SENTINEL } from "./sentinel";
 
 type Overrides = { [G in keyof Client]?: Partial<Client[G]> };
+
+/** The shop's settings as Go sends them, with any field replaceable. */
+export function aSettings(overrides: Partial<SettingsState> = {}): SettingsState {
+  return {
+    locale: "ar",
+    shopName: "بقالية المونة",
+    direction: "rtl",
+    debtCurrency: "USD",
+    localCurrency: "SYP",
+    cashNote: "500",
+    rateSource: "standard",
+    localRateUrl: "",
+    localRateField: "",
+    ...overrides,
+  };
+}
 
 /** A product for tests, with any field replaceable. */
 export function aProduct(overrides: Partial<Product> = {}): Product {
@@ -469,13 +485,16 @@ export function fakeClient(overrides: Overrides = {}): Client {
       saveSupportFile: async () => ({ path: "/Users/shop/Documents/support.zip", bytes: 1, cancelled: false }),
     },
     settings: {
-      get: async () => ({ locale: "ar", shopName: "بقالية المونة", direction: "rtl", debtCurrency: "USD" }),
-      update: async (input) => ({
-        locale: input.locale ?? "ar",
-        shopName: input.shopName ?? "بقالية المونة",
-        direction: input.locale === "en" ? "ltr" : "rtl",
-        debtCurrency: "USD",
-      }),
+      get: async () => aSettings(),
+      update: async (input) =>
+        aSettings({
+          locale: input.locale ?? "ar",
+          shopName: input.shopName ?? "بقالية المونة",
+          direction: input.locale === "en" ? "ltr" : "rtl",
+          rateSource: input.rateSource ?? "standard",
+          localRateUrl: input.localRateUrl ?? "",
+          localRateField: input.localRateField ?? "",
+        }),
     },
     catalog: {
       importTemplate: async () => ({ path: "/Users/shop/Documents/products.xlsx", bytes: 1, cancelled: false }),

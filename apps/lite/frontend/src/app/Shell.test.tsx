@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { aRate, fakeClient, renderWithProviders } from "@/api/testing";
+import { aRate, aSettings, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import { ROUTES } from "./routes";
 import { Shell } from "./Shell";
@@ -14,7 +14,7 @@ async function settled(locale: "ar" | "en") {
 
 describe("Shell", () => {
   it("renders one navigation link per route, labelled in the active language", async () => {
-    const client = fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "بقالية المونة", direction: "ltr", debtCurrency: "USD" }) } });
+    const client = fakeClient({ settings: { get: async () => (aSettings({ locale: "en", direction: "ltr" })) } });
     renderWithProviders(<Shell />, { client, locale: "en" });
     await settled("en");
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
@@ -24,7 +24,7 @@ describe("Shell", () => {
   });
 
   it("switches to English at once, in the same render, and saves it", async () => {
-    const update = vi.fn(async () => ({ locale: "en", shopName: "بقالية المونة", direction: "ltr", debtCurrency: "USD" }));
+    const update = vi.fn(async () => (aSettings({ locale: "en", direction: "ltr" })));
     renderWithProviders(<Shell />, { client: fakeClient({ settings: { update } }), locale: "ar" });
     await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", "rtl"));
 
@@ -53,7 +53,7 @@ describe("Shell", () => {
   });
 
   it("adopts the stored language when the document was served in a different one", async () => {
-    const client = fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "بقالية المونة", direction: "ltr", debtCurrency: "USD" }) } });
+    const client = fakeClient({ settings: { get: async () => (aSettings({ locale: "en", direction: "ltr" })) } });
     renderWithProviders(<Shell />, { client, locale: "ar" });
     await waitFor(() => expect(document.documentElement).toHaveAttribute("lang", "en"));
     expect(document.documentElement).toHaveAttribute("dir", "ltr");
@@ -75,7 +75,7 @@ describe("Shell", () => {
   });
 
   it("names each language in its own language, marked with its own lang attribute", async () => {
-    const client = fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "بقالية المونة", direction: "ltr", debtCurrency: "USD" }) } });
+    const client = fakeClient({ settings: { get: async () => (aSettings({ locale: "en", direction: "ltr" })) } });
     renderWithProviders(<Shell />, { client, locale: "en" });
     await settled("en");
     expect(screen.getByRole("button", { name: "العربية" })).toHaveAttribute("lang", "ar");
@@ -99,7 +99,7 @@ describe("Shell header", () => {
       return { setUp: true, lockedSeconds: 0, elevatedSeconds: 0 };
     });
     const client = fakeClient({
-      settings: { get: async () => ({ locale: "en", shopName: "The Pantry", direction: "ltr", debtCurrency: "USD" }) },
+      settings: { get: async () => (aSettings({ locale: "en", shopName: "The Pantry", direction: "ltr" })) },
       owner: { status: async () => ({ setUp: true, lockedSeconds: 0, elevatedSeconds: elevated }), endElevation },
     });
     renderWithProviders(<Shell />, { client, locale: "en" });
@@ -112,7 +112,7 @@ describe("Shell header", () => {
   });
 
   it("shows no owner indicator outside owner mode", async () => {
-    const client = fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "The Pantry", direction: "ltr", debtCurrency: "USD" }) } });
+    const client = fakeClient({ settings: { get: async () => (aSettings({ locale: "en", shopName: "The Pantry", direction: "ltr" })) } });
     renderWithProviders(<Shell />, { client, locale: "en" });
     await settled("en");
     expect(screen.queryByRole("button", { name: "Lock" })).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("Shell header", () => {
 
 describe("Shell — the exchange rate in the header", () => {
   it("shows the rate and its age to everyone, linking to the rate screen", async () => {
-    renderWithProviders(<Shell />, { client: fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr", debtCurrency: "USD" }) } }), locale: "en" });
+    renderWithProviders(<Shell />, { client: fakeClient({ settings: { get: async () => (aSettings({ locale: "en", shopName: "المونة", direction: "ltr" })) } }), locale: "en" });
     await settled("en");
     const chip = await screen.findByTestId("header-rate");
     expect(chip).toHaveTextContent("1 USD = 15,000 SYP · 3 hours ago");
@@ -130,7 +130,7 @@ describe("Shell — the exchange rate in the header", () => {
 
   it("marks a rate not updated today, and says when there is none", async () => {
     const stale = fakeClient({
-      settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr", debtCurrency: "USD" }) },
+      settings: { get: async () => (aSettings({ locale: "en", shopName: "المونة", direction: "ltr" })) },
       fx: { current: async () => aRate({ stale: true }) },
     });
     const { unmount } = renderWithProviders(<Shell />, { client: stale, locale: "en" });
@@ -139,7 +139,7 @@ describe("Shell — the exchange rate in the header", () => {
     unmount();
 
     const none = fakeClient({
-      settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr", debtCurrency: "USD" }) },
+      settings: { get: async () => (aSettings({ locale: "en", shopName: "المونة", direction: "ltr" })) },
       fx: { current: async () => aRate({ set: false, rate: "" }) },
     });
     renderWithProviders(<Shell />, { client: none, locale: "en" });
@@ -161,7 +161,7 @@ describe("Shell — backups on every screen (L8 A-L8.3)", () => {
 
     const health = vi.fn(async () => ({ version: "0.9.0", schemaVersion: 8, platform: "darwin", dataDir: "/d" }));
     const status = async () => aBackupStatus({ outsideStale: true });
-    renderWithProviders(<Shell />, { client: fakeClient({ app: { health }, backups: { status }, settings: { get: async () => ({ locale: "en", shopName: "x", direction: "ltr", debtCurrency: "USD" }) } }), locale: "en" });
+    renderWithProviders(<Shell />, { client: fakeClient({ app: { health }, backups: { status }, settings: { get: async () => (aSettings({ locale: "en", shopName: "x", direction: "ltr" })) } }), locale: "en" });
     const warning = await screen.findByTestId("backup-warning");
     expect(warning).toHaveTextContent("The last copy in the outside folder is more than two days old");
     expect(screen.getByRole("link", { name: "Open Backups" })).toHaveAttribute("href", "/backups");

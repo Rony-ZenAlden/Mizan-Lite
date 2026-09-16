@@ -4,6 +4,7 @@ import { AboutScreen } from "@/screens/about/AboutScreen";
 import { BackupsScreen } from "@/screens/backups/BackupsScreen";
 import { CashScreen } from "@/screens/cash/CashScreen";
 import { CustomersScreen } from "@/screens/customers/CustomersScreen";
+import { SettingsScreen } from "@/screens/settings/SettingsScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
 import { PrinterScreen } from "@/screens/printer/PrinterScreen";
 import { ProductsScreen } from "@/screens/products/ProductsScreen";
@@ -36,6 +37,7 @@ export const ROUTES: readonly RouteDef[] = [
   { path: "/reports", labelKey: "nav.reports", Screen: ReportsScreen },
   { path: "/printer", labelKey: "nav.printer", Screen: PrinterScreen },
   { path: "/backups", labelKey: "nav.backups", Screen: BackupsScreen },
+  { path: "/settings", labelKey: "nav.settings", Screen: SettingsScreen },
   { path: "/owner", labelKey: "nav.owner", Screen: OwnerScreen },
   { path: "/about", labelKey: "nav.about", Screen: AboutScreen },
 ];

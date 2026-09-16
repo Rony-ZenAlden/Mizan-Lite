@@ -12,7 +12,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
+	"github.com/mizan-erp/mizan/internal/lite/fx/infra/httpsource"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
+	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 )
 
 // startFunc builds the graph. bootstrap.Start in the application; a controllable fake in tests.
@@ -38,6 +40,26 @@ type shell struct {
 	app     *bootstrap.App
 	closing bool
 	booted  chan struct{}
+}
+
+// localRateProvider is the shop's own market endpoint, read from its settings at the moment of a fetch. It answers
+// ok=false — leaving the published providers to it — when the shop has not chosen the local source, has not set a URL, or
+// the graph is not up yet.
+//
+// A bad URL is not an error here: the endpoint is checked when it is saved, and a fetch that refused to run because of a
+// stored value would leave the shop with no rate at all rather than the published one.
+func (s *shell) localRateProvider(ctx context.Context) (httpsource.Provider, bool) {
+	s.mu.Lock()
+	app := s.app
+	s.mu.Unlock()
+	if app == nil {
+		return httpsource.Provider{}, false
+	}
+	stored, err := app.Settings.Get(ctx)
+	if err != nil || stored.RateSource != settingsdomain.RateSourceLocal || stored.LocalRateURL == "" {
+		return httpsource.Provider{}, false
+	}
+	return httpsource.LocalProvider(httpsource.LocalConfig{URL: stored.LocalRateURL, Field: stored.LocalRateField}), true
 }
 
 func newShell(set *api.Set, p paths.Paths, log *slog.Logger, version string, start startFunc) *shell {

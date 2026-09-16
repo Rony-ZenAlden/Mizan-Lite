@@ -1,6 +1,6 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { fakeClient, renderWithProviders } from "@/api/testing";
+import { aSettings, fakeClient, renderWithProviders } from "@/api/testing";
 import type { Locale } from "@/i18n/messages";
 import { ROUTES } from "./routes";
 import { Shell } from "./Shell";
@@ -17,7 +17,7 @@ describe.each(cases)("every route in %s", (locale, direction) => {
   it.each(ROUTES.map((r) => [r.path, r] as const))("mounts %s", async (path) => {
     // The stored language matches the one under test; otherwise the shell correctly adopts the
     // stored one and the case would measure that instead.
-    const client = fakeClient({ settings: { get: async () => ({ locale, shopName: "بقالية المونة", direction, debtCurrency: "USD" }) } });
+    const client = fakeClient({ settings: { get: async () => (aSettings({ locale, direction })) } });
     renderWithProviders(<Shell />, { client, locale, route: path });
     await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", direction));
     expect(document.documentElement).toHaveAttribute("lang", locale);

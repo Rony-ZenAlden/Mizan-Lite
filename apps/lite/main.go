@@ -57,7 +57,11 @@ func main() {
 	set.SetFiles(wailsFiles{})
 	set.SetRestarter(sh.restart)
 	// The real rate providers, registered here and nowhere else: automatic mode's primary source (L3 §14.6).
-	sh.rates = httpsource.New(version, httpsource.Providers(), nil)
+	client := httpsource.New(version, httpsource.Providers(), nil)
+	// The shop's own local-market endpoint goes ahead of them when it has chosen one, with them still behind it as the
+	// fallback (2026-09-17). Asked per fetch, because a shop may change the endpoint without restarting.
+	client.TryFirst(sh.localRateProvider)
+	sh.rates = client
 
 	if err := wails.Run(appOptions(appConfig{
 		Assets:         assets,

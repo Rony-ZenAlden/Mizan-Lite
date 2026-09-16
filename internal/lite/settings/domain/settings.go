@@ -36,6 +36,38 @@ const MaxRateAdjustPercentMicro = 50_000_000
 // CodeInvalidRateAdjust is a margin that is not a number, or is past the bound.
 const CodeInvalidRateAdjust = "lite.settings.invalid_rate_adjust"
 
+// Where a fetched rate comes from (the owner's request, 2026-09-17). It is meaningful only in automatic mode: in manual
+// mode nothing is fetched into force at all.
+const (
+	KeyRateSource = "fx.source"
+	// RateSourceStandard is the published providers, with the shop's margin on top (0.9.3).
+	RateSourceStandard = "standard"
+	// RateSourceLocal is the shop's own local-market endpoint, falling back to the published providers when it fails.
+	RateSourceLocal = "local"
+)
+
+// KeyLocalRateURL and KeyLocalRateField are the shop's own endpoint and the dotted path to the number inside its JSON.
+// Empty means the shop has not set one up, and the local source behaves as the standard one.
+const (
+	KeyLocalRateURL   = "fx.local_url"
+	KeyLocalRateField = "fx.local_field"
+)
+
+// CodeInvalidRateSource is a source that is neither standard nor local.
+const CodeInvalidRateSource = "lite.settings.invalid_rate_source"
+
+// ParseRateSource reads where fetched rates come from.
+func ParseRateSource(raw string) (string, error) {
+	switch v := strings.ToLower(strings.TrimSpace(raw)); v {
+	case "", RateSourceStandard:
+		return RateSourceStandard, nil
+	case RateSourceLocal:
+		return RateSourceLocal, nil
+	default:
+		return "", errs.Validation(CodeInvalidRateSource, "a rate source is standard or local").WithParam("value", raw)
+	}
+}
+
 // KeyLocalCurrency is the stored key for the currency the exchange rate prices (L3 §3.2). Not editable in v1: nothing
 // writes it, and a stored value must name a currency code.
 const KeyLocalCurrency = "currency.local"
@@ -189,12 +221,20 @@ type Settings struct {
 	// RateAdjustPercentMicro is the margin put on a fetched rate, at 10⁻⁶ of a percentage point, signed. Zero leaves the
 	// internet's figure as it came; it applies only in automatic mode, and never to a rate typed by hand.
 	RateAdjustPercentMicro int64
+	// RateSource is where a fetched rate comes from: the published providers, or the shop's own local-market endpoint
+	// with the published ones behind it (2026-09-17).
+	RateSource string
+	// LocalRateURL is that endpoint, and LocalRateField the dotted path to the number in its JSON. Empty until a shop
+	// sets one up, and while empty the local source behaves as the standard one.
+	LocalRateURL   string
+	LocalRateField string
 }
 
 // Defaults is what a fresh installation uses.
 func Defaults() Settings {
 	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote,
-		DebtCurrency: DefaultDebtCurrency, Receipt: DefaultReceipt(), BackupEvery: DefaultBackupEvery}
+		DebtCurrency: DefaultDebtCurrency, Receipt: DefaultReceipt(), BackupEvery: DefaultBackupEvery,
+		RateSource: RateSourceStandard}
 }
 
 // ProblemKind says what was wrong with a stored row.
@@ -266,6 +306,17 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.DebtCurrency = value
+		case KeyRateSource:
+			source, err := ParseRateSource(value)
+			if err != nil {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.RateSource = source
+		case KeyLocalRateURL:
+			out.LocalRateURL = value
+		case KeyLocalRateField:
+			out.LocalRateField = value
 		case KeyRateAdjustPercent:
 			adjust, err := ParseRateAdjustPercent(value)
 			if err != nil {
@@ -306,8 +357,12 @@ type Update struct {
 	RateMode *string
 	// RateAdjustPercent is the margin on the internet's rate, as typed ("5", "-2٫5"); "" leaves it as it is.
 	RateAdjustPercent *string
-	CashNote          *string
-	Printing          PrintingUpdate
+	// RateSource, LocalRateURL and LocalRateField are where fetched rates come from (2026-09-17).
+	RateSource     *string
+	LocalRateURL   *string
+	LocalRateField *string
+	CashNote       *string
+	Printing       PrintingUpdate
 }
 
 // Apply validates an update against the current settings and returns the result and the rows that
@@ -344,6 +399,24 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 			next.RateMode = mode
 			changes = append(changes, Change{Key: KeyRateMode, Value: string(mode)})
 		}
+	}
+	if u.RateSource != nil {
+		source, err := ParseRateSource(*u.RateSource)
+		if err != nil {
+			return s, nil, err
+		}
+		if source != s.RateSource {
+			next.RateSource = source
+			changes = append(changes, Change{Key: KeyRateSource, Value: source})
+		}
+	}
+	if u.LocalRateURL != nil && *u.LocalRateURL != s.LocalRateURL {
+		next.LocalRateURL = *u.LocalRateURL
+		changes = append(changes, Change{Key: KeyLocalRateURL, Value: *u.LocalRateURL})
+	}
+	if u.LocalRateField != nil && *u.LocalRateField != s.LocalRateField {
+		next.LocalRateField = *u.LocalRateField
+		changes = append(changes, Change{Key: KeyLocalRateField, Value: *u.LocalRateField})
 	}
 	if u.RateAdjustPercent != nil {
 		adjust, err := ParseRateAdjustPercent(*u.RateAdjustPercent)

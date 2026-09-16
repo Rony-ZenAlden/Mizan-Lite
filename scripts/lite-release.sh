@@ -49,7 +49,18 @@ MOUNT="$(mktemp -d)"
 hdiutil attach "${DIST}/Mizan Lite ${VERSION}.dmg" -mountpoint "$MOUNT" -nobrowse -quiet
 trap 'hdiutil detach "$MOUNT" -quiet 2>/dev/null || true' EXIT
 scripts/lite-smoke-macos.sh "${MOUNT}/Mizan Lite.app" "$SHOP"
-hdiutil detach "$MOUNT" -quiet
+# The application has only just closed, and macOS can still hold the image for a moment: hdiutil answers 16, "resource
+# busy", and an impatient detach would fail a release whose artefacts are already built and verified.
+detach() {
+  for _ in 1 2 3 4 5; do
+    if hdiutil detach "$MOUNT" -quiet 2>/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  hdiutil detach "$MOUNT" -force -quiet 2>/dev/null || true
+}
+detach
 trap - EXIT
 
 echo "▶ checksums"

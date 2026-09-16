@@ -60,23 +60,18 @@ func guardedActs(t *testing.T, app *bootstrap.App) int {
 	return n
 }
 
-// TestTheCatalogueGuardIsTheRealOwner proves the adapter in the composition root: the catalogue's port reaches
-// the owner service, with the owner module's own refusal code.
+// TestTheCatalogueGuardIsTheRealOwner proves the adapter in the composition root: the catalogue's port reaches the owner
+// service and not a fake that nods at everything.
+//
+// Since 2026-09-16 a price change no longer asks for the PIN (owner.ReservedActs), so refusal can no longer be the proof.
+// What proves it is the record: only the real owner service writes the act into the owner's history.
 func TestTheCatalogueGuardIsTheRealOwner(t *testing.T) {
 	ctx := context.Background()
 	app, p := startFast(t)
 
-	_, err := app.Catalog.SetPrice(ctx, catalog.SetPriceInput{ID: p.ID, RowVersion: p.RowVersion, Currency: "USD", Price: "2.00"})
-	if errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a price change outside owner mode = %v", err)
-	}
-
-	if _, err = app.Owner.Elevate(ctx, "246813"); err != nil {
-		t.Fatal(err)
-	}
 	changed, err := app.Catalog.SetPrice(ctx, catalog.SetPriceInput{ID: p.ID, RowVersion: p.RowVersion, Currency: "USD", Price: "2.00"})
 	if err != nil || changed.PriceMicro != 2_000_000 {
-		t.Fatalf("SetPrice in owner mode = %+v, %v", changed, err)
+		t.Fatalf("SetPrice at the counter = %+v, %v", changed, err)
 	}
 	if guardedActs(t, app) != 1 {
 		t.Fatal("the price change is not in the owner's history")
@@ -115,15 +110,13 @@ func TestARolledBackPriceChangeLeavesNoRecordOfIt(t *testing.T) {
 func TestDeactivationThroughTheRealGuard(t *testing.T) {
 	ctx := context.Background()
 	app, p := startFast(t)
-	if _, err := app.Catalog.SetActive(ctx, catalog.SetActiveInput{ID: p.ID, RowVersion: p.RowVersion, Active: false}); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("deactivation outside owner mode = %v", err)
-	}
-	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
-		t.Fatal(err)
-	}
+	// Open at the counter since 2026-09-16; the record is what proves the real guard (see TestTheCatalogueGuardIsTheRealOwner).
 	off, err := app.Catalog.SetActive(ctx, catalog.SetActiveInput{ID: p.ID, RowVersion: p.RowVersion, Active: false})
 	if err != nil || off.Active {
-		t.Fatalf("deactivation in owner mode = %+v, %v", off, err)
+		t.Fatalf("deactivation at the counter = %+v, %v", off, err)
+	}
+	if guardedActs(t, app) != 1 {
+		t.Fatal("the deactivation is not in the owner's history")
 	}
 }
 
@@ -148,18 +141,16 @@ func TestStockReachesTheRealOwnerAndCatalogue(t *testing.T) {
 		t.Fatalf("the litre's decimals were not read from the catalogue: %v", err)
 	}
 
+	// A write-off and the valuation are both open at the counter since 2026-09-16; the write-off is still recorded.
 	lower := stock.AdjustInput{ProductID: p.ID, Direction: stock.DirectionOut, Quantity: "2", Reason: stockdomain.ReasonExpired}
-	if _, err := app.Stock.Adjust(ctx, lower); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a write-off outside owner mode: %v", err)
-	}
-	if _, err := app.Stock.Valuation(ctx); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("valuation outside owner mode: %v", err)
-	}
-	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
-		t.Fatal(err)
+	if _, err := app.Stock.Valuation(ctx); err != nil {
+		t.Fatalf("valuation at the counter: %v", err)
 	}
 	if _, err := app.Stock.Adjust(ctx, lower); err != nil {
 		t.Fatal(err)
+	}
+	if guardedActs(t, app) != 1 {
+		t.Fatal("the write-off is not in the owner's history")
 	}
 	valuation, err := app.Stock.Valuation(ctx)
 	if err != nil || valuation.TotalMinor != 3413 {
@@ -191,20 +182,15 @@ func TestRatesReachTheRealOwnerAndSettings(t *testing.T) {
 	if err != nil || !current.Found || current.Rate.Source != fxdomain.SourceFirstRun || current.Local != "SYP" || current.Mode != fxdomain.ModeManual {
 		t.Fatalf("after first run: %+v, %v", current, err)
 	}
-	if _, err := app.FX.SetRate(ctx, fx.SetRateInput{Rate: "15200"}); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a rate outside owner mode: %v", err)
-	}
-	if _, err := app.FX.SetMode(ctx, "automatic"); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a mode switch outside owner mode: %v", err)
-	}
-	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
-		t.Fatal(err)
-	}
+	// The rate and the mode are set at the counter since 2026-09-16; both are recorded, which is what proves the real owner.
 	if _, err := app.FX.SetRate(ctx, fx.SetRateInput{Rate: "15200"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := app.FX.SetMode(ctx, "automatic"); err != nil {
 		t.Fatal(err)
+	}
+	if guardedActs(t, app) != 2 {
+		t.Fatal("the rate and the mode are not both in the owner's history")
 	}
 	stored, _ := app.Settings.Get(ctx)
 	if stored.RateMode != settingsdomain.RateAutomatic {
@@ -279,17 +265,15 @@ func TestTheTillReachesTheRealModules(t *testing.T) {
 		t.Fatalf("stock after selling beyond it = %+v", levels)
 	}
 
-	// A discount needs the real owner.
+	// A discount is rung up at the counter since 2026-09-16, and reaches the real owner to be recorded.
 	discounted := salesdomain.CartInput{Lines: []salesdomain.LineInput{{ProductID: oil.ID, Quantity: "1", DiscountPercent: "10"}}}
 	dq, _ := app.Sales.Quote(ctx, discounted)
-	if _, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: discounted, Token: dq.Token}); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a discount outside owner mode: %v", err)
-	}
-	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
-		t.Fatal(err)
-	}
+	before := guardedActs(t, app)
 	if _, err := app.Sales.Checkout(ctx, sales.CheckoutInput{Cart: discounted, Token: dq.Token}); err != nil {
 		t.Fatal(err)
+	}
+	if guardedActs(t, app) != before+1 {
+		t.Fatal("the discount is not in the owner's history")
 	}
 	if _, err := app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "خطأ"}); err != nil {
 		t.Fatal(err)
@@ -364,7 +348,7 @@ func TestACheckoutThatFailsAfterTheStockMovementLeavesNothing(t *testing.T) {
 
 // TestVoidNeedsTheOwnerAndReturnsTheStockAtTheSnapshottedCost, on the real modules: a delivery between the sale and its
 // void moves the average; the void averages the goods back in at the cost they left at.
-func TestVoidNeedsTheOwnerAndReturnsTheStockAtTheSnapshottedCost(t *testing.T) {
+func TestAVoidReturnsTheStockAtTheSnapshottedCost(t *testing.T) {
 	ctx := context.Background()
 	app, oil := startFast(t) // $3.25 a litre
 	if _, err := app.Owner.Elevate(ctx, "246813"); err != nil {
@@ -390,17 +374,13 @@ func TestVoidNeedsTheOwnerAndReturnsTheStockAtTheSnapshottedCost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "أعاده"}); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a void outside owner mode: %v", err)
-	}
-	if levels, _ := app.Stock.Levels(ctx); levels[0].OnHandMicro != 12_000_000 {
-		t.Fatalf("a refused void moved stock: %+v", levels)
-	}
-	if _, err = app.Owner.Elevate(ctx, "246813"); err != nil {
-		t.Fatal(err)
-	}
+	// A void is done at the counter since 2026-09-16, and reaches the real owner to be recorded.
+	before := guardedActs(t, app)
 	if _, err = app.Sales.Void(ctx, sales.VoidInput{SaleID: sale.ID, Reason: "أعاده"}); err != nil {
 		t.Fatal(err)
+	}
+	if guardedActs(t, app) != before+1 {
+		t.Fatal("the void is not in the owner's history")
 	}
 	// (12 × 3 + 4 × 2) ÷ 16 = 2.75.
 	v, err := app.Stock.Valuation(ctx)

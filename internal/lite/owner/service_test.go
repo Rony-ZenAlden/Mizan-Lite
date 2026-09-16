@@ -68,6 +68,13 @@ func act() owner.Act {
 	return owner.Act{Action: "catalog.price.change", SubjectID: subject, Before: "USD 3.25", After: "USD 2.00"}
 }
 
+// reserved is an act that still asks for the PIN (owner.ReservedActs, 2026-09-16): restoring over the shop's books. The
+// elevation window is tested through it, because act() above is now allowed at the counter without owner mode.
+func reserved() owner.Act {
+	subject, _ := id.New()
+	return owner.Act{Action: "backups.restore", SubjectID: subject, After: "backup-2026-09-16.mizanbak"}
+}
+
 func TestSetUp(t *testing.T) {
 	ctx := context.Background()
 	f := fake(t)
@@ -104,15 +111,15 @@ func TestElevationAndItsWindow(t *testing.T) {
 	f := fake(t)
 	f.setUp(t)
 
-	if err := f.svc.Require(ctx, act()); errs.CodeOf(err) != domain.CodeRequired {
-		t.Fatalf("an act outside owner mode = %v", err)
+	if err := f.svc.Require(ctx, reserved()); errs.CodeOf(err) != domain.CodeRequired {
+		t.Fatalf("a reserved act outside owner mode = %v", err)
 	}
 	status, err := f.svc.Elevate(ctx, pin)
 	if err != nil || status.ElevatedFor != domain.ElevationWindow {
 		t.Fatalf("Elevate = %+v, %v", status, err)
 	}
-	if err := f.svc.Require(ctx, act()); err != nil {
-		t.Fatalf("an act in owner mode was refused: %v", err)
+	if err := f.svc.Require(ctx, reserved()); err != nil {
+		t.Fatalf("a reserved act in owner mode was refused: %v", err)
 	}
 	if count(f.events(t), domain.EventGuardedAct) != 1 {
 		t.Fatal("the act was not recorded")
@@ -127,12 +134,12 @@ func TestElevationExpiresTwoMinutesAfterEntryNotAfterActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.clk.Advance(90 * time.Second)
-	if err := f.svc.Require(ctx, act()); err != nil {
+	if err := f.svc.Require(ctx, reserved()); err != nil {
 		t.Fatalf("refused inside the window: %v", err)
 	}
 	// The act above must NOT have extended the window: 90 s + 31 s is past two minutes from entry.
 	f.clk.Advance(31 * time.Second)
-	if err := f.svc.Require(ctx, act()); errs.CodeOf(err) != domain.CodeRequired {
+	if err := f.svc.Require(ctx, reserved()); errs.CodeOf(err) != domain.CodeRequired {
 		t.Fatalf("owner mode outlived its window, extended by activity: %v", err)
 	}
 	if s, _ := f.svc.Status(ctx); s.ElevatedFor != 0 {
@@ -157,8 +164,8 @@ func TestLockEndsOwnerModeAndIsRecordedOnlyWhenItEndsSomething(t *testing.T) {
 	if err != nil || status.ElevatedFor != 0 {
 		t.Fatalf("EndElevation = %+v, %v", status, err)
 	}
-	if err := f.svc.Require(ctx, act()); errs.CodeOf(err) != domain.CodeRequired {
-		t.Fatal("an act was allowed after Lock")
+	if err := f.svc.Require(ctx, reserved()); errs.CodeOf(err) != domain.CodeRequired {
+		t.Fatal("a reserved act was allowed after Lock")
 	}
 	if count(f.events(t), domain.EventElevationEnded) != 1 {
 		t.Fatal("ending owner mode was not recorded")
@@ -479,32 +486,57 @@ func TestOwnerModeIsNotGrantedWhenTheAttemptFailsToSave(t *testing.T) {
 	if _, err := svc.Elevate(ctx, pin); !errors.Is(err, ownertest.ErrInjected) {
 		t.Fatalf("Elevate over a failing store = %v", err)
 	}
-	if err := svc.Require(ctx, act()); errs.CodeOf(err) != domain.CodeRequired {
+	if err := svc.Require(ctx, reserved()); errs.CodeOf(err) != domain.CodeRequired {
 		t.Fatalf("owner mode was granted although the attempt did not save: %v", err)
 	}
 }
 
-func TestAllowedFollowsOwnerModeAndRecordsNothing(t *testing.T) {
+func TestEveryGuardedReadIsOpenAndRecordsNothing(t *testing.T) {
 	ctx := context.Background()
 	f := fake(t)
 	f.setUp(t)
-	if f.svc.Allowed(ctx) {
-		t.Fatal("allowed outside owner mode")
+	before := len(f.events(t))
+	// Since 2026-09-16 the figures are open at the counter: no PIN to read a cost, a profit or the drawer.
+	for range 2 {
+		if !f.svc.Allowed(ctx) {
+			t.Fatal("a guarded read was refused outside owner mode")
+		}
 	}
 	if _, err := f.svc.Elevate(ctx, pin); err != nil {
 		t.Fatal(err)
 	}
-	before := len(f.events(t))
-	for range 2 { // asked twice: a second look records no more than the first
-		if !f.svc.Allowed(ctx) {
-			t.Fatal("not allowed in owner mode")
+	if !f.svc.Allowed(ctx) {
+		t.Fatal("a guarded read was refused in owner mode")
+	}
+	// The elevation itself, and not one event more: looking is not an act.
+	if got := len(f.events(t)); got != before+1 {
+		t.Fatalf("events = %d, want %d — a guarded read was recorded in the owner's history", got, before+1)
+	}
+}
+
+// TestOnlyRestoreAndBringingInABackupStillAskForThePIN pins the owner's decision of 2026-09-16: a single-computer shop
+// with no login should not be stopped for a PIN to void a receipt or read a report. What stays reserved is the pair that
+// replaces the books wholesale. Every act is recorded either way.
+func TestOnlyRestoreAndBringingInABackupStillAskForThePIN(t *testing.T) {
+	ctx := context.Background()
+	f := fake(t)
+	f.setUp(t)
+	opened := []string{"sales.sale.void", "sales.discount", "customers.write_off", "customers.refund",
+		"customers.opening", "customers.reverse", "stock.adjust.lower", "stock.cost.correct", "stock.receipt.reverse",
+		"cashbook.withdrawal", "cashbook.expense", "cashbook.reverse", "catalog.price.change", "catalog.product.deactivate",
+		"catalog.import", "fx.rate.set", "fx.mode.set", "printers.settings", "sales.cash_note.set",
+		"backups.outside_folder", "backups.save_copy", "support.database"}
+	for _, action := range opened {
+		if err := f.svc.Require(ctx, owner.Act{Action: action}); err != nil {
+			t.Fatalf("%s asked for the PIN: %v", action, err)
 		}
 	}
-	if len(f.events(t)) != before {
-		t.Fatal("a guarded read was recorded in the owner's history")
+	if got := count(f.events(t), domain.EventGuardedAct); got != len(opened) {
+		t.Fatalf("acts recorded = %d, want %d — the history is what survives the gate", got, len(opened))
 	}
-	f.clk.Advance(domain.ElevationWindow)
-	if f.svc.Allowed(ctx) {
-		t.Fatal("allowed after owner mode ended")
+	for _, action := range []string{"backups.restore", "backups.import"} {
+		if err := f.svc.Require(ctx, owner.Act{Action: action}); errs.CodeOf(err) != domain.CodeRequired {
+			t.Fatalf("%s was allowed without the PIN: %v", action, err)
+		}
 	}
 }

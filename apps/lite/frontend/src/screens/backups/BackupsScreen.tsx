@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useClient } from "@/api/ClientContext";
-import type { BackupInfo, BackupStatus, Loss, RestoreResult } from "@/api/client";
+import type { BackupEvery, BackupInfo, BackupStatus, Loss, RestoreResult } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatInteger } from "@/i18n/numbers";
 import { formatAge, formatDateTime } from "@/i18n/time";
@@ -70,6 +70,13 @@ export function BackupsScreen() {
       await load();
     });
 
+  // How often the shop backs itself up (the owner's request, 2026-09-16). Anyone may change it; it is recorded.
+  const chooseEvery = (every: BackupEvery) =>
+    act(async () => {
+      setStatus(await client.backups.setBackupEvery(every));
+      await load();
+    });
+
   const saveCopy = (name: string) =>
     act(async () => {
       const result = await withOwner(() => client.backups.saveCopy(name));
@@ -118,6 +125,27 @@ export function BackupsScreen() {
       ) : null}
 
       {status ? <BackupStatusPanel status={status} /> : null}
+
+      <div className="space-y-2 rounded-md border border-border bg-surface-raised p-4">
+        <h3 className="font-semibold">{t("backups.every")}</h3>
+        <div role="group" aria-label={t("backups.every")} className="flex flex-wrap gap-2" data-testid="backup-every">
+          {(["daily", "weekly", "monthly", "manual"] as const).map((every) => (
+            <button
+              key={every}
+              type="button"
+              aria-pressed={(status?.every ?? "daily") === every}
+              onClick={() => void chooseEvery(every)}
+              disabled={busy}
+              className={`rounded-md px-3 py-1 text-sm ${
+                (status?.every ?? "daily") === every ? "bg-primary text-primary-fg" : "border border-border hover:bg-surface"
+              }`}
+            >
+              {t(`backups.every.${every}` as "backups.every.daily")}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-text-muted">{t("backups.every_hint")}</p>
+      </div>
 
       <div className="space-y-2 rounded-md border border-border bg-surface-raised p-4">
         <h3 className="font-semibold">{t("backups.outside")}</h3>

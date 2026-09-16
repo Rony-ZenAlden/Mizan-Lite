@@ -66,7 +66,7 @@ describe("TillScreen — adding", () => {
     const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
     renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { quote } }), locale: "en" });
     await settle();
-    const grid = screen.getByRole("group", { name: "Quick products" });
+    const grid = screen.getByRole("group", { name: "All products" });
     expect(within(grid).getAllByRole("button").map((b) => b.textContent)).toEqual(["Olive oil", "Apricot jam"]);
 
     await userEvent.click(within(grid).getByRole("button", { name: "Olive oil" }));
@@ -87,7 +87,7 @@ describe("TillScreen — adding", () => {
     const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
     renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { quote } }), locale: "en" });
     await settle();
-    const button = within(screen.getByRole("group", { name: "Quick products" })).getByRole("button", { name: "Apricot jam" });
+    const button = within(screen.getByRole("group", { name: "All products" })).getByRole("button", { name: "Apricot jam" });
     await userEvent.click(button);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(scanField()).toHaveFocus();
@@ -172,6 +172,7 @@ describe("TillScreen — the cart as Go priced it", () => {
     renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote } }), locale: "en" });
     await settle();
     await userEvent.type(scanField(), "6291{Enter}");
+    await userEvent.click(screen.getByTestId("till-details-toggle")); // the tender fields are shut until asked for
     await userEvent.selectOptions(screen.getByLabelText("Paid in"), "USD");
     await userEvent.type(screen.getByLabelText("Amount handed over"), "5");
     await settle();
@@ -522,5 +523,90 @@ describe("TillScreen — paying while the cart is being priced (found by the end
     await userEvent.keyboard("+");
     await settle();
     expect(checkout).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TillScreen — quick pay (owner's testing, 2026-09-16)", () => {
+  it("starts every sale on cash in the local currency, with the detail fields shut", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+
+    expect(screen.getByRole("button", { name: "Cash" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Charge in Syrian pound" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("till-details")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Amount handed over")).not.toBeInTheDocument();
+    // Nothing hidden is priced into the sale: no tender, no change currency, no discount.
+    expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ payment: "cash", settlement: "", tendered: "", tenderCurrency: "", changeCurrency: "", saleDiscount: "" }));
+  });
+
+  it("opens the detail fields when asked, and closing them puts the sale back to the exact amount", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+
+    await userEvent.click(screen.getByTestId("till-details-toggle"));
+    expect(screen.getByTestId("till-details-toggle")).toHaveAttribute("aria-expanded", "true");
+    await userEvent.type(screen.getByLabelText("Amount handed over"), "100000");
+    await settle();
+    expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ tendered: "100000" }));
+
+    await userEvent.click(screen.getByTestId("till-details-toggle"));
+    await settle();
+    expect(screen.queryByTestId("till-details")).not.toBeInTheDocument();
+    // The figure typed is gone from the sale, not merely hidden behind the panel.
+    expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ tendered: "" }));
+  });
+
+  it("choosing credit opens the panel, because paid-now is the field that choice is about", async () => {
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    expect(screen.queryByTestId("till-details")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "On credit" }));
+    await settle();
+    expect(screen.getByTestId("till-details")).toBeInTheDocument();
+    expect(screen.getByLabelText("Paid now (optional)")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Cash" }));
+    await settle();
+    expect(screen.queryByTestId("till-details")).not.toBeInTheDocument();
+  });
+});
+
+describe("TillScreen — every product on the grid (owner's testing, 2026-09-16)", () => {
+  it("shows every product, not only the ones on a quick button, with the quick ones first", async () => {
+    // Two pinned (slots 1 and 2) and three that were never pinned: all five must be reachable without a search.
+    const rice = aProduct({ id: "rice", nameAr: "رز", nameEn: "Rice", unitCode: "kg", quickSlot: 0 });
+    const sugar = aProduct({ id: "sugar", nameAr: "سكر", nameEn: "Sugar", unitCode: "kg", quickSlot: 0 });
+    const beans = aProduct({ id: "beans", nameAr: "فول", nameEn: "Beans", unitCode: "tin", quickSlot: 0 });
+    const all = async () => [rice, oil, beans, jam, sugar];
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products: all }, till: { quote: async () => aQuote() } }), locale: "en" });
+    await settle();
+
+    const grid = screen.getByRole("group", { name: "All products" });
+    expect(within(grid).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Olive oil", // quick slot 1
+      "Apricot jam", // quick slot 2
+      "Beans", // then the rest, by name
+      "Rice",
+      "Sugar",
+    ]);
+    // The pinned ones are still marked as such.
+    expect(within(grid).getByRole("button", { name: "Olive oil" })).toHaveAttribute("data-quick", "true");
+    expect(within(grid).getByRole("button", { name: "Rice" })).not.toHaveAttribute("data-quick");
+    // And the grid scrolls rather than growing without end.
+    expect(grid.className).toContain("overflow-y-auto");
+  });
+
+  it("says so plainly when the shop has no products at all", async () => {
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products: async () => [] } }), locale: "en" });
+    await settle();
+    expect(screen.queryByTestId("till-products")).not.toBeInTheDocument();
+    expect(screen.getByText("No products yet — add them on the Products screen.")).toBeInTheDocument();
   });
 });

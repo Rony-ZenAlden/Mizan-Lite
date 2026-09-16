@@ -60,8 +60,7 @@ for (const locale of LOCALES) {
       await expectReadable(dialog.getByRole("status").last(), readable(label(locale, "import.ready", { count: "2", stock: "1" })));
       await checkStructure(page, locale, "import preview");
       await dialog.getByRole("button", { name: label(locale, "import.apply", { count: "2" }) }).click();
-      await enterPin(page, locale);
-      await expect(dialog).toBeHidden();
+      await expect(dialog).toBeHidden(); // no PIN since 2026-09-16
       const products = await call<{ nameAr: string; id: string }[]>(page.request, "Catalog", "Products", { text: "", includeInactive: true });
       expect(products.length).toBe(before + 2);
 
@@ -117,7 +116,8 @@ for (const locale of LOCALES) {
       const picker = page.getByRole("dialog", { name: label(locale, "customers.pick_title") });
       await picker.getByRole("button", { name: /سمير الحداد/ }).click();
       await expect(picker).toBeHidden();
-      await page.getByRole("button", { name: label(locale, "till.pay") }).click();
+      // exact: the payment-details toggle also carries the word "Pay" in English (owner's UX changes, 2026-09-16)
+      await page.getByRole("button", { name: label(locale, "till.pay"), exact: true }).click();
       const receipt = receiptDialog(page);
       await expect(receipt.getByTestId("receipt-credit")).toBeVisible();
       await expect(receipt.getByRole("status")).toBeVisible(); // printed by itself (Q-L7.2)
@@ -142,7 +142,7 @@ for (const locale of LOCALES) {
       expect(st.entries.at(-1)?.kind === "payment" || st.balance === "0").toBeTruthy();
     });
 
-    test(`J5 a void states the cash to hand back before the PIN — ${locale}`, async ({ page }) => {
+    test(`J5 a void states the cash to hand back before it is confirmed — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
       const day = await call<{ sales: { id: string; receiptNo: number; status: string }[] }>(page.request, "Sales", "List", "");
       const target = day.sales.filter((s) => s.status === "posted").at(-1)!;
@@ -153,14 +153,13 @@ for (const locale of LOCALES) {
       await expect(receipt.getByTestId("void-hand-back")).toBeVisible();
       await receipt.getByLabel(label(locale, "receipt.void_reason")).fill("e2e");
       await checkStructure(page, locale, "void form");
-      await receipt.getByRole("button", { name: label(locale, "receipt.void_confirm") }).click();
-      await enterPin(page, locale);
+      await receipt.getByRole("button", { name: label(locale, "receipt.void_confirm") }).click(); // no PIN since 2026-09-16
       await expect(receipt.getByTestId("receipt")).toContainText(readable(label(locale, "receipt.voided", { reason: "" })).replace(/[—\s-]+$/, ""));
       const after = await call<{ sales: { id: string; status: string }[] }>(page.request, "Sales", "List", "");
       expect(after.sales.find((s) => s.id === target.id)?.status).toBe("voided");
     });
 
-    test(`J6 the drawer: a count at the counter, an expense with the PIN — ${locale}`, async ({ page }) => {
+    test(`J6 the drawer: a count and an expense, both at the counter — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
       await go(page, locale, "nav.cash");
       await page.getByTestId("drawer-SYP").getByRole("button", { name: label(locale, "cash.count.action") }).click();
@@ -174,30 +173,31 @@ for (const locale of LOCALES) {
       await expense.getByLabel(label(locale, "cash.category")).selectOption("electricity");
       await checkStructure(page, locale, "expense dialog");
       await expense.getByRole("button", { name: label(locale, "action.save") }).click();
-      await enterPin(page, locale);
-      await expect(expense).toBeHidden();
+      await expect(expense).toBeHidden(); // no PIN since 2026-09-16
       const drawer = await call<{ entries: { kind: string }[] }>(page.request, "Cash", "Drawer", "");
       expect(drawer.entries.map((e) => e.kind)).toEqual(expect.arrayContaining(["count", "expense"]));
     });
 
-    test(`J7 reports through the PIN, cleared when owner mode ends — ${locale}`, async ({ page }) => {
+    test(`J7 every report opens at the counter, with no PIN — ${locale}`, async ({ page }) => {
+      // Until 2026-09-16 this journey entered the PIN and then watched the figures disappear when owner mode ended. The
+      // owner asked for the shop's own figures to be readable at the counter; what it proves now is that they simply are.
       await reset(page, "seeded", locale);
       await go(page, locale, "nav.reports");
-      await enterPin(page, locale);
       for (const tab of ["day", "month", "products", "stock"]) {
         await page.getByRole("tab", { name: label(locale, `reports.tab.${tab}`) }).click();
         await expect(page.getByRole("button", { name: label(locale, "export.xlsx") })).toBeVisible();
         await checkStructure(page, locale, `reports ${tab}`);
       }
-      await page.getByRole("button", { name: label(locale, "header.lock") }).click();
-      await expect(page.getByRole("button", { name: label(locale, "reports.show") })).toBeVisible();
-      await expect(page.getByRole("button", { name: label(locale, "export.xlsx") })).toBeHidden();
+      // No PIN was ever asked for, and the profit figures are on screen.
+      await expect(page.getByRole("dialog", { name: label(locale, "pin.title") })).toBeHidden();
+      await expect(page.getByRole("button", { name: label(locale, "reports.show") })).toBeHidden();
+      const status = await call<{ elevatedSeconds: number }>(page.request, "Owner", "Status");
+      expect(status.elevatedSeconds).toBe(0);
     });
 
     test(`J8 exports: every report and the ledger, to Excel and PDF — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
-      await go(page, locale, "nav.reports");
-      await enterPin(page, locale);
+      await go(page, locale, "nav.reports"); // no PIN since 2026-09-16
       for (const tab of ["day", "month", "products", "stock"]) {
         await page.getByRole("tab", { name: label(locale, `reports.tab.${tab}`) }).click();
         for (const format of ["xlsx", "pdf"]) {
@@ -223,8 +223,7 @@ for (const locale of LOCALES) {
       const outside = join(saveDir, "usb");
       mkdirSync(outside, { recursive: true });
       await setFiles(page, { folder: outside });
-      await page.getByRole("button", { name: label(locale, "backups.outside_change") }).click();
-      await enterPin(page, locale);
+      await page.getByRole("button", { name: label(locale, "backups.outside_change") }).click(); // no PIN since 2026-09-16
       await expect(page.getByText(outside)).toBeVisible();
       await checkStructure(page, locale, "backups");
 
@@ -234,6 +233,8 @@ for (const locale of LOCALES) {
       await expect(restore.getByTestId("restore-loss")).toBeVisible();
       await checkStructure(page, locale, "restore dialog");
       await restore.getByRole("button", { name: label(locale, "restore.confirm") }).click();
+      // A restore is one of the two acts that still ask (owner.ReservedActs): it replaces the shop's books wholesale.
+      await enterPin(page, locale);
       await expect(restore.getByRole("status")).toBeVisible();
       await expect.poll(async () => (await call<{ restored?: unknown }>(page.request, "Backups", "Status")).restored, { timeout: 20_000 }).toBeTruthy();
       await page.goto("/#/about");
@@ -247,8 +248,7 @@ for (const locale of LOCALES) {
       await go(page, locale, "nav.rates");
       await page.getByLabel(label(locale, "rates.rate_label", { currency: label(locale, "currency.SYP") })).fill("15300");
       await checkStructure(page, locale, "rates");
-      await page.getByRole("button", { name: label(locale, "rates.save") }).click();
-      await enterPin(page, locale);
+      await page.getByRole("button", { name: label(locale, "rates.save") }).click(); // no PIN since 2026-09-16
       await expect.poll(async () => (await call<{ rate: string }>(page.request, "FX", "Current")).rate).toMatch(/^15,?300/);
 
       const other: Locale = locale === "ar" ? "en" : "ar";

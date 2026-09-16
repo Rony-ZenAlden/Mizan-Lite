@@ -21,17 +21,42 @@ const (
 	KeyShopAddress   = "shop.address"
 	KeyReceiptFooter = "receipt.footer"
 	KeyBackupFolder  = "backup.outside_folder"
+	KeyBackupEvery   = "backup.every"
 )
 
 // Codes for the printing and backup settings.
 const (
-	CodeInvalidPaper      = "lite.settings.invalid_paper"
-	CodeInvalidPath       = "lite.settings.invalid_print_path"
-	CodeInvalidAuto       = "lite.settings.invalid_auto_print"
-	CodeInvalidFlag       = "lite.settings.invalid_flag"
-	CodeTextTooLong       = "lite.settings.text_too_long"
-	CodeFolderNotAbsolute = "lite.settings.folder_not_absolute"
+	CodeInvalidPaper       = "lite.settings.invalid_paper"
+	CodeInvalidPath        = "lite.settings.invalid_print_path"
+	CodeInvalidAuto        = "lite.settings.invalid_auto_print"
+	CodeInvalidFlag        = "lite.settings.invalid_flag"
+	CodeTextTooLong        = "lite.settings.text_too_long"
+	CodeFolderNotAbsolute  = "lite.settings.folder_not_absolute"
+	CodeInvalidBackupEvery = "lite.settings.invalid_backup_every"
 )
+
+// How often the shop is backed up by itself (the owner's request, 2026-09-16). A backup on close and a backup before a
+// migration or a restore happen whatever this says: they are the ones that save a shop from the thing about to happen.
+// This setting governs only the unattended one the scheduler takes.
+const (
+	BackupDaily   = "daily"
+	BackupWeekly  = "weekly"
+	BackupMonthly = "monthly"
+	BackupManual  = "manual" // only when someone presses the button
+)
+
+// DefaultBackupEvery keeps a shop that never opens the setting exactly as protected as it was before the setting existed.
+const DefaultBackupEvery = BackupDaily
+
+// ParseBackupEvery reads how often the scheduled backup runs.
+func ParseBackupEvery(raw string) (string, error) {
+	switch v := strings.ToLower(strings.TrimSpace(raw)); v {
+	case BackupDaily, BackupWeekly, BackupMonthly, BackupManual:
+		return v, nil
+	default:
+		return "", errs.Validation(CodeInvalidBackupEvery, "a backup frequency is daily, weekly, monthly or manual").WithParam("value", raw)
+	}
+}
 
 // Automatic printing (Q-L7.2).
 const (
@@ -158,6 +183,8 @@ func (s *Settings) storedPrinting(key, value string) (handled bool, err error) {
 		r.Footer, err = ParseText(value, "footer", MaxLineRunes)
 	case KeyBackupFolder:
 		s.BackupFolder, err = ParseFolder(value)
+	case KeyBackupEvery:
+		s.BackupEvery, err = ParseBackupEvery(value)
 	default:
 		return false, nil
 	}
@@ -166,7 +193,7 @@ func (s *Settings) storedPrinting(key, value string) (handled bool, err error) {
 
 // PrintingUpdate is a change to the printing and backup settings; nil leaves a field as it is.
 type PrintingUpdate struct {
-	Printer, PaperMM, Path, AutoPrint, Drawer, Phone, Address, Footer, BackupFolder *string
+	Printer, PaperMM, Path, AutoPrint, Drawer, Phone, Address, Footer, BackupFolder, BackupEvery *string
 }
 
 func (s Settings) applyPrinting(u PrintingUpdate, changes []Change) (Settings, []Change, error) {
@@ -208,6 +235,7 @@ func (s Settings) applyPrinting(u PrintingUpdate, changes []Change) (Settings, [
 			return p, err
 		}},
 		{u.BackupFolder, KeyBackupFolder, s.BackupFolder, func(v string) (string, error) { p, err := ParseFolder(v); next.BackupFolder = p; return p, err }},
+		{u.BackupEvery, KeyBackupEvery, s.BackupEvery, func(v string) (string, error) { p, err := ParseBackupEvery(v); next.BackupEvery = p; return p, err }},
 	}
 	for _, f := range fields {
 		if f.raw == nil {

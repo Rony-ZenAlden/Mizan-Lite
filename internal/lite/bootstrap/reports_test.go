@@ -567,19 +567,26 @@ func TestTheC6FixtureThroughTheRealModules(t *testing.T) {
 	}
 }
 
-// TestTheReportsAndCashBookReachTheRealOwner proves the new adapters: the owner module's refusal, a money entry in the owner's
-// history, a count against the reports' own expected figure, and the module constants the adapters copy.
+// TestTheReportsAndCashBookReachTheRealOwner proves the new adapters: a money entry in the owner's history, a count against
+// the reports' own expected figure, and the module constants the adapters copy.
+//
+// Since 2026-09-16 neither a report nor an expense asks for the PIN (owner.ReservedActs), so the proof that the adapters
+// reach the REAL owner service is the record they leave, not a refusal.
 func TestTheReportsAndCashBookReachTheRealOwner(t *testing.T) {
 	s := openShop(t, 65)
 	if reports.CodeOwnerRequired != ownerdomain.CodeRequired || cashbook.CodeOwnerRequired != ownerdomain.CodeRequired {
 		t.Fatal("a refusal code is not the owner's")
 	}
 	_, _ = s.app.Owner.EndElevation(s.ctx)
-	if _, err := s.app.Reports.Day(s.ctx, ""); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("a report outside owner mode: %v", err)
+	if _, err := s.app.Reports.Day(s.ctx, ""); err != nil {
+		t.Fatalf("a report at the counter: %v", err)
 	}
-	if _, err := s.app.Cashbook.Record(s.ctx, cashbook.RecordInput{Kind: cashbookdomain.KindExpense, Currency: "SYP", Amount: "1000", Category: "rent"}); errs.CodeOf(err) != ownerdomain.CodeRequired {
-		t.Fatalf("an expense outside owner mode: %v", err)
+	countedBefore := guardedActs(t, s.app)
+	if _, err := s.app.Cashbook.Record(s.ctx, cashbook.RecordInput{Kind: cashbookdomain.KindExpense, Currency: "SYP", Amount: "1000", Category: "rent"}); err != nil {
+		t.Fatalf("an expense at the counter: %v", err)
+	}
+	if guardedActs(t, s.app) != countedBefore+1 {
+		t.Fatal("the expense is not in the owner's history")
 	}
 	before := guardedActs(t, s.app)
 	s.owner()

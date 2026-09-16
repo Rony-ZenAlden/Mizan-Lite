@@ -13,6 +13,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/guide"
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
+	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sheets"
 )
 
@@ -95,10 +96,8 @@ func TestProductsImportFromExcelAllOrNothing(t *testing.T) {
 		t.Fatalf("no problems must reach the screen as an empty list, not null: %s", raw)
 	}
 	apply = api.ImportApplyInput{Path: files.open, Digest: clean.Data.Digest}
-	if r := set.Catalog.ImportApply(apply); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("an import at the counter")
-	}
-	elevate(t, set)
+	// (An import no longer asks for the PIN — owner.ReservedActs, 2026-09-16. It is applied once, below, because applying
+	// it twice would refuse on duplicate names.)
 	if r := set.Catalog.ImportApply(api.ImportApplyInput{Path: files.open, Digest: "stale"}); codeOf(t, r) != api.CodeImportChanged {
 		t.Fatal("a changed workbook applied")
 	}
@@ -191,10 +190,8 @@ func TestAboutGuidesAndTheSupportFile(t *testing.T) {
 		t.Fatalf("diagnostics %s", content[:min(400, len(content))])
 	}
 
-	if r := set.App.SaveSupportFile(true); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("the database in a support file at the counter")
-	}
-	elevate(t, set)
+	// The database may be put in a support file at the counter now (2026-09-16): the owner asked for the PIN to guard a
+	// restore and nothing else. It is still only included when the ticked box asks for it.
 	withDB := set.App.SaveSupportFile(true)
 	names, _ = unzipAll(t, withDB.Data.Path)
 	found := false
@@ -226,4 +223,188 @@ func unzipAll(t *testing.T, path string) (map[string]bool, string) {
 		all.Write(body)
 	}
 	return names, all.String()
+}
+
+// TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN is the owner's decision of 2026-09-16 held at the boundary the
+// frontend actually calls: a single-computer shop with no login should not be stopped for a PIN to void a receipt, give a
+// discount, take an expense out of the drawer, read a report or export it. What stays reserved is the pair that replaces
+// the shop's books wholesale — a restore, and bringing in a backup file to restore from.
+//
+// The acts are still written to the owner's history: the record is what survives the gate.
+func TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN(t *testing.T) {
+	set, oil := tillShop(t)
+	elevate(t, set)
+	if r := set.Stock.Opening(api.ReceiveInput{ProductID: oil.ID, Quantity: "20", CostMode: "total", Cost: "40", Currency: "USD"}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	abu := set.Customers.Create(api.CustomerInput{Name: "أبو محمد"}).Data
+	set.Owner.EndElevation()
+	if s := set.Owner.Status(); s.Data.ElevatedSeconds != 0 {
+		t.Fatal("this test must run at the counter, not in owner mode")
+	}
+
+	// A sale, then the acts a shop does all day — none of them elevated.
+	cart := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "2"}}}
+	sale := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: quoted(t, set, cart).Token})
+	if !sale.OK {
+		t.Fatal(sale.Error)
+	}
+	discounted := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "1", DiscountPercent: "10"}}}
+	if r := set.Till.Checkout(api.CheckoutInput{Cart: discounted, Token: quoted(t, set, discounted).Token}); !r.OK {
+		t.Fatalf("a discount at the counter = %+v", r.Error)
+	}
+	if r := set.Sales.Void(api.VoidInput{SaleID: sale.Data.ID, Reason: "أعاد الزيت"}); !r.OK {
+		t.Fatalf("a void at the counter = %+v", r.Error)
+	}
+	if r := set.Cash.Record(api.CashRecordInput{Kind: "expense", Currency: "SYP", Amount: "25000", Category: "electricity", FromDrawer: true}); !r.OK {
+		t.Fatalf("an expense at the counter = %+v", r.Error)
+	}
+	if r := set.Cash.Record(api.CashRecordInput{Kind: "withdrawal", Currency: "SYP", Amount: "10000"}); !r.OK {
+		t.Fatalf("a withdrawal at the counter = %+v", r.Error)
+	}
+	if r := set.Customers.Opening(api.DebtAmountInput{CustomerID: abu.ID, Currency: "SYP", Amount: "50000", Note: "صفحة 3"}); !r.OK {
+		t.Fatalf("an opening balance at the counter = %+v", r.Error)
+	}
+	if r := set.Customers.WriteOff(api.DebtAmountInput{CustomerID: abu.ID, Currency: "SYP", Amount: "10000", Note: "خصم"}); !r.OK {
+		t.Fatalf("a write-off at the counter = %+v", r.Error)
+	}
+	if r := set.Stock.Adjust(api.AdjustInput{ProductID: oil.ID, Direction: "out", Quantity: "1", Reason: "expired"}); !r.OK {
+		t.Fatalf("stock written off at the counter = %+v", r.Error)
+	}
+	if r := set.Stock.CorrectCost(api.CorrectCostInput{ProductID: oil.ID, AverageCost: "2.10", Note: "فاتورة"}); !r.OK {
+		t.Fatalf("the average cost corrected at the counter = %+v", r.Error)
+	}
+	if r := set.FX.SetRate(api.SetRateInput{Rate: "15500", Note: "السوق"}); !r.OK {
+		t.Fatalf("the rate at the counter = %+v", r.Error)
+	}
+
+	// The figures, which the owner asked to be readable without a PIN.
+	for name, ok := range map[string]bool{
+		"day":      set.Reports.Day("").OK,
+		"month":    set.Reports.Month("").OK,
+		"products": set.Reports.Products(api.RangeInput{}).OK,
+		"stock":    set.Reports.Stock(api.RangeInput{}).OK,
+		"drawer":   set.Cash.Drawer("").OK,
+		"value":    set.Stock.Valuation().OK,
+	} {
+		if !ok {
+			t.Errorf("%s was refused at the counter", name)
+		}
+	}
+	if d := set.Cash.Drawer(""); !d.Data.OwnerView {
+		t.Error("the drawer is still the counter's cut-down view")
+	}
+
+	// Every one of those acts is in the owner's history.
+	events := set.Owner.Events(200)
+	acts := 0
+	for _, e := range events.Data {
+		if e.Kind == "guarded_act" {
+			acts++
+		}
+	}
+	if acts < 9 {
+		t.Errorf("acts recorded = %d, want at least 9 — the history is what survives the gate", acts)
+	}
+
+	// And the reserved pair still asks, exactly as before: a real backup, refused at the counter.
+	taken := set.Backups.TakeNow()
+	if !taken.OK {
+		t.Fatal(taken.Error)
+	}
+	if code := codeOf(t, set.Backups.Restore(taken.Data.Name)); code != ownerdomain.CodeRequired {
+		t.Fatalf("a restore at the counter = %s", code)
+	}
+}
+
+// TestTheBackupFrequencyIsTheShopsToChoose is the owner's request of 2026-09-16: a shop that does not want a backup every
+// day may ask for weekly, monthly, or none at all — and the backups that save it from an upgrade, a restore or a close
+// still happen whatever it chose.
+func TestTheBackupFrequencyIsTheShopsToChoose(t *testing.T) {
+	set, _ := tillShop(t)
+
+	if st := set.Backups.Status(); !st.OK || st.Data.Every != "daily" {
+		t.Fatalf("a fresh shop is backed up daily, as it always was: %+v", st.Data)
+	}
+	for _, every := range []string{"weekly", "monthly", "manual", "daily"} {
+		st := set.Backups.SetBackupEvery(every)
+		if !st.OK || st.Data.Every != every {
+			t.Fatalf("SetBackupEvery(%q) = %+v", every, st)
+		}
+	}
+	if code := codeOf(t, set.Backups.SetBackupEvery("hourly")); code != settingsdomain.CodeInvalidBackupEvery {
+		t.Fatalf("an unknown frequency = %s", code)
+	}
+	// Each change is in the owner's history, like every other setting.
+	events := set.Owner.Events(50)
+	changes := 0
+	for _, e := range events.Data {
+		if e.Action == api.ActBackupEvery {
+			changes++
+		}
+	}
+	if changes != 4 {
+		t.Fatalf("frequency changes recorded = %d, want 4", changes)
+	}
+	// Taking one by hand is never governed by the setting.
+	if st := set.Backups.SetBackupEvery("manual"); !st.OK {
+		t.Fatal(st.Error)
+	}
+	if taken := set.Backups.TakeNow(); !taken.OK {
+		t.Fatalf("a backup by hand under \"manual only\" = %+v", taken.Error)
+	}
+}
+
+// TestTheShopsHeaderIsOnEveryPrintedThing is the owner's request of 2026-09-16: the shop's name, address and telephone are
+// saved once, in the printer settings, and appear the same on a receipt and on an A4 report — on paper and in a workbook.
+func TestTheShopsHeaderIsOnEveryPrintedThing(t *testing.T) {
+	set, oil := tillShop(t)
+	files := &fakeFiles{}
+	set.SetFiles(files)
+	saved := set.Printers.Save(api.PrinterSettingsInput{Printer: "XP-80", PaperMM: "80", Path: "driver", AutoPrint: "none",
+		Phone: "0933 123 456", Address: "شارع القوتلي، عفرين", Footer: "أهلاً بكم"})
+	if !saved.OK {
+		t.Fatal(saved.Error)
+	}
+	// Saved once and kept: read back through a second call, as a restart would.
+	if again := set.Printers.Settings(); again.Data.Phone != "0933 123 456" || again.Data.Address != "شارع القوتلي، عفرين" || again.Data.Footer != "أهلاً بكم" {
+		t.Fatalf("the shop's header was not kept: %+v", again.Data)
+	}
+
+	cart := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "1"}}}
+	sale := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: quoted(t, set, cart).Token})
+	if !sale.OK {
+		t.Fatal(sale.Error)
+	}
+
+	// On the receipt.
+	receipt, err := api.PrintDocument(set, "sale", sale.Data.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"بقالية المونة", "شارع القوتلي، عفرين", "0933 123 456", "أهلاً بكم"} {
+		if !strings.Contains(textOf(receipt), want) {
+			t.Errorf("the receipt does not carry %q", want)
+		}
+	}
+
+	// And on an A4 report, which used to carry the name alone.
+	dir := t.TempDir()
+	files.save = filepath.Join(dir, "day.pdf")
+	if r := set.Export.Report(api.ExportReportInput{Kind: "day", Format: "pdf"}); !r.OK {
+		t.Fatal(r.Error)
+	}
+	pdf, err := os.ReadFile(files.save)
+	if err != nil || len(pdf) == 0 {
+		t.Fatalf("the report was not written: %v", err)
+	}
+	day, err := api.ExportDocument(set, "report", api.ExportReportInput{Kind: "day", Format: "pdf"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"بقالية المونة", "شارع القوتلي، عفرين", "0933 123 456"} {
+		if !strings.Contains(textOf(day), want) {
+			t.Errorf("the A4 report does not carry %q", want)
+		}
+	}
 }

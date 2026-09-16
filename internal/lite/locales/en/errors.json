@@ -169,6 +169,7 @@
   "lite.sales.void_reason_too_long": "The reason is longer than {max} characters.",
   "lite.settings.folder_not_absolute": "Choose a folder.",
   "lite.settings.invalid_auto_print": "Choose when receipts print.",
+  "lite.settings.invalid_backup_every": "Choose how often a backup is taken.",
   "lite.settings.invalid_cash_note": "The smallest note is a whole number from 1 to {max}.",
   "lite.settings.invalid_flag": "Choose yes or no.",
   "lite.settings.invalid_locale": "The chosen language is not supported.",

@@ -7,7 +7,6 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 )
 
@@ -72,13 +71,8 @@ func TestTheDebtBookThroughTheBindings(t *testing.T) {
 		t.Fatalf("RecordPayment = %+v", paid)
 	}
 
-	// The owner's acts refuse outside owner mode.
-	if r := set.Customers.Opening(api.DebtAmountInput{CustomerID: abu.ID, Currency: "SYP", Amount: "50000", Note: "صفحة 3"}); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("an opening outside owner mode")
-	}
-	if r := set.Customers.Reverse(api.ReverseEntryInput{EntryID: paid.Data.ID, Reason: "x"}); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a reversal outside owner mode")
-	}
+	// (Openings and reversals no longer ask for the PIN — owner.ReservedActs, 2026-09-16. They are not run here because
+	// the assertions below expect the balance this shop has now; see TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN.)
 	elevate(t, set)
 	opening := set.Customers.Opening(api.DebtAmountInput{CustomerID: abu.ID, Currency: "SYP", Amount: "50000", Note: "صفحة 3"})
 	if !opening.OK || opening.Data.Amount != "50000" || opening.Data.Note != "صفحة 3" {

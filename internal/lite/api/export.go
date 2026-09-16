@@ -10,7 +10,6 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/documents"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sheets"
 	"github.com/mizan-erp/mizan/internal/lite/typeset"
 )
@@ -80,14 +79,18 @@ func (w words) render(x exportable, format string) ([]byte, error) {
 			Running:   w.user(shop) + " — " + x.title,
 			Footer:    w.t("doc.page", "page", "{page}", "pages", "{pages}", "printed", w.now()),
 			Meta:      documents.Meta{Title: x.title, Author: shop, Created: "D:" + w.app.Now().UTC().Format("20060102150405") + "Z"},
-			Blocks:    append([]documents.Block{documents.Title{Text: x.title, Subtitle: w.user(shop) + " · " + x.subtitle}}, x.blocks...),
+			Blocks:    append(w.paperHeader(x), x.blocks...),
 		}
 		return documents.PDF(w.ts, doc), nil
 	case FormatXLSX:
 		for i := range x.sheets {
 			plainCells(x.sheets[i].Rows)
 			x.sheets[i].RightToLeft = !w.english()
-			header := [][]sheets.Cell{{sheets.Text(x.title).Bolded()}, {sheets.Text(shop + " · " + x.subtitle)}, {sheets.Text(w.t("doc.printed_at", "printed", w.now()))}, {}}
+			header := [][]sheets.Cell{{sheets.Text(x.title).Bolded()}, {sheets.Text(shop + " · " + x.subtitle)}}
+			if line := w.shopDetails(); line != "" {
+				header = append(header, []sheets.Cell{sheets.Text(line)})
+			}
+			header = append(header, []sheets.Cell{sheets.Text(w.t("doc.printed_at", "printed", w.now()))}, []sheets.Cell{})
 			if x.sheets[i].Frozen > 0 {
 				x.sheets[i].Frozen += len(header)
 			}
@@ -96,6 +99,33 @@ func (w words) render(x exportable, format string) ([]byte, error) {
 		return sheets.XLSX(sheets.Workbook{Sheets: x.sheets, Title: x.title, Creator: shop, Created: w.app.Now().UTC().Format("2006-01-02T15:04:05Z")})
 	}
 	return nil, errs.Validation(CodeUnknownFormat, "xlsx or pdf").WithParam("value", format)
+}
+
+// paperHeader is the shop's own heading on an A4 export: its name, then the address and telephone it set for its receipts
+// (the owner's request, 2026-09-16 — the same header on a receipt and on a report, not one of each).
+func (w words) paperHeader(x exportable) []documents.Block {
+	blocks := []documents.Block{documents.Title{Text: x.title, Subtitle: w.user(w.settings.ShopName) + " · " + x.subtitle}}
+	r := w.settings.Receipt
+	if r.Address != "" {
+		blocks = append(blocks, documents.Paragraph{Text: w.user(r.Address), Small: true})
+	}
+	if r.Phone != "" {
+		blocks = append(blocks, documents.Paragraph{Text: w.fig(r.Phone), Small: true})
+	}
+	return blocks
+}
+
+// shopDetails is the address and telephone on one line, for a workbook's heading; empty when neither is set.
+func (w words) shopDetails() string {
+	r := w.settings.Receipt
+	switch {
+	case r.Address != "" && r.Phone != "":
+		return r.Address + " · " + r.Phone
+	case r.Address != "":
+		return r.Address
+	default:
+		return r.Phone
+	}
 }
 
 var unsafeName = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f\x{2066}-\x{2069}]+`)
@@ -172,9 +202,6 @@ func reportContent(ctx context.Context, app *bootstrap.App, w words, in ExportRe
 		s, err := stockReportDTO(ctx, app, RangeInput{From: in.From, To: in.To})
 		return w.stockExport(s), err
 	case "drawer":
-		if !app.Owner.Allowed(ctx) {
-			return exportable{}, errs.Permission(ownerdomain.CodeRequired, "the drawer's export lists expenses")
-		}
 		d, err := drawerDTO(ctx, app, in.Date)
 		return w.drawerExport(d), err
 	}
@@ -218,9 +245,6 @@ func (e *Export) DebtLedger(in ExportRangeInput) envelope.Result[ExportResultDTO
 
 // ledgerContent is the export's content, for both formats.
 func ledgerContent(ctx context.Context, app *bootstrap.App, w words, in ExportRangeInput) (exportable, error) {
-	if !app.Owner.Allowed(ctx) {
-		return exportable{}, errs.Permission(ownerdomain.CodeRequired, "the debt ledger is the owner's")
-	}
 	from, to, err := app.Reports.Range(in.From, in.To)
 	if err != nil {
 		return exportable{}, err
@@ -253,9 +277,6 @@ func (e *Export) SalesHistory(in ExportRangeInput) envelope.Result[ExportResultD
 
 // salesContent is the export's content, for both formats.
 func salesContent(ctx context.Context, app *bootstrap.App, w words, in ExportRangeInput) (exportable, error) {
-	if !app.Owner.Allowed(ctx) {
-		return exportable{}, errs.Permission(ownerdomain.CodeRequired, "the sales history carries costs")
-	}
 	from, to, err := app.Reports.Range(in.From, in.To)
 	if err != nil {
 		return exportable{}, err

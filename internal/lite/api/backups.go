@@ -44,6 +44,8 @@ type BackupStatusDTO struct {
 	OutsideStale  bool         `json:"outsideStale"`
 	OutsideFailed string       `json:"outsideFailed"`
 	Restored      *RestoredDTO `json:"restored"`
+	// Every is how often the shop backs itself up: daily, weekly, monthly or manual (2026-09-16).
+	Every string `json:"every"`
 }
 
 // LossDTO is a restore's warning: the backup, and what restoring it removes.
@@ -72,7 +74,7 @@ func backupDTO(app *bootstrap.App, e backups.Entry) BackupDTO {
 }
 
 func statusDTO(app *bootstrap.App, st backups.Status) BackupStatusDTO {
-	out := BackupStatusDTO{Folder: st.Folder, OutsideStale: st.OutsideStale, OutsideFailed: st.OutsideFailed}
+	out := BackupStatusDTO{Folder: st.Folder, OutsideStale: st.OutsideStale, OutsideFailed: st.OutsideFailed, Every: st.Every}
 	if st.Last != nil {
 		b := backupDTO(app, *st.Last)
 		out.Last = &b
@@ -153,9 +155,7 @@ func (b *Backups) RestoreFromFile() envelope.Result[BackupDTO] {
 		if err != nil {
 			return BackupDTO{}, err
 		}
-		if !app.Owner.Allowed(ctx) {
-			return BackupDTO{}, requireOwner(ctx, app, backups.ActImport, "")
-		}
+		// Bringing in a backup file is reserved (owner.ReservedActs); app.Safety.Import asks, and records it.
 		files, err := b.core.dialogs()
 		if err != nil {
 			return BackupDTO{}, err
@@ -181,9 +181,7 @@ func (b *Backups) SaveCopy(name string) envelope.Result[ExportResultDTO] {
 		if err != nil {
 			return ExportResultDTO{}, err
 		}
-		if !app.Owner.Allowed(ctx) {
-			return ExportResultDTO{}, requireOwner(ctx, app, backups.ActSaveCopy, name)
-		}
+		// Saving a copy is open at the counter since 2026-09-16; app.Safety.SaveCopy records it.
 		files, err := b.core.dialogs()
 		if err != nil {
 			return ExportResultDTO{}, err
@@ -197,6 +195,32 @@ func (b *Backups) SaveCopy(name string) envelope.Result[ExportResultDTO] {
 	})
 }
 
+// ActBackupEvery is the owner's history entry for changing how often the shop backs itself up.
+const ActBackupEvery = "backups.every"
+
+// SetBackupEvery chooses how often the shop is backed up by itself: daily, weekly, monthly, or manual only (the owner's
+// request, 2026-09-16). The backups taken on close, before a migration and before a restore are not affected: a shop that
+// chose "manual only" still gets the ones that save it from what is about to happen.
+func (b *Backups) SetBackupEvery(every string) envelope.Result[BackupStatusDTO] {
+	return call(b.core, "Backups.SetBackupEvery", func(ctx context.Context, app *bootstrap.App) (BackupStatusDTO, error) {
+		chosen, err := settingsdomain.ParseBackupEvery(every)
+		if err != nil {
+			return BackupStatusDTO{}, err
+		}
+		err = app.DB.Do(ctx, func(ctx context.Context) error {
+			if _, updateErr := app.Settings.Update(ctx, settingsdomain.Update{Printing: settingsdomain.PrintingUpdate{BackupEvery: &chosen}}); updateErr != nil {
+				return updateErr
+			}
+			return requireOwner(ctx, app, ActBackupEvery, chosen)
+		})
+		if err != nil {
+			return BackupStatusDTO{}, err
+		}
+		st, err := app.Safety.Status(ctx)
+		return statusDTO(app, st), err
+	})
+}
+
 // SetOutsideFolder asks for the folder every backup is copied to — or, with stop, stops copying. Owner only.
 func (b *Backups) SetOutsideFolder(stop bool) envelope.Result[BackupStatusDTO] {
 	return call(b.core, "Backups.SetOutsideFolder", func(ctx context.Context, app *bootstrap.App) (BackupStatusDTO, error) {
@@ -204,9 +228,7 @@ func (b *Backups) SetOutsideFolder(stop bool) envelope.Result[BackupStatusDTO] {
 		if err != nil {
 			return BackupStatusDTO{}, err
 		}
-		if !app.Owner.Allowed(ctx) {
-			return BackupStatusDTO{}, requireOwner(ctx, app, ActOutsideFolder, "")
-		}
+		// Choosing the outside folder is open at the counter since 2026-09-16; it is recorded below, in the transaction.
 		folder := ""
 		if !stop {
 			files, dialogErr := b.core.dialogs()

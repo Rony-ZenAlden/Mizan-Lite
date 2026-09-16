@@ -8,7 +8,6 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
 )
 
@@ -66,31 +65,26 @@ func TestStockThroughTheBindings(t *testing.T) {
 		t.Fatalf("Levels = %+v", levels)
 	}
 
-	// Outside owner mode: no costs, and the owner's reads and acts refuse.
-	if v := set.Stock.Valuation(); codeOf(t, v) != ownerdomain.CodeRequired {
-		t.Fatal("Valuation answered outside owner mode")
+	// Without owner mode, since 2026-09-16: the costs are on screen and the owner's reads answer. The shop asked for its
+	// own figures without a PIN (owner.ReservedActs), so the boundary that used to strip them no longer does.
+	if v := set.Stock.Valuation(); !v.OK || v.Data.Total != "78.00" {
+		t.Fatalf("Valuation without owner mode = %+v", v)
 	}
-	if v := set.Stock.Verify(); codeOf(t, v) != ownerdomain.CodeRequired {
-		t.Fatal("Verify answered outside owner mode")
+	if v := set.Stock.Verify(); !v.OK || len(v.Data) != 0 {
+		t.Fatalf("Verify without owner mode = %+v", v)
 	}
 	history := set.Stock.Movements(api.MovementsQueryDTO{ProductID: bulgur.ID, Limit: 10})
-	if !history.OK || history.Data.CostsVisible || len(history.Data.Movements) != 2 {
+	if !history.OK || !history.Data.CostsVisible || len(history.Data.Movements) != 2 {
 		t.Fatalf("Movements = %+v", history)
 	}
 	newest := history.Data.Movements[0]
-	if newest.UnitCost != "" || newest.AverageCostAfter != "" || newest.EnteredUnitCost != "" || newest.Rate != "" || newest.EnteredCurrency != "" {
-		t.Fatalf("costs crossed the boundary outside owner mode: %+v", newest)
+	if newest.UnitCost != "1.20" || newest.EnteredUnitCost != "18000" || newest.EnteredCurrency != "SYP" {
+		t.Fatalf("costs were withheld without owner mode: %+v", newest)
 	}
 	if newest.Kind != "receipt" || newest.Quantity != "25.000" || newest.Note != "أبو خليل" || history.Data.ReversibleID != newest.ID {
 		t.Fatalf("newest = %+v, reversible %s", newest, history.Data.ReversibleID)
 	}
 	lower := api.CountInput{ProductID: bulgur.ID, Counted: "63.5"}
-	if r := set.Stock.Count(lower); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a lowering count went through without the owner")
-	}
-	if r := set.Stock.ReverseReceipt(api.ReverseReceiptInput{MovementID: newest.ID}); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a reversal went through without the owner")
-	}
 
 	elevate(t, set)
 	history = set.Stock.Movements(api.MovementsQueryDTO{ProductID: bulgur.ID, Limit: 10})

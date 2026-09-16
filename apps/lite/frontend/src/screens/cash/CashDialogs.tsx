@@ -102,6 +102,7 @@ export function CountDialog({ currency, expected, onDone, onClose }: { currency:
   return (
     <Dialog title={t("cash.count.title", { currency: tDynamic(`currency.${currency}`) })} onClose={onClose}>
       <form className="space-y-3" onSubmit={submit}>
+        <p className="text-sm">{t("cash.count.explain")}</p>
         <p className="text-sm text-text-muted">{t("cash.count.hint", { expected, currency: tDynamic(`currency.short.${currency}`) })}</p>
         <TextField label={t("cash.counted")} value={counted} onChange={(e) => setCounted(e.target.value)} inputMode="decimal" dir="ltr" error={errors.field("amount")} required />
         <TextField label={t("cash.note")} value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} error={errors.field("note")} />

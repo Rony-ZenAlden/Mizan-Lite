@@ -206,8 +206,10 @@ func TestTheSeederStocksTheShop(t *testing.T) {
 	}
 
 	// A pound delivery keeps what was typed: 337,500 for 25 kg at 15,000 is 13,500 a kilo, $0.90.
-	if hidden, err := app.Stock.History(ctx, byName["Fine bulgur"].ID, 10); err != nil || hidden.CostsVisible {
-		t.Fatalf("the seeder left costs visible: %v", err)
+	// The seeder leaves the shop as a shopkeeper finds it: not in owner mode. (The costs themselves are on screen either
+	// way since 2026-09-16 — owner.ReservedActs.)
+	if status, _ := app.Owner.Status(ctx); status.ElevatedFor != 0 {
+		t.Fatal("the seeder left the installation in owner mode")
 	}
 	if _, err := app.Owner.Elevate(ctx, "481537"); err != nil {
 		t.Fatal(err)
@@ -381,8 +383,8 @@ func TestTheSeederRingsUpADayAtTheTill(t *testing.T) {
 	if status, _ := app.Owner.Status(ctx); status.ElevatedFor != 0 {
 		t.Fatal("the seeder left the installation in owner mode")
 	}
-	if _, err := app.Sales.Verify(ctx); errs.CodeOf(err) != sales.CodeOwnerRequired {
-		t.Fatal("the sales verifier answered outside owner mode")
+	if findings, err := app.Sales.Verify(ctx); err != nil || len(findings) != 0 {
+		t.Fatalf("the sales verifier at the counter found %+v, %v", findings, err)
 	}
 	if findings, err := app.Sales.VerifyUnguarded(ctx); err != nil || len(findings) != 0 {
 		t.Fatalf("the sales verifier found %+v, %v", findings, err)

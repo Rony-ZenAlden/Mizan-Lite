@@ -172,12 +172,14 @@ type Settings struct {
 	Receipt Receipt
 	// BackupFolder is where every backup is also copied — a USB drive or a synced folder — or empty (L7 §6.2).
 	BackupFolder string
+	// BackupEvery is how often the scheduler backs the shop up by itself: daily, weekly, monthly or manual only.
+	BackupEvery string
 }
 
 // Defaults is what a fresh installation uses.
 func Defaults() Settings {
 	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote,
-		DebtCurrency: DefaultDebtCurrency, Receipt: DefaultReceipt()}
+		DebtCurrency: DefaultDebtCurrency, Receipt: DefaultReceipt(), BackupEvery: DefaultBackupEvery}
 }
 
 // ProblemKind says what was wrong with a stored row.

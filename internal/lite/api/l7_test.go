@@ -14,10 +14,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/documents"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/printers"
 	"github.com/mizan-erp/mizan/internal/lite/printing"
 )
@@ -97,17 +97,13 @@ func TestReceiptsPrintThroughTheChosenPathAndCopiesAreStamped(t *testing.T) {
 	}
 	set.Owner.EndElevation()
 	settings := api.PrinterSettingsInput{Printer: "Xprinter XP-80", PaperMM: "80", Path: "raw", AutoPrint: "credit", Drawer: true, Phone: "0933 123 456", Footer: "أهلاً بكم"}
-	if r := set.Printers.Save(settings); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("printer settings outside owner mode")
-	}
-	if s := set.Printers.Settings(); s.Data.Printer != "" {
-		t.Fatal("a refused save was kept")
-	}
-	elevate(t, set)
+	// Printer settings are saved at the counter since 2026-09-16 (owner.ReservedActs), and recorded in the owner's history.
 	if r := set.Printers.Save(settings); !r.OK || r.Data.Printer != "Xprinter XP-80" || r.Data.PaperMM != 80 || !r.Data.Drawer {
-		t.Fatalf("save %+v", r)
+		t.Fatalf("save without owner mode = %+v", r)
 	}
-	set.Owner.EndElevation()
+	if s := set.Printers.Settings(); s.Data.Printer != "Xprinter XP-80" {
+		t.Fatalf("the saved settings were not kept: %+v", s.Data)
+	}
 
 	first := set.Print.Sale(sale.ID)
 	if !first.OK || first.Data.CopyNo != 1 || first.Data.Path != "raw" || len(printer.jobs) != 1 {
@@ -166,7 +162,7 @@ func hasStamp(doc documents.Document) bool {
 	return false
 }
 
-func TestVouchersAreNumberedAndRefundsAreTheOwners(t *testing.T) {
+func TestVouchersAreNumberedAndARefundPrintsOneToo(t *testing.T) {
 	set, oil := tillShop(t)
 	set.SetPrinters(&fakePrinter{names: []printers.Printer{{Name: "P"}}})
 	abu := set.Customers.Create(api.CustomerInput{Name: "أبو محمد"}).Data
@@ -197,10 +193,11 @@ func TestVouchersAreNumberedAndRefundsAreTheOwners(t *testing.T) {
 		t.Fatal(refund.Error)
 	}
 	set.Owner.EndElevation()
-	if r := set.Print.Entry(refund.Data.ID); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a refund voucher at the counter")
+	// A refund's voucher is no longer the owner's (2026-09-16): at the counter it reaches the printer, and stops only
+	// because this shop has chosen none.
+	if r := set.Print.Entry(refund.Data.ID); codeOf(t, r) != printers.CodeNoPrinter {
+		t.Fatalf("a refund voucher at the counter = %+v", r)
 	}
-	elevate(t, set)
 	refundDoc, err := api.PrintDocument(set, "entry", refund.Data.ID)
 	if err != nil || !strings.Contains(textOf(refundDoc), "\u20662\u2069") {
 		t.Fatalf("the refund voucher is number 2: %v %s", err, textOf(refundDoc))
@@ -270,8 +267,9 @@ func unzip(t *testing.T, path string) string {
 func TestEveryExportCarriesTheScreensFiguresAndSavesWhereChosen(t *testing.T) {
 	set, oil := tillShop(t)
 	files := &fakeFiles{}
-	if r := set.Export.Report(api.ExportReportInput{Kind: "day", Format: "xlsx"}); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a report exported outside owner mode")
+	// Exporting reaches the Save dialog without a PIN since 2026-09-16; with no dialogs wired it says so.
+	if r := set.Export.Report(api.ExportReportInput{Kind: "day", Format: "xlsx"}); codeOf(t, r) != api.CodeNoDialogs {
+		t.Fatalf("a report exported without owner mode = %+v", r)
 	}
 	elevate(t, set)
 	if r := set.Export.Report(api.ExportReportInput{Kind: "day", Format: "xlsx"}); codeOf(t, r) != api.CodeNoDialogs {
@@ -414,19 +412,20 @@ func TestEveryExportCarriesTheScreensFiguresAndSavesWhereChosen(t *testing.T) {
 	}
 	files.failing = false
 
-	// The counter: a statement yes; the ledger, the sales history and the drawer no.
+	// The counter, since 2026-09-16: every export goes, the ledger and the sales history and the drawer with it. The owner
+	// asked for the shop's own papers to be printable without a PIN (owner.ReservedActs); only a restore is still reserved.
 	set.Owner.EndElevation()
 	files.save = filepath.Join(dir, "counter.pdf")
 	if r := set.Export.Statement(api.ExportStatementInput{CustomerID: abu.ID, Format: "pdf"}); !r.OK {
 		t.Fatalf("a statement at the counter: %+v", r.Error)
 	}
-	for name, r := range map[string]string{
-		"ledger": codeOf(t, set.Export.DebtLedger(api.ExportRangeInput{Format: "pdf"})),
-		"sales":  codeOf(t, set.Export.SalesHistory(api.ExportRangeInput{Format: "pdf"})),
-		"drawer": codeOf(t, set.Export.Report(api.ExportReportInput{Kind: "drawer", Format: "pdf"})),
+	for name, r := range map[string]envelope.Result[api.ExportResultDTO]{
+		"ledger": set.Export.DebtLedger(api.ExportRangeInput{Format: "pdf"}),
+		"sales":  set.Export.SalesHistory(api.ExportRangeInput{Format: "pdf"}),
+		"drawer": set.Export.Report(api.ExportReportInput{Kind: "drawer", Format: "pdf"}),
 	} {
-		if r != ownerdomain.CodeRequired {
-			t.Errorf("%s at the counter: %s", name, r)
+		if !r.OK {
+			t.Errorf("%s at the counter: %+v", name, r.Error)
 		}
 	}
 }
@@ -445,11 +444,10 @@ func TestBackupsThroughTheBindings(t *testing.T) {
 	if !status.OK || status.Data.Last == nil || status.Data.Folder != "" || status.Data.Restored != nil {
 		t.Fatalf("status %+v", status)
 	}
-	if r := set.Backups.SetOutsideFolder(false); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("choosing the folder at the counter")
-	}
-	if r := set.Backups.LossPreview(taken.Data.Name); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a loss preview at the counter")
+	// Choosing the outside folder and reading what a restore would cost are open at the counter (2026-09-16); the restore
+	// itself is not — TestARestoreStillAsksForThePIN holds that.
+	if r := set.Backups.LossPreview(taken.Data.Name); !r.OK {
+		t.Fatalf("a loss preview at the counter = %+v", r.Error)
 	}
 	elevate(t, set)
 	folder := set.Backups.SetOutsideFolder(false)

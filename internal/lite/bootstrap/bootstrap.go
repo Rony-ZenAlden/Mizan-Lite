@@ -340,6 +340,13 @@ func (a *App) registerBackupJob() error {
 		CatchUp:     jobs.RunOnce,
 		Description: "lite.jobs.scheduled_backup",
 	}, func(ctx context.Context, _ jobs.RunContext) error {
+		due, err := a.scheduledBackupDue(ctx)
+		if err != nil {
+			return err
+		}
+		if !due {
+			return nil
+		}
 		taken, err := a.Backups.Take(ctx, backup.Scheduled)
 		if err != nil {
 			return err
@@ -353,6 +360,40 @@ func (a *App) registerBackupJob() error {
 		}
 		return nil
 	})
+}
+
+// scheduledBackupDue reads the shop's chosen frequency (the owner's request, 2026-09-16) and says whether the unattended
+// backup is owed. The job itself keeps its daily beat; this decides whether that beat takes a snapshot, so a shop can
+// change the setting without the scheduler being rebuilt.
+//
+// The backups on close, before a migration and before a restore are NOT governed by this: they are the ones that save a
+// shop from the thing about to happen, and a shop that chose "manual only" still gets them.
+func (a *App) scheduledBackupDue(ctx context.Context) (bool, error) {
+	stored, err := a.Settings.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	var every time.Duration
+	switch stored.BackupEvery {
+	case settingsdomain.BackupManual:
+		return false, nil
+	case settingsdomain.BackupWeekly:
+		every = 7 * 24 * time.Hour
+	case settingsdomain.BackupMonthly:
+		every = 30 * 24 * time.Hour
+	default: // daily, and anything a future version writes that this one does not know
+		return true, nil
+	}
+	taken, err := a.Safety.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, b := range taken {
+		if b.Reason == backup.Scheduled {
+			return a.Now().Sub(b.TakenAt) >= every, nil // the list is newest first
+		}
+	}
+	return true, nil // never backed up by itself
 }
 
 // registerRateJob fetches the exchange rate in the background: at launch (RunOnce catch-up — a laptop opened in the
@@ -959,6 +1000,11 @@ type backupSettings struct{ settings *settings.Service }
 func (s backupSettings) BackupFolder(ctx context.Context) (string, error) {
 	current, err := s.settings.Get(ctx)
 	return current.BackupFolder, err
+}
+
+func (s backupSettings) BackupEvery(ctx context.Context) (string, error) {
+	current, err := s.settings.Get(ctx)
+	return current.BackupEvery, err
 }
 
 // backupsGate satisfies the backups module's OwnerGate port.

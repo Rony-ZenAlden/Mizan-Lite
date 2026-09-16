@@ -11,7 +11,6 @@ import (
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx/fxtest"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/owner/ownertest"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
 )
@@ -44,9 +43,9 @@ func TestTheRateThroughTheBindings(t *testing.T) {
 		current.Data.LocalCurrency != "SYP" || current.Data.Mode != "manual" || current.Data.CanFetch || current.Data.HasFetch {
 		t.Fatalf("Current = %+v", current)
 	}
-	if r := set.FX.SetRate(api.SetRateInput{Rate: "15200"}); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a rate went through without the owner")
-	}
+	// (Setting the rate no longer needs the PIN — owner.ReservedActs, 2026-09-16. It is not exercised here because this
+	// test's later assertions depend on the rate still being the one first run set; see
+	// TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN.)
 	if r := set.FX.Refresh(); codeOf(t, r) != fxdomain.CodeFetchUnavailable {
 		t.Fatal("a graph with no provider fetched")
 	}
@@ -166,9 +165,6 @@ func TestAFetchedProposalThroughTheBindings(t *testing.T) {
 	if !refreshed.OK || refreshed.Data.Rate != "13007.5355" || !refreshed.Data.HasFetch || refreshed.Data.LastFetch.Outcome != "proposed" ||
 		!refreshed.Data.LastFetch.Acceptable || refreshed.Data.LastFetch.Change != "-99.1" || !refreshed.Data.CanFetch {
 		t.Fatalf("Refresh = %+v", refreshed)
-	}
-	if r := set.FX.AcceptProposal(refreshed.Data.LastFetch.ID); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a proposal accepted without the owner")
 	}
 	elevate(t, set)
 	accepted := set.FX.AcceptProposal(refreshed.Data.LastFetch.ID)

@@ -223,18 +223,32 @@ func (s *Service) Events(ctx context.Context, limit int) ([]Event, error) {
 	return s.store.Events(ctx, limit)
 }
 
-// Allowed reports whether the application is in owner mode, recording nothing.
+// ReservedActs are the only acts that still ask for the PIN (the owner's decision, 2026-09-16). Mizan Lite runs on one
+// computer in one shop, with no login at the counter; the owner judged that asking for a PIN to read a report or void a
+// receipt cost more in friction than it bought in control. What remains reserved is the pair that can destroy the shop's
+// books rather than change them: restoring over the live database, and bringing in a foreign backup file to restore from.
 //
-// For guarded READS — average cost, stock value (L2 §6, D-L2.13). Viewing is not an act, and recording every glance
-// in the owner's history would bury the acts that matter. Require stays the guard for acts.
-func (s *Service) Allowed(context.Context) bool {
-	return s.elevatedFor(s.clk.Now()) > 0
+// Changing the PIN is not listed because it never passed through this gate: ChangePIN takes the current PIN itself.
+//
+// EVERY act is still written to the owner's history, reserved or not — the record is what survives the gate.
+var ReservedActs = map[string]bool{
+	"backups.restore": true,
+	"backups.import":  true,
 }
 
-// Require permits an owner-only act in owner mode and records it in the CALLER's transaction — so an act
-// that rolls back leaves no record that it happened. Outside owner mode it refuses with CodeRequired.
+// Allowed reports whether a guarded READ may go ahead — average cost, stock value, profit, the drawer's owner view.
+//
+// Since 2026-09-16 every read is open: the owner asked for the figures to be visible at the counter without a PIN. It
+// stays a method, and stays called, so that a shop which wants the figures behind the PIN again is one return statement
+// away rather than a change to every reader.
+func (s *Service) Allowed(context.Context) bool {
+	return true
+}
+
+// Require permits an owner-only act and records it in the CALLER's transaction — so an act that rolls back leaves no
+// record that it happened. Only the acts in ReservedActs still need owner mode; the rest are recorded and allowed.
 func (s *Service) Require(ctx context.Context, act Act) error {
-	if s.elevatedFor(s.clk.Now()) <= 0 {
+	if ReservedActs[act.Action] && s.elevatedFor(s.clk.Now()) <= 0 {
 		return errs.Permission(domain.CodeRequired, "the owner's PIN is required").WithParam("action", act.Action)
 	}
 	return s.event(ctx, domain.EventGuardedAct, act)

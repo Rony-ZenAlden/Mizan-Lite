@@ -155,3 +155,41 @@ describe("BackupsScreen", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("That file is not a Mizan Lite backup.");
   });
 });
+
+describe("BackupsScreen — how often (owner's request, 2026-09-16)", () => {
+  it("offers daily, weekly, monthly and manual, and sends the one chosen", async () => {
+    // Go remembers what it was told, so the screen reads back what it set — as the real binding does.
+    let every: "daily" | "weekly" | "monthly" | "manual" = "daily";
+    const setBackupEvery = vi.fn(async (chosen: typeof every) => {
+      every = chosen;
+      return aBackupStatus({ every });
+    });
+    const status = async () => aBackupStatus({ every });
+    renderWithProviders(<BackupsScreen />, { client: fakeClient({ backups: { setBackupEvery, status } }), locale: "en" });
+    await settle();
+
+    const group = screen.getByTestId("backup-every");
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Every day",
+      "Every week",
+      "Every month",
+      "Only when I ask",
+    ]);
+    // A fresh shop is on daily, as it always was.
+    expect(within(group).getByRole("button", { name: "Every day" })).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(within(group).getByRole("button", { name: "Every week" }));
+    await settle();
+    expect(setBackupEvery).toHaveBeenCalledWith("weekly");
+    expect(within(group).getByRole("button", { name: "Every week" })).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(within(group).getByRole("button", { name: "Only when I ask" }));
+    await settle();
+    expect(setBackupEvery).toHaveBeenLastCalledWith("manual");
+
+    // No PIN was asked for at any point (2026-09-16).
+    expect(screen.queryByLabelText("Owner PIN")).not.toBeInTheDocument();
+    // And the shop is told what still happens regardless.
+    expect(screen.getByText("A backup is taken on close, and before any upgrade or restore, whatever this says.")).toBeInTheDocument();
+  });
+});

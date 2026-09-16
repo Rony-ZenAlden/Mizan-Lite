@@ -8,7 +8,6 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
 	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 )
@@ -85,9 +84,8 @@ func TestTheTillThroughTheBindings(t *testing.T) {
 	if !dq.Discounted || dq.Lines[0].DiscountPercent != "10" || dq.Lines[0].DiscountUSD != "0.33" {
 		t.Fatalf("discounted quote = %+v", dq)
 	}
-	if r := set.Till.Checkout(api.CheckoutInput{Cart: discounted, Token: dq.Token}); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a discount went through without the owner")
-	}
+	// (A discount no longer needs the PIN — owner.ReservedActs, 2026-09-16. Ringing it up here would add a second sale to
+	// the day the assertions below count; see TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN.)
 
 	// The day, per currency: pounds charged and given back, dollars taken.
 	day := set.Sales.List("")
@@ -103,17 +101,13 @@ func TestTheTillThroughTheBindings(t *testing.T) {
 		t.Fatal("a date that is not YYYY-MM-DD")
 	}
 
-	// Voids, the verifier and the note are the owner's.
+	// The verifier answers at the counter now (2026-09-16): the shop may check its own books without a PIN.
 	void := api.VoidInput{SaleID: sold.Data.ID, Reason: "خطأ في الكمية"}
-	if r := set.Sales.Void(void); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("a void outside owner mode")
+	if r := set.Sales.Verify(); !r.OK || len(r.Data) != 0 {
+		t.Fatalf("Verify without owner mode = %+v", r)
 	}
-	if r := set.Sales.Verify(); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("the verifier answered outside owner mode")
-	}
-	if r := set.Till.SetCashNote("1000"); codeOf(t, r) != ownerdomain.CodeRequired {
-		t.Fatal("the cash note changed outside owner mode")
-	}
+	// (Voiding and changing the smallest note are open too; both are exercised where they do not disturb this day's
+	// figures — see TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN.)
 	if note := set.Till.CashNote(); !note.OK || note.Data != (api.CashNoteDTO{Currency: "SYP", Note: "500"}) {
 		t.Fatalf("CashNote = %+v", note)
 	}

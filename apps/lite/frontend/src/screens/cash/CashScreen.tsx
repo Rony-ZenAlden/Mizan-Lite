@@ -61,13 +61,32 @@ export function CashScreen() {
   };
 
   const isToday = drawer !== null && drawer.date === drawer.today;
+  // A day either side, and back to today, without opening the date picker: a drawer is read day by day (Q-L8.15).
+  const shown = date || drawer?.date || "";
+  const shift = (days: number) => {
+    if (!shown) return;
+    const at = new Date(`${shown}T12:00:00Z`); // midday, so no time zone can move the date across midnight
+    at.setUTCDate(at.getUTCDate() + days);
+    setDate(at.toISOString().slice(0, 10));
+  };
 
   return (
     <section className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <h2 className="text-xl font-semibold">{t("cash.title")}</h2>
-        <div className="w-48">
-          <TextField label={t("cash.date")} type="date" value={date || drawer?.date || ""} onChange={(e) => setDate(e.target.value)} dir="ltr" />
+        <div className="flex items-end gap-2">
+          <Button onClick={() => shift(-1)} disabled={!shown}>
+            {t("cash.day.previous")}
+          </Button>
+          <div className="w-44">
+            <TextField label={t("cash.date")} type="date" value={shown} onChange={(e) => setDate(e.target.value)} dir="ltr" />
+          </div>
+          <Button onClick={() => shift(1)} disabled={!shown || isToday}>
+            {t("cash.day.next")}
+          </Button>
+          <Button onClick={() => setDate(drawer?.today ?? "")} disabled={isToday}>
+            {t("cash.day.today")}
+          </Button>
         </div>
       </header>
 

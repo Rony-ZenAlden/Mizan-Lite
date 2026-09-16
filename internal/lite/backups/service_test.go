@@ -25,9 +25,19 @@ type db struct{ s *database.Store }
 func (d db) WriterPool() *sql.DB     { return d.s.WriterPool() }
 func (d db) Dialect() backup.Dialect { return d.s.Dialect() }
 
-type settings struct{ folder string }
+type settings struct {
+	folder string
+	every  string
+}
 
 func (s *settings) BackupFolder(context.Context) (string, error) { return s.folder, nil }
+
+func (s *settings) BackupEvery(context.Context) (string, error) {
+	if s.every == "" {
+		return "daily", nil
+	}
+	return s.every, nil
+}
 
 type gate struct {
 	elevated bool

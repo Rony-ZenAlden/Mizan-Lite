@@ -88,8 +88,12 @@ func (a *App) SaveSupportFile(includeDatabase bool) envelope.Result[ExportResult
 		if err != nil {
 			return ExportResultDTO{}, err
 		}
-		if includeDatabase && !app.Owner.Allowed(ctx) {
-			return ExportResultDTO{}, requireOwner(ctx, app, ActSupportDatabase, "")
+		// Putting the shop's whole database in a support file is open at the counter since 2026-09-16 (owner.ReservedActs),
+		// and only ever happens when the box is ticked — but it is always recorded, so the shop can see it was done.
+		if includeDatabase {
+			if err = requireOwner(ctx, app, ActSupportDatabase, ""); err != nil {
+				return ExportResultDTO{}, err
+			}
 		}
 		now := app.Now()
 		d := diagnostics{Version: a.core.version, Platform: runtime.GOOS, Arch: runtime.GOARCH, GoVersion: runtime.Version(),

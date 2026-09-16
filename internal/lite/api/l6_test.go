@@ -7,7 +7,6 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	cashbookdomain "github.com/mizan-erp/mizan/internal/lite/cashbook/domain"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	reportsdomain "github.com/mizan-erp/mizan/internal/lite/reports/domain"
 )
 
@@ -26,13 +25,22 @@ func TestTheReportsAndTheDrawerThroughTheBindings(t *testing.T) {
 		t.Fatalf("the receipt says what a void hands back: %+v", sold)
 	}
 
-	// Outside owner mode: every report refused, the drawer shown.
-	if codeOf(t, set.Reports.Day("")) != ownerdomain.CodeRequired || codeOf(t, set.Reports.Month("")) != ownerdomain.CodeRequired ||
-		codeOf(t, set.Reports.Products(api.RangeInput{})) != ownerdomain.CodeRequired || codeOf(t, set.Reports.Stock(api.RangeInput{})) != ownerdomain.CodeRequired {
-		t.Fatal("a report outside owner mode")
+	// Without owner mode, since 2026-09-16: every report answers, and the drawer is shown in full. The owner asked for the
+	// shop's own figures to be readable at the counter without a PIN (owner.ReservedActs).
+	if r := set.Reports.Day(""); !r.OK {
+		t.Fatalf("Day without owner mode = %+v", r.Error)
+	}
+	if r := set.Reports.Month(""); !r.OK {
+		t.Fatalf("Month without owner mode = %+v", r.Error)
+	}
+	if r := set.Reports.Products(api.RangeInput{}); !r.OK {
+		t.Fatalf("Products without owner mode = %+v", r.Error)
+	}
+	if r := set.Reports.Stock(api.RangeInput{}); !r.OK {
+		t.Fatalf("Stock without owner mode = %+v", r.Error)
 	}
 	drawer := set.Cash.Drawer("")
-	if !drawer.OK || drawer.Data.OwnerView || drawer.Data.Date != drawer.Data.Today || len(drawer.Data.Categories) != 6 {
+	if !drawer.OK || !drawer.Data.OwnerView || drawer.Data.Date != drawer.Data.Today || len(drawer.Data.Categories) != 6 {
 		t.Fatalf("the counter's drawer = %+v", drawer)
 	}
 	usd, syp := drawer.Data.Currencies[0], drawer.Data.Currencies[1]
@@ -44,11 +52,9 @@ func TestTheReportsAndTheDrawerThroughTheBindings(t *testing.T) {
 		t.Fatalf("a count at the counter = %+v", count)
 	}
 	expense := api.CashRecordInput{Kind: "expense", Currency: "SYP", Amount: "25000", Category: "electricity", FromDrawer: true, Note: "فاتورة"}
-	if codeOf(t, set.Cash.Record(expense)) != ownerdomain.CodeRequired {
-		t.Fatal("an expense outside owner mode")
-	}
-	if after := set.Cash.Drawer(""); after.Data.Currencies[1].Count != "97000" || after.Data.Currencies[1].Difference != "-500" || len(after.Data.Entries) != 1 ||
-		after.Data.Entries[0].Reversible {
+	// (An expense no longer asks for the PIN — owner.ReservedActs, 2026-09-16. Recording it here would put a second entry
+	// in the drawer the assertion below counts; see TestEveryOwnersActGoesThroughAtTheCounterWithoutAPIN.)
+	if after := set.Cash.Drawer(""); after.Data.Currencies[1].Count != "97000" || after.Data.Currencies[1].Difference != "-500" || len(after.Data.Entries) != 1 {
 		t.Fatalf("the drawer after the count = %+v", after.Data)
 	}
 

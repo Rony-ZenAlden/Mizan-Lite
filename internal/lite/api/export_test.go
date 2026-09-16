@@ -36,7 +36,8 @@ func ExportDocument(set *Set, kind string, in any) (documents.Document, error) {
 			x, err = salesContent(ctx, app, w, v)
 		}
 	}
-	return documents.Document{Direction: w.dir, Running: w.settings.ShopName, Blocks: append([]documents.Block{documents.Title{Text: x.title, Subtitle: x.subtitle}}, x.blocks...)}, err
+	// The same heading render() puts on the PDF, so a test reads what a shop would print.
+	return documents.Document{Direction: w.dir, Running: w.settings.ShopName, Blocks: append(w.paperHeader(x), x.blocks...)}, err
 }
 
 // PrintDocument is the document a print would render.

@@ -54,6 +54,8 @@ type Snapshots interface {
 // Settings is where the outside folder is kept.
 type Settings interface {
 	BackupFolder(ctx context.Context) (string, error)
+	// BackupEvery is how often the scheduler takes one by itself: daily, weekly, monthly or manual.
+	BackupEvery(ctx context.Context) (string, error)
 }
 
 // OwnerGate is what the module needs of the owner.
@@ -150,6 +152,8 @@ type Status struct {
 	LastOutside   *Entry
 	OutsideStale  bool
 	OutsideFailed string // the code of the last failed outside copy, "" when the last one succeeded
+	// Every is how often the shop is backed up by itself (2026-09-16): daily, weekly, monthly or manual.
+	Every string
 }
 
 // Status reports the newest backup and the newest outside copy.
@@ -164,6 +168,9 @@ func (s *Service) Status(ctx context.Context) (Status, error) {
 		st.Last = &e
 	}
 	if st.Folder, err = s.settings.BackupFolder(ctx); err != nil {
+		return Status{}, err
+	}
+	if st.Every, err = s.settings.BackupEvery(ctx); err != nil {
 		return Status{}, err
 	}
 	if st.Folder != "" {

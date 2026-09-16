@@ -291,3 +291,21 @@ describe("CustomersScreen — L7", () => {
     expect(entry).toHaveBeenCalledWith("pay-1");
   });
 });
+
+describe("CustomerStatement — the way back (owner's testing, 2026-09-16)", () => {
+  it("has a named Back button at the top, and Escape closes the statement too", async () => {
+    const dialog = await openStatement();
+    const back = within(dialog).getByTestId("statement-back");
+    expect(back).toHaveTextContent("Back");
+    // First in the dialog: a cashier reads the way out before the figures.
+    expect(within(dialog).getAllByRole("button")[0]).toBe(back);
+
+    await userEvent.click(back);
+    expect(screen.queryByRole("dialog", { name: "Statement — أبو محمد" })).not.toBeInTheDocument();
+
+    const again = await openStatement();
+    expect(again).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Statement — أبو محمد" })).not.toBeInTheDocument();
+  });
+});

@@ -158,3 +158,59 @@ describe("CashScreen — L7", () => {
     expect(screen.getByText("/Users/shop/drawer.pdf")).toBeInTheDocument();
   });
 });
+
+describe("CashScreen — moving between days (owner's testing, 2026-09-16)", () => {
+  it("steps a day back and forward, and returns to today, without opening the date picker", async () => {
+    const drawer = vi.fn(async (date: string) => aDrawer({ date: date || "2026-09-14", today: "2026-09-14" }));
+    renderWithProviders(<CashScreen />, { client: fakeClient({ cash: { drawer } }), locale: "en" });
+    await settle();
+    expect(drawer).toHaveBeenLastCalledWith("");
+
+    await userEvent.click(screen.getByRole("button", { name: "The day before" }));
+    await settle();
+    expect(drawer).toHaveBeenLastCalledWith("2026-09-13");
+
+    await userEvent.click(screen.getByRole("button", { name: "The day before" }));
+    await settle();
+    expect(drawer).toHaveBeenLastCalledWith("2026-09-12");
+
+    await userEvent.click(screen.getByRole("button", { name: "The day after" }));
+    await settle();
+    expect(drawer).toHaveBeenLastCalledWith("2026-09-13");
+
+    await userEvent.click(screen.getByRole("button", { name: "Today" }));
+    await settle();
+    expect(drawer).toHaveBeenLastCalledWith("2026-09-14");
+  });
+
+  it("steps across the end of a month, and cannot walk past today", async () => {
+    const drawer = vi.fn(async (date: string) => aDrawer({ date: date || "2026-09-01", today: "2026-09-01" }));
+    renderWithProviders(<CashScreen />, { client: fakeClient({ cash: { drawer } }), locale: "en" });
+    await settle();
+    // On today, forward and Today are both spent.
+    expect(screen.getByRole("button", { name: "The day after" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Today" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "The day before" }));
+    await settle();
+    expect(drawer).toHaveBeenLastCalledWith("2026-08-31");
+  });
+});
+
+describe("CountDialog — what counting is for (owner's testing, 2026-09-16)", () => {
+  it("says in plain words what the cashier is being asked to do, in both languages", async () => {
+    for (const locale of ["ar", "en"] as const) {
+      const { unmount } = renderWithProviders(<CashScreen />, { client: fakeClient(), locale });
+      await settle();
+      const action = locale === "ar" ? "عُدّ الصندوق" : "Count the drawer";
+      await userEvent.click(within(screen.getByTestId("drawer-SYP")).getByRole("button", { name: action }));
+      const dialog = await screen.findByRole("dialog");
+      const explanation =
+        locale === "ar"
+          ? "أدخل المبلغ الفعلي الموجود حالياً في الدرج لمطابقته مع المبيعات واكتشاف أي زيادة أو نقص في الصندوق."
+          : "Type the money actually in the drawer now, so it can be matched against the sales and any surplus or shortfall is found.";
+      expect(dialog).toHaveTextContent(explanation);
+      unmount();
+    }
+  });
+});

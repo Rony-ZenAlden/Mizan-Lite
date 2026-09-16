@@ -73,6 +73,9 @@ export function TillScreen() {
   const [tendered, setTendered] = useState("");
   const [changeCurrency, setChangeCurrency] = useState("");
   const [payment, setPayment] = useState<"cash" | "credit">("cash");
+  // Quick pay is the whole sale in the settlement currency with no change: the fields that would say otherwise stay shut until
+  // the cashier opens them, and closing them puts every one back to that default, so nothing hidden can price a sale.
+  const [details, setDetails] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [picking, setPicking] = useState(false);
   const [debtCurrency, setDebtCurrency] = useState("USD");
@@ -254,6 +257,7 @@ export function TillScreen() {
     setPayment("cash");
     setCustomer(null);
     setSettlement("");
+    setDetails(false); // the next sale starts at quick pay again, whatever this one needed
   };
 
   const clear = () => {
@@ -300,13 +304,16 @@ export function TillScreen() {
     [quote, pending, busy, withOwner, client, input],
   );
 
-  const quick = useMemo(
-    () =>
-      products
-        .filter((p) => p.quickSlot > 0)
-        .sort((a, b) => a.quickSlot - b.quickSlot),
-    [products],
-  );
+  // Every product the shop sells, browsable without a search (the owner's request, 2026-09-16): the quick buttons the
+  // owner pinned come first, in their slot order, then everything else by name. The grid scrolls; the cart beside it does
+  // not move.
+  const grid = useMemo(() => {
+    const pinned = products.filter((p) => p.quickSlot > 0).sort((a, b) => a.quickSlot - b.quickSlot);
+    const rest = products
+      .filter((p) => p.quickSlot === 0)
+      .sort((a, b) => (locale === "ar" ? a.nameAr : a.nameEn || a.nameAr).localeCompare(locale === "ar" ? b.nameAr : b.nameEn || b.nameAr, locale));
+    return { pinned, all: [...pinned, ...rest] };
+  }, [products, locale]);
   const local = rate?.localCurrency || quote?.localCurrency || "";
   const noRate = rate !== null && !rate.set;
   const errors = formErrors(quoteError, errorText);
@@ -376,6 +383,17 @@ export function TillScreen() {
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
+  const showDetails = (open: boolean) => {
+    setDetails(open);
+    if (!open) {
+      setSaleDiscount("");
+      setTenderCurrency("");
+      setTendered("");
+      setChangeCurrency("");
+    }
+    setStale(false);
+  };
+
   const choosePayment = (next: "cash" | "credit") => {
     setPayment(next);
     setStale(false);
@@ -383,6 +401,9 @@ export function TillScreen() {
       // On credit the sale is charged in the default debt currency (Q-L5.1), one tap from the other.
       setSettlement(debtCurrency === local ? "" : debtCurrency);
       if (!customer) setPicking(true);
+      setDetails(true); // choosing credit IS the explicit choice: "paid now" is the field the cashier came for
+    } else {
+      showDetails(false);
     }
   };
 
@@ -440,25 +461,32 @@ export function TillScreen() {
             </ul>
           ) : null}
 
-          {quick.length > 0 ? (
-            <div
-              role="group"
-              aria-label={t("till.quick")}
-              className="grid grid-cols-3 gap-2 xl:grid-cols-4"
-            >
-              {quick.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => add(pickOf(p))}
-                  className="min-h-16 rounded-md border border-border bg-surface-raised p-2 text-sm font-medium hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {name(p)}
-                </button>
-              ))}
-            </div>
+          {grid.all.length > 0 ? (
+            <>
+              <p className="text-xs text-text-muted">{t("till.quick_first")}</p>
+              <div
+                role="group"
+                aria-label={t("till.all_products")}
+                data-testid="till-products"
+                className="grid max-h-[26rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain pe-1 sm:grid-cols-3 xl:grid-cols-4"
+              >
+                {grid.all.map((p, i) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => add(pickOf(p))}
+                    data-quick={i < grid.pinned.length ? "true" : undefined}
+                    className={`min-h-16 rounded-md border p-2 text-sm font-medium hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      i < grid.pinned.length ? "border-primary/40 bg-surface-raised" : "border-border bg-surface-raised/60"
+                    }`}
+                  >
+                    {name(p)}
+                  </button>
+                ))}
+              </div>
+            </>
           ) : (
-            <p className="text-sm text-text-muted">{t("till.quick_empty")}</p>
+            <p className="text-sm text-text-muted">{t("till.products_empty")}</p>
           )}
         </div>
 
@@ -733,59 +761,75 @@ export function TillScreen() {
               )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TextField
-                label={t("till.sale_discount", {
-                  currency: tDynamic(`currency.${settlement || local}`),
-                })}
-                value={saleDiscount}
-                onChange={(e) => setSaleDiscount(e.target.value)}
-                error={errors.field("saleDiscount")}
-                inputMode="decimal"
-                dir="ltr"
-                autoComplete="off"
-              />
-              <SelectField
-                label={t("till.tender_currency")}
-                value={tenderCurrency}
-                onChange={(e) => setTenderCurrency(e.target.value)}
-              >
-                <option value="">{t("till.same_as_total")}</option>
-                {[local, "USD"].filter(Boolean).map((c) => (
-                  <option key={c} value={c}>
-                    {tDynamic(`currency.${c}`)}
-                  </option>
-                ))}
-              </SelectField>
-              <TextField
-                label={credit ? t("till.paid_now") : t("till.tendered")}
-                hint={
-                  credit ? t("till.paid_now_hint") : t("till.tendered_hint")
-                }
-                value={tendered}
-                onChange={(e) => setTendered(e.target.value)}
-                error={errors.field("tendered")}
-                inputMode="decimal"
-                dir="ltr"
-                autoComplete="off"
-              />
-              {credit ? null : (
+            <p className="text-sm text-text-muted" data-testid="till-quick-pay">
+              {t("till.quick_pay")}
+            </p>
+
+            <button
+              type="button"
+              aria-expanded={details}
+              onClick={() => showDetails(!details)}
+              className="text-sm text-primary underline"
+              data-testid="till-details-toggle"
+            >
+              {details ? t("till.details_hide") : t("till.details_show")}
+            </button>
+
+            {details ? (
+              <div className="grid gap-3 sm:grid-cols-2" data-testid="till-details">
+                <TextField
+                  label={t("till.sale_discount", {
+                    currency: tDynamic(`currency.${settlement || local}`),
+                  })}
+                  value={saleDiscount}
+                  onChange={(e) => setSaleDiscount(e.target.value)}
+                  error={errors.field("saleDiscount")}
+                  inputMode="decimal"
+                  dir="ltr"
+                  autoComplete="off"
+                />
                 <SelectField
-                  label={t("till.change_currency")}
-                  value={changeCurrency}
-                  onChange={(e) => setChangeCurrency(e.target.value)}
-                  error={errors.field("changeCurrency")}
-                  hint={t("till.change_default_hint")}
+                  label={t("till.tender_currency")}
+                  value={tenderCurrency}
+                  onChange={(e) => setTenderCurrency(e.target.value)}
                 >
-                  <option value="">{t("till.change_default")}</option>
+                  <option value="">{t("till.same_as_total")}</option>
                   {[local, "USD"].filter(Boolean).map((c) => (
                     <option key={c} value={c}>
                       {tDynamic(`currency.${c}`)}
                     </option>
                   ))}
                 </SelectField>
-              )}
-            </div>
+                <TextField
+                  label={credit ? t("till.paid_now") : t("till.tendered")}
+                  hint={
+                    credit ? t("till.paid_now_hint") : t("till.tendered_hint")
+                  }
+                  value={tendered}
+                  onChange={(e) => setTendered(e.target.value)}
+                  error={errors.field("tendered")}
+                  inputMode="decimal"
+                  dir="ltr"
+                  autoComplete="off"
+                />
+                {credit ? null : (
+                  <SelectField
+                    label={t("till.change_currency")}
+                    value={changeCurrency}
+                    onChange={(e) => setChangeCurrency(e.target.value)}
+                    error={errors.field("changeCurrency")}
+                    hint={t("till.change_default_hint")}
+                  >
+                    <option value="">{t("till.change_default")}</option>
+                    {[local, "USD"].filter(Boolean).map((c) => (
+                      <option key={c} value={c}>
+                        {tDynamic(`currency.${c}`)}
+                      </option>
+                    ))}
+                  </SelectField>
+                )}
+              </div>
+            ) : null}
 
             {quote && quote.tenderGiven && !credit ? (
               <p data-testid="till-change" className="text-xl font-semibold">

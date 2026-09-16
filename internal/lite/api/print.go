@@ -12,7 +12,6 @@ import (
 	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/documents"
 	"github.com/mizan-erp/mizan/internal/lite/owner"
-	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
 	"github.com/mizan-erp/mizan/internal/lite/printers"
 	"github.com/mizan-erp/mizan/internal/lite/printing"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
@@ -105,9 +104,6 @@ func build(ctx context.Context, app *bootstrap.App, w words, kind, rawID string)
 		case customersdomain.KindPayment:
 		case customersdomain.KindRefund:
 			k = printing.KindRefund
-			if !app.Owner.Allowed(ctx) {
-				return printable{}, errs.Permission(ownerdomain.CodeRequired, "a refund voucher is the owner's")
-			}
 		default:
 			return printable{}, errs.Conflict(CodeNotPrintable, "only payments and refunds have vouchers").WithParam("kind", string(e.Kind))
 		}

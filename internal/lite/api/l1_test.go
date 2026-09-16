@@ -85,18 +85,16 @@ func TestTheCatalogueThroughTheBindings(t *testing.T) {
 		t.Fatalf("UpdateProduct = %+v", renamed)
 	}
 
-	// The guarded price change, as the frontend sees it: refused with a code, then accepted in owner mode.
+	// The price change, as the frontend sees it. Since 2026-09-16 it goes through at the counter without the PIN
+	// (owner.ReservedActs); it is still written to the owner's history, which TestTheOwnersHistoryStillRecordsEveryAct pins.
 	cut := api.SetPriceInput{ID: p.ID, RowVersion: renamed.Data.RowVersion, PriceCurrency: "SYP", Price: "45000"}
-	if code := codeOf(t, set.Catalog.SetPrice(cut)); code != ownerdomain.CodeRequired {
-		t.Fatalf("SetPrice outside owner mode = %s", code)
+	priced := set.Catalog.SetPrice(cut)
+	if !priced.OK || priced.Data.Price != "45000" || priced.Data.PriceCurrency != "SYP" {
+		t.Fatalf("SetPrice without owner mode = %+v", priced)
 	}
 	elevated := set.Owner.Elevate(api.PINInput{PIN: testPIN})
 	if !elevated.OK || elevated.Data.ElevatedSeconds != 120 {
 		t.Fatalf("Elevate = %+v", elevated)
-	}
-	priced := set.Catalog.SetPrice(cut)
-	if !priced.OK || priced.Data.Price != "45000" || priced.Data.PriceCurrency != "SYP" {
-		t.Fatalf("SetPrice in owner mode = %+v", priced)
 	}
 
 	slotted := set.Catalog.SetQuickSlot(api.SetQuickSlotInput{ID: p.ID, Slot: 4})

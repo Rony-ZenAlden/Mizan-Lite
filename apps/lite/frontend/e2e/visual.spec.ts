@@ -95,12 +95,16 @@ for (const locale of LOCALES) {
     await page.getByRole("button", { name: label(locale, "backups.take_now") }).click();
     await expect(page.getByTestId("backup-row").first()).toBeVisible();
     await page.getByTestId("backup-row").first().getByRole("button", { name: label(locale, "backups.restore") }).click();
-    const pin = page.getByRole("dialog", { name: label(locale, "pin.title") });
-    await shot("pin");
-    await enterPin(page, locale);
-    await expect(page.getByRole("dialog", { name: label(locale, "restore.title") })).toBeVisible();
+    // Reading what a restore would cost is open at the counter since 2026-09-16; the PIN comes at the confirmation, which
+    // is one of the only two acts that still ask for it (owner.ReservedActs).
+    const restore = page.getByRole("dialog", { name: label(locale, "restore.title") });
+    await expect(restore).toBeVisible();
     await shot("restore");
-    await page.keyboard.press("Escape");
-    expect(pin).toBeDefined();
+    await restore.getByRole("button", { name: label(locale, "restore.confirm") }).click();
+    const pin = page.getByRole("dialog", { name: label(locale, "pin.title") });
+    await expect(pin).toBeVisible();
+    await shot("pin");
+    await page.keyboard.press("Escape"); // cancelled: the visual pack never restores over the shop it is looking at
+    await expect(pin).toBeHidden();
   });
 }

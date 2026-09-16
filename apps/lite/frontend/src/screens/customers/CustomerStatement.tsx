@@ -89,6 +89,10 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
 
   return (
     <Dialog title={t("statement.title", { name: current.name })} onClose={onClose} wide>
+      {/* The way out, named and first. Escape closes the dialog too, but a cashier should not have to know that. */}
+      <Button variant="primary" onClick={onClose} data-testid="statement-back">
+        {t("action.back")}
+      </Button>
       <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
         <div className="space-y-1">
           {current.phone ? <bdi dir="ltr">{current.phone}</bdi> : null}

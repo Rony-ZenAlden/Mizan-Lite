@@ -431,7 +431,7 @@ export function aBackup(overrides: Partial<BackupInfo> = {}): BackupInfo {
 
 /** The backup status Home shows: a backup this morning and its outside copy, nothing stale, with any field replaceable. */
 export function aBackupStatus(overrides: Partial<BackupStatus> = {}): BackupStatus {
-  return { last: aBackup(), folder: "/Volumes/USB", lastOutside: aBackup(), outsideStale: false, outsideFailed: "", restored: undefined, ...overrides } as BackupStatus;
+  return { last: aBackup(), folder: "/Volumes/USB", lastOutside: aBackup(), outsideStale: false, outsideFailed: "", restored: undefined, every: "daily", ...overrides } as BackupStatus;
 }
 
 /** Printer settings as Go sends them: an 80 mm printer through its driver, credit printed automatically. */
@@ -663,6 +663,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
       restore: async () => ({ staged: true, restarting: true }),
       restoreFromFile: async () => aBackup({ name: "imported-20260914T090000Z.db", reason: "imported" }),
       saveCopy: async () => ({ path: "/Volumes/USB/copy.db", bytes: 0, cancelled: false }),
+      setBackupEvery: async (every) => aBackupStatus({ every }),
       setOutsideFolder: async (clear) => aBackupStatus({ folder: clear ? "" : "/Volumes/USB" }),
     },
     owner: {

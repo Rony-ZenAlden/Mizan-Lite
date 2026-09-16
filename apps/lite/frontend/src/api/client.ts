@@ -116,6 +116,8 @@ export type PrinterSettings = Plain<api.PrinterSettingsDTO>;
 export type PrinterSettingsInput = Plain<api.PrinterSettingsInput>;
 export type BackupInfo = Plain<api.BackupDTO>;
 export type BackupStatus = Plain<api.BackupStatusDTO>;
+/** How often the shop backs itself up (2026-09-16). The backups on close and before an upgrade or restore ignore it. */
+export type BackupEvery = "daily" | "weekly" | "monthly" | "manual";
 export type Loss = Plain<api.LossDTO>;
 export type RestoreResult = Plain<api.RestoreDTO>;
 
@@ -248,6 +250,7 @@ export function createClient() {
       restoreFromFile: () => unwrap(Backups.RestoreFromFile),
       saveCopy: (name: string) => unwrap(() => Backups.SaveCopy(name)),
       setOutsideFolder: (clear: boolean) => unwrap(() => Backups.SetOutsideFolder(clear)),
+      setBackupEvery: (every: BackupEvery) => unwrap(() => Backups.SetBackupEvery(every)),
     },
     owner: {
       status: () => unwrap(Owner.Status),

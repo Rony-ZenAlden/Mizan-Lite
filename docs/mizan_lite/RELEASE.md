@@ -19,7 +19,7 @@ It runs, in order, and stops at the first failure:
 2. the shipped guide PDFs are checked against `docs/mizan_lite/guide` — a guide edited and not regenerated fails here;
 3. every past schema (1–8) upgrades to this release with every row intact;
 4. the macOS `.dmg` and the Windows `Setup.exe` (WebView2 inside);
-5. the packaged macOS application is opened on a freshly seeded shop and closed;
+5. the macOS application **inside the disk image** is mounted, opened on a freshly seeded shop and closed — what ships is what must open;
 6. `SHA256SUMS-<version>.txt` and `MANIFEST-<version>.txt`, which names what was **not** verified here.
 
 Artefacts land in `dist/lite/`.

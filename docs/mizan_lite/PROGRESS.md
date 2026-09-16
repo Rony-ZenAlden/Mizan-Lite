@@ -34,7 +34,7 @@
 ```bash
 make lite-ci              # Go (race), Windows cross-compile, archlint + drills, golangci-lint v2, frontend, bundle gate, E2E journeys
 make lite-e2e             # the browser journeys and the visual pack alone (needs Chrome or Edge)
-make lite-release         # CI + the upgrade matrix + both packages + the smoke test + checksums → build/lite-release/
+make lite-release         # CI + the upgrade matrix + both packages + the smoke test + checksums → dist/lite/
 make lite-build-macos     # universal .app → apps/lite/build/bin/
 make lite-build-windows   # .exe → apps/lite/build/bin/  (builds here; cannot be run here)
 ```

@@ -39,10 +39,11 @@ make lite-build-macos     # universal .app → apps/lite/build/bin/
 make lite-build-windows   # .exe → apps/lite/build/bin/  (builds here; cannot be run here)
 ```
 
-Last full run: 2026-09-15 (L7) — see [L7 §19.1](phases/L7_HARDWARE_BACKUP.md): 480 Lite Go test functions (race), 471 frontend
-tests, 85 architecture rules seen failing, golangci-lint v2 0 issues; 40 behaviour drills caught; a year of sales history to
-Excel in 1.2 s and to PDF in 2.7 s. Mizan's `scripts/check.sh` green (114 packages) after L7's archlint change. The packaged app
-upgraded the seeded L6 month to schema 8 with every row intact.
+Last full run: 2026-09-16 (L8, on the tag `lite-v0.9.0`) — see [L8 §19.1](phases/L8_RELEASE.md): 492 Lite Go test functions
+(race), 487 frontend tests, 89 architecture rules seen failing, golangci-lint v2 0 issues, and 20 end-to-end journeys plus 6
+visual specs in Chrome; nothing NOT RUN. Mizan's `scripts/check.sh` green. `make lite-release` then built both packages and
+opened the macOS application **inside the disk image** on a freshly seeded shop: version 0.9.0, schema 8, integrity ok, 0
+foreign-key problems, 0 errors, a clean close. Artefacts and their checksums are in `dist/lite/`.
 
 Try the seeded shop:
 

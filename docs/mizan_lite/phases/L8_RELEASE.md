@@ -671,6 +671,14 @@ package rather than the rule. Planted where no cycle exists (`guide` → `settin
 the upgrade matrix's first run reported `stock_ledger` "changed" on schemas 3 and 4 — it was L4's rebuild adding columns
 (D-L8.i15), not a loss.
 
+**R6 — the first tagged `make lite-release` failed, and in the release script itself.** The macOS smoke test pointed at the
+build folder, which `wails build` cleans out when it builds Windows next, so the run died after both packages were already made;
+it now mounts the disk image and opens the application inside it, which is what `scripts/lite-smoke-macos.sh` documents as its own
+contract — what ships is what must open. And `dist/lite` was not emptied first, while the checksum step globs the version: a
+development build's name contains the release's number (`Mizan Lite 0.9.0-dev.<sha>.dmg` matches `0.9.0`), so a leftover artefact
+would have been checksummed into `SHA256SUMS-0.9.0.txt` as though it belonged to the release. Both fixed in `18c537f`, the tag
+moved onto it. **A release script is code, and the first real release is its first honest test.**
+
 **R5 — a caution about reading right-to-left screenshots.** A rendered Arabic PDF was read here as reversed and unshaped, and a
 second render at a larger size showed it was correct all along. Arabic in a thumbnail is easy to misread; the guide's real
 defect (R2) was found by looking again, not by the first impression.
@@ -695,9 +703,23 @@ defect (R2) was found by looking again, not by the first impression.
 
 After the last change to code: `make lite-ci` — wails generate, gofmt, vet, the Windows and Intel-Mac cross-compiles, archlint and
 its 89 planted drills, the Go tests under the race detector, golangci-lint v2, ESLint, typecheck, the frontend tests and gates,
-the production bundle, the bundle gate, and the end-to-end journeys and visual pack in Chrome — **every step passed**. Then
-`make lite-release`: the guides checked against their Markdown, the upgrade matrix, both packages, the packaged application
-opened on a freshly seeded shop, the checksums and the manifest.
+the production bundle, the bundle gate, and the end-to-end journeys (20) and visual pack (6) in Chrome — **every step passed,
+nothing NOT RUN**. Mizan's own `scripts/check.sh` green beside it (337 frontend tests).
+
+Then, **on the tag** `lite-v0.9.0` (`18c537f`, a clean tree), `make lite-release`: that whole CI again, the guides checked against
+their Markdown, the upgrade matrix over schemas 1–8, both packages, the macOS application **inside the disk image** opened on a
+freshly seeded shop — version 0.9.0, schema 8, integrity ok, 0 foreign-key problems, 0 errors, a clean close — then the checksums
+and the manifest.
+
+| Artefact | Size | SHA-256 |
+|---|---|---|
+| `dist/lite/Mizan Lite 0.9.0.dmg` | 22,265,366 | `31e4d124056a74a17ee242d9d355c01d850c8bc3fe6f999b9f82816471b97cb2` |
+| `dist/lite/Mizan Lite 0.9.0 Setup.exe` | 223,625,947 | `775da477ee82aec9c7fe4010124caebb574400f8d5418e8707453718352a7138` |
+| `dist/lite/Mizan Lite 0.9.0.exe` | 24,309,760 | `fa8e48e2785136bbf6fb57d932ee6629392d31238a19064fad04d0d56facc34b` |
+
+The application inside the image is a universal binary (x86_64 and arm64), `CFBundleShortVersionString` 0.9.0,
+`CFBundleIdentifier` com.mizanerp.lite; the image also carries the installation guide in both languages. The bare Windows
+application is PE32+ x86-64; the installer is NSIS with the WebView2 runtime inside. Both are **unsigned** (Q-L8.2).
 
 ## 20. MUTATION DRILLS
 

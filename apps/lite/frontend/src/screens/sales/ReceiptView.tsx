@@ -11,6 +11,7 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { TextField } from "@/ui/Field";
+import { ratePair } from "@/i18n/figures";
 import { Money, isZero } from "./Money";
 
 /**
@@ -81,7 +82,7 @@ export function ReceiptView({
         <header className="space-y-1 text-center">
           <p className="text-sm font-semibold">{sale.shopName}</p>
           <p>
-            {t("receipt.number", { number: String(sale.receiptNo) })} · <bdi dir="ltr">{formatDateTime(sale.soldAt, locale)}</bdi>
+            {t("receipt.number", { number: String(sale.receiptNo) })} · <bdi dir="ltr">{formatDateTime(sale.soldAt)}</bdi>
           </p>
         </header>
 
@@ -167,7 +168,7 @@ export function ReceiptView({
 
         <footer className="space-y-1 border-t border-dashed border-border pt-2 text-center text-text-muted">
           <p>
-            <bdi dir="ltr">{t("receipt.rate", { rate: formatDecimal(sale.rate, locale), currency: tDynamic(`currency.short.${sale.localCurrency}`) })}</bdi>
+            {t("receipt.rate", ratePair(sale.rate, sale.localCurrency, locale, tDynamic))}
           </p>
           <p>{t("receipt.thanks")}</p>
         </footer>

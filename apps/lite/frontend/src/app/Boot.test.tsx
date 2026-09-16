@@ -18,7 +18,7 @@ describe("Boot", () => {
     });
     renderWithProviders(<Boot>{child}</Boot>, { client });
     expect(await screen.findByText("يجري تحديث قاعدة البيانات…")).toBeInTheDocument();
-    expect(screen.getByText("الخطوة 2 من 5")).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.tagName === "P" && el.textContent?.replace(/[\u2066-\u2069]/g, "") === "الخطوة 2 من 5")).toBeInTheDocument();
     expect(screen.queryByText("application")).not.toBeInTheDocument();
   });
 

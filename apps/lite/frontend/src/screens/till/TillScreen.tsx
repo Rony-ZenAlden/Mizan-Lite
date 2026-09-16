@@ -29,7 +29,8 @@ import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { CellInput, SelectField, TextField } from "@/ui/Field";
-import { addToCart, type CartEntry, type Pick } from "./cart";
+import { addToCart, minusOne, plusOne, type CartEntry, type Pick } from "./cart";
+import { ratePair } from "@/i18n/figures";
 import { QuantityDialog } from "./QuantityDialog";
 
 /** How long the cart must be still before it is priced again. */
@@ -49,6 +50,9 @@ export const CODE_NO_RATE = "lite.sales.no_rate";
  * figure — each line in pounds and dollars, the rounding to the smallest note, the change — is Go's quote of the cart as
  * typed, and Pay sends that quote's token, so a sale is never recorded at a total the cashier did not see (L4 §4).
  */
+/** The part of a key press the till reads. */
+type KeyPress = { key: string; preventDefault: () => void };
+
 export function TillScreen() {
   const client = useClient();
   const { withOwner } = useOwner();
@@ -206,7 +210,11 @@ export function TillScreen() {
   const scan = async (event: FormEvent) => {
     event.preventDefault();
     const typed = code.trim();
-    if (typed === "") return;
+    if (typed === "") {
+      // Enter on an empty scan field pays (L8 D-L8.9): the cashier's hands never leave the keyboard.
+      requestPay();
+      return;
+    }
     setCode("");
     try {
       const found = await client.till.scan(typed);
@@ -318,6 +326,56 @@ export function TillScreen() {
     cart.length > 0 &&
     !(credit && (!customer || quote?.needsCustomer));
 
+  // A pay key pressed while the cart is still being priced pays as soon as Go's quote arrives — found by the end-to-end journey
+  // (J3): a cashier's F9 straight after a scan did nothing, silently. Anything that changes the cart first cancels it.
+  const [payWhenPriced, setPayWhenPriced] = useState(false);
+  const requestPay = () => {
+    if (canPay) void pay();
+    else if (cart.length > 0 && pending && !busy) setPayWhenPriced(true);
+  };
+  useEffect(() => {
+    if (!payWhenPriced || pending) return;
+    setPayWhenPriced(false);
+    if (canPay) void pay();
+  }, [payWhenPriced, pending, canPay, pay]);
+  useEffect(() => {
+    setPayWhenPriced(false);
+  }, [cart, payment, settlement, tendered, tenderCurrency, saleDiscount]);
+
+  // The counter's keys (L8 D-L8.9): F9 pays, F4 switches cash and credit, F2 goes to the last line's quantity, + and − on an empty
+  // scan field change a counted last line by one, Escape clears search results. Not while a dialog is open — it has the keyboard.
+  const keys = useRef<(event: KeyPress) => void>(() => {});
+  keys.current = (event: KeyPress) => {
+    if (receipt || picking || weigh) return;
+    const last = cart[cart.length - 1];
+    const inScan = document.activeElement === scanField.current;
+    if (event.key === "F9") {
+      event.preventDefault();
+      requestPay();
+    } else if (event.key === "F4") {
+      event.preventDefault();
+      choosePayment(credit ? "cash" : "credit");
+    } else if (event.key === "F2" && last) {
+      event.preventDefault();
+      const field = document.querySelector<HTMLInputElement>(`[data-quantity-of="${last.key}"]`);
+      field?.focus();
+      field?.select();
+    } else if ((event.key === "+" || event.key === "-") && inScan && code === "" && last && last.unitDecimals === 0) {
+      event.preventDefault();
+      const next = event.key === "+" ? plusOne(last.quantity) : minusOne(last.quantity);
+      if (next !== null) update(last.key, { quantity: next });
+    } else if (event.key === "Escape" && (results || notFound)) {
+      setResults(null);
+      setNotFound("");
+      focusScan();
+    }
+  };
+  useEffect(() => {
+    const listener = (event: KeyPress) => keys.current(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
+
   const choosePayment = (next: "cash" | "credit") => {
     setPayment(next);
     setStale(false);
@@ -359,6 +417,9 @@ export function TillScreen() {
               autoFocus
             />
           </form>
+          <p className="text-xs text-text-muted" data-testid="till-keys">
+            {t("till.keys")}
+          </p>
           {notFound ? (
             <p role="status" className="text-sm text-danger">
               {t("till.not_found", { code: notFound })}
@@ -463,6 +524,7 @@ export function TillScreen() {
                               name: name(l),
                             })}
                             value={l.quantity}
+                            data-quantity-of={l.key}
                             onChange={(e) =>
                               update(l.key, { quantity: e.target.value })
                             }
@@ -662,14 +724,7 @@ export function TillScreen() {
                   <p
                     className={`text-xs ${quote.rateStale ? "text-danger" : "text-text-muted"}`}
                   >
-                    <bdi dir="ltr">
-                      {t("till.rate", {
-                        rate: formatDecimal(quote.rate, locale),
-                        currency: tDynamic(
-                          `currency.short.${quote.localCurrency}`,
-                        ),
-                      })}
-                    </bdi>
+                    {t("till.rate", ratePair(quote.rate, quote.localCurrency, locale, tDynamic))}
                     {quote.rateStale ? ` · ${t("header.rate_stale")}` : ""}
                   </p>
                 </>
@@ -720,6 +775,7 @@ export function TillScreen() {
                   value={changeCurrency}
                   onChange={(e) => setChangeCurrency(e.target.value)}
                   error={errors.field("changeCurrency")}
+                  hint={t("till.change_default_hint")}
                 >
                   <option value="">{t("till.change_default")}</option>
                   {[local, "USD"].filter(Boolean).map((c) => (

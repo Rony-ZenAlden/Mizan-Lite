@@ -851,11 +851,12 @@ against the final tests.
 | Mizan's `scripts/check.sh` green | ✅ |
 | PROGRESS, DECISIONS and this document updated | ✅ |
 
-### 22.1 At commit (2026-09-15)
+### 22.1 At commit (2026-09-15, `d356598`)
 
 The owner approved L7 — D-L7.i1–i19, and with them the questions built as recommended (Q-L7.2–5, Q-L7.10–12), which were not
 answered one by one — and asked for the commit. **L7 is committed with two Definition of Done checks outstanding**, both the
 owner's and both needing hardware or software this machine lacks: a receipt on the shop's 80 mm printer and an export in Excel
 (PROGRESS O14). A failure in either reopens L7 before release; L8's release gate includes both.
 
-**Next:** L8's design note — end-to-end testing, Arabic and English polish, release packaging and the shop's documentation.
+**Next:** L8's design note — end-to-end testing, Arabic and English polish, release packaging and the shop's documentation:
+[L8_RELEASE.md](L8_RELEASE.md).

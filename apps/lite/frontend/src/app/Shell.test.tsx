@@ -6,9 +6,10 @@ import { BindingError } from "@/api/envelope";
 import { ROUTES } from "./routes";
 import { Shell } from "./Shell";
 
-/** Waits for the routed status screen to finish loading, so no update lands after the test ends. */
+/** Waits for the Till — the screen the counter lands on — to finish loading, so no update lands after the test ends. */
 async function settled(locale: "ar" | "en") {
-  await screen.findByText(locale === "ar" ? "متصل بمحرّك التطبيق" : "Connected to the application engine");
+  await screen.findByLabelText(locale === "ar" ? "امسح أو ابحث" : "Scan or search");
+  await new Promise((resolve) => setTimeout(resolve, 20));
 }
 
 describe("Shell", () => {
@@ -18,7 +19,8 @@ describe("Shell", () => {
     await settled("en");
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     expect(nav.querySelectorAll("a")).toHaveLength(ROUTES.length);
-    expect(screen.getByRole("link", { name: "Status" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    expect(screen.getByRole("link", { name: "Till" })).toHaveAttribute("href", "/");
   });
 
   it("switches to English at once, in the same render, and saves it", async () => {
@@ -122,7 +124,7 @@ describe("Shell — the exchange rate in the header", () => {
     renderWithProviders(<Shell />, { client: fakeClient({ settings: { get: async () => ({ locale: "en", shopName: "المونة", direction: "ltr", debtCurrency: "USD" }) } }), locale: "en" });
     await settled("en");
     const chip = await screen.findByTestId("header-rate");
-    expect(chip).toHaveTextContent("1 USD = 15,000 Syrian pound · 3 hours ago");
+    expect(chip).toHaveTextContent("1 USD = 15,000 SYP · 3 hours ago");
     expect(chip).toHaveAttribute("href", "/rates");
   });
 
@@ -143,5 +145,27 @@ describe("Shell — the exchange rate in the header", () => {
     renderWithProviders(<Shell />, { client: none, locale: "en" });
     await settled("en");
     expect(await screen.findByTestId("header-rate")).toHaveTextContent("No exchange rate");
+  });
+});
+
+describe("Shell — backups on every screen (L8 A-L8.3)", () => {
+  it("warns on every screen when the backups need attention, and not otherwise", async () => {
+    const { aBackup, aBackupStatus } = await import("@/api/testing");
+    const { needsAttention } = await import("./Shell");
+    expect(needsAttention(aBackupStatus())).toBeNull();
+    expect(needsAttention(aBackupStatus({ last: undefined }))).toBe("backups.warning_none");
+    expect(needsAttention(aBackupStatus({ last: aBackup({ ageSeconds: 40 * 3600 }) }))).toBe("backups.warning_old");
+    expect(needsAttention(aBackupStatus({ outsideFailed: "lite.backups.folder_missing" }))).toBe("backups.outside_failed");
+    expect(needsAttention(aBackupStatus({ outsideStale: true }))).toBe("backups.warning_outside_old");
+    expect(needsAttention(aBackupStatus({ folder: "", outsideStale: true }))).toBeNull();
+
+    const health = vi.fn(async () => ({ version: "0.9.0", schemaVersion: 8, platform: "darwin", dataDir: "/d" }));
+    const status = async () => aBackupStatus({ outsideStale: true });
+    renderWithProviders(<Shell />, { client: fakeClient({ app: { health }, backups: { status }, settings: { get: async () => ({ locale: "en", shopName: "x", direction: "ltr", debtCurrency: "USD" }) } }), locale: "en" });
+    const warning = await screen.findByTestId("backup-warning");
+    expect(warning).toHaveTextContent("The last copy in the outside folder is more than two days old");
+    expect(screen.getByRole("link", { name: "Open Backups" })).toHaveAttribute("href", "/backups");
+    expect(health).toHaveBeenCalledTimes(1);
+    await settled("en");
   });
 });

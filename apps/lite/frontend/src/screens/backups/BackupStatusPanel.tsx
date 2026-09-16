@@ -42,7 +42,7 @@ export function BackupStatusPanel({ status }: { status: BackupStatus }) {
         <dd>
           {status.last ? (
             <>
-              {age(status.last.ageSeconds)} · <bdi dir="ltr">{formatDateTime(status.last.takenAt, locale)}</bdi> · {tDynamic(`backups.reason.${status.last.reason}`)}
+              {age(status.last.ageSeconds)} · <bdi dir="ltr">{formatDateTime(status.last.takenAt)}</bdi> · {tDynamic(`backups.reason.${status.last.reason}`)}
             </>
           ) : (
             t("backups.none")
@@ -54,7 +54,7 @@ export function BackupStatusPanel({ status }: { status: BackupStatus }) {
             <span className="text-text-muted">{t("backups.outside_none")}</span>
           ) : status.lastOutside ? (
             <>
-              {age(status.lastOutside.ageSeconds)} · <bdi dir="ltr">{formatDateTime(status.lastOutside.takenAt, locale)}</bdi>
+              {age(status.lastOutside.ageSeconds)} · <bdi dir="ltr">{formatDateTime(status.lastOutside.takenAt)}</bdi>
             </>
           ) : (
             t("backups.none")

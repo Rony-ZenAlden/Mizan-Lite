@@ -396,3 +396,76 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L7.i17 | Choosing an outside folder takes a backup at once; a missing folder warns, local backups continue | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
 | D-L7.i18 | A4 table cells a 5 pt gutter; the products table's amounts without currency names; an empty cash book a sentence | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
 | D-L7.i19 | A print recorded only when a printer is named; a failed print does not consume a copy number | approved | [L7 §17](phases/L7_HARDWARE_BACKUP.md) |
+
+## L8 — approved 2026-09-16, with the owner's answers (the Windows build cross-compiled, the pilot unsigned, الصندوق / حركة الصندوق, DD/MM/YYYY, an Excel import)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| A-L8.1 | L8 adds end-to-end testing, UI polish, the support file and the documentation set to DESIGN §10's installers, seeder, DoD review and pilot | approved | [L8 §2.3](phases/L8_RELEASE.md) |
+| A-L8.2 | "The screens looked at in Arabic and English" closed for L0–L7 by the visual pack and the owner's review | approved | [L8 §2.3](phases/L8_RELEASE.md) |
+| A-L8.3 | The counter lands on the Till; Status becomes About | approved | [L8 §2.3](phases/L8_RELEASE.md) |
+| D-L8.1 | E2E: the real built frontend against the real Go graph through a test-only loopback bridge | approved | [L8 §3.2](phases/L8_RELEASE.md) |
+| D-L8.2 | `playwright-core` with the installed Chrome or Edge; no browser = NOT RUN | approved | [L8 §3.3](phases/L8_RELEASE.md) |
+| D-L8.3 | Ten journeys in both languages, each ending with Go-state assertions | approved | [L8 §3.4](phases/L8_RELEASE.md) |
+| D-L8.4 | A visual pack of every view, both languages, two sizes, looked at each release; structural checks automated; no screen pixel goldens | approved | [L8 §3.4](phases/L8_RELEASE.md) |
+| D-L8.5 | Packaged-app smoke scripts for macOS and Windows | approved | [L8 §3.5](phases/L8_RELEASE.md) |
+| D-L8.6 | Fixture databases for schemas 1–8, upgraded and verified on every run | approved | [L8 §3.6](phases/L8_RELEASE.md) |
+| D-L8.7 | A seven-point review of every view; S1–S8 fixed with a test each | approved | [L8 §4.1](phases/L8_RELEASE.md) |
+| D-L8.8 | A bilingual glossary; one rule for dates and numbers everywhere | approved | [L8 §4.3](phases/L8_RELEASE.md) |
+| D-L8.9 | The till fully usable by keyboard, with a key legend | approved | [L8 §4.4](phases/L8_RELEASE.md) |
+| D-L8.10 | One version source, `lite-v…` tags, `-dev.<sha>` otherwise | approved | [L8 §5.2](phases/L8_RELEASE.md) |
+| D-L8.11 | Per-machine NSIS installer with offline WebView2; refuses while running; never touches the data | approved | [L8 §5.3](phases/L8_RELEASE.md) |
+| D-L8.12 | Universal DMG with `hdiutil` | approved | [L8 §5.4](phases/L8_RELEASE.md) |
+| D-L8.13 | Signing opt-in; unsigned bypasses documented | approved | [L8 §5.5](phases/L8_RELEASE.md) |
+| D-L8.14 | `make lite-release` from a clean tag, listing what was NOT RUN | approved | [L8 §5.6](phases/L8_RELEASE.md) |
+| D-L8.15 | Third-party notices generated offline, shipped and shown | approved | [L8 §5.7](phases/L8_RELEASE.md) |
+| D-L8.16 | `docs/mizan_lite/guide/`, Arabic first with English parity gated; the shop guide as a PDF rendered by Lite | approved | [L8 §6](phases/L8_RELEASE.md) |
+| D-L8.17 | About screen; the counter lands on the Till | approved | [L8 §9.1](phases/L8_RELEASE.md) |
+| D-L8.18 | A support file saved by the owner; the database only when chosen; no secret | approved | [L8 §9.2](phases/L8_RELEASE.md) |
+| D-L8.19 | The Windows protocol and the pilot week are release criteria; 0.9.0 pilot, 1.0.0 at exit | approved | [L8 §7, §8](phases/L8_RELEASE.md) |
+| D-L8.20 | A Definition of Done review over L0–L8 in Mizan's form | approved | [L8 §12.3](phases/L8_RELEASE.md) |
+| Q-L8.1 | A Windows PC or VM before release — **answered: cross-compile here; the owner runs and verifies it** (O1) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.2 | Code signing certificates — **answered: the pilot ships unsigned**; signing stays opt-in | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.3 | Who installs in a shop (recommended: write for a relative or technician) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.4 | The pilot shop, its machine and printer; paper book in parallel (recommended: three days) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.5 | Navigation names and the first screen — **answered: الصندوق for selling, حركة الصندوق for the drawer**; land on the Till | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.6 | Arabic dates and times — **answered: DD/MM/YYYY everywhere**, 24-hour, no month names (D-L8.i5) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.7 | Installer per-machine or per-user, and its language (recommended: per-machine, Arabic) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.8 | The database in the support file when ticked (recommended: yes, off by default) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.9 | Product import from a spreadsheet — **answered: yes, a simple Excel import in L8** (D-L8.i8) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.10 | Versions (recommended: 0.9.0 pilot, 1.0.0 at exit) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.11 | No automatic update (recommended: confirm) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.12 | Minimum computer (recommended: Windows 10 22H2/11 64-bit, 4 GB, 1366×768; macOS 13+) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.13 | Playwright as a frontend dev dependency — built as `@playwright/test` with no browser download (D-L8.i2) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+| Q-L8.14 | Who reviews the Arabic (recommended: the owner, on the visual pack) | approved | [L8 §14.2](phases/L8_RELEASE.md) |
+
+### L8 — decisions made while building (approved 2026-09-16)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L8.i1 | The bridge is an ordinary package plus `cmd/lite-e2e`, not a build-tagged one; `lite-e2e-test-only` keeps it out of the application | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i2 | `@playwright/test` driving the installed Chrome (Edge on Windows); no browser downloaded | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i3 | The journeys assert Go's state through the same bridge they drive | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i4 | The counter lands on the Till; Status became About; the backups' state warns from every screen | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i5 | One date rule everywhere — `15/09/2026`, 24-hour, digits only, on paper and in the guides | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i6 | Values put into an Arabic sentence are isolated by the translator, not at the call site | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i7 | Rate sentences carry both sides as figures (`{usd} = {local}`) | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i8 | The import's preview runs the real import in a rolled-back transaction; the PIN is asked for last | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i9 | Every list a binding returns is empty, never nil | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i10 | A pay key pressed while Go is pricing pays when the price arrives; a change to the cart cancels it | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i11 | The Excel template's example rows are named "(مثال)" / "(example)" | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i12 | The guides live as Markdown in `docs/` and ship as PDFs rendered by Lite, checked for drift | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i13 | The support file holds diagnostics and a week of logs; the database only when ticked, in owner mode | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i14 | The notices are generated for both systems' module graphs | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i15 | The upgrade matrix compares the columns a table had, not the columns it has | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i16 | The Windows installer is per-machine, bilingual, refuses while running, and never touches the shop's data | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i17 | No custom disk-image background; the installation guide travels inside the image | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i18 | A build off a `lite-v<version>` tag calls itself `<version>-dev.<sha>` everywhere it names itself | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i19 | The smoke test waits for *ready* on a new shop and for the frontend's own call on a shop that is set up | approved | [L8 §17](phases/L8_RELEASE.md) |
+| D-L8.i20 | The seeded shop for the journeys is seeded once and copied per test | approved | [L8 §17](phases/L8_RELEASE.md) |
+
+### Authentication — asked and settled 2026-09-16
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L8.i21 | **No JWT and no login.** A single-computer offline application has no server to authenticate against; the counter must never be locked out mid-sale. One-time setup, the owner PIN on the owner's actions, two minutes of owner mode, a recovery code written down once | approved — the owner chose this over three alternatives | [L8 §15](phases/L8_RELEASE.md) |

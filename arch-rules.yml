@@ -129,9 +129,9 @@ rules:
 
       - name: lite-cmd-entry
         description: Lite's commands wire internal/lite and hold nothing else.
-        applies_to: ["self/cmd/lite-demoseed/**"]
+        applies_to: ["self/cmd/lite-demoseed/**", "self/cmd/lite-guides/**", "self/cmd/lite-e2e/**"]
         allow_only: ["std", "self/internal/lite/**"]
-        message: "cmd/lite-demoseed may import only the standard library and internal/lite"
+        message: "Lite's commands may import only the standard library and internal/lite"
 
       # ── Lite module isolation (DESIGN §13.3 A10, L1 §11) ──────────────────────
       # Modules import none of each other. Only the orchestrators — bootstrap, api, setup, demoseed — and the
@@ -409,12 +409,34 @@ rules:
         allow_only: ["std", "self/internal/kernel/errs", "self/internal/lite/typeset"]
         message: "documents and sheets may import only the standard library, kernel/errs and typeset"
 
+      - name: lite-support-pure
+        description: The support file is assembled from values and the log folder — no module, no database (L8 §9.2).
+        applies_to: ["self/internal/lite/support/**"]
+        allow_only: ["std", "self/internal/kernel/errs"]
+        message: "support may import only the standard library and kernel/errs"
+
+      - name: lite-guide-pure
+        description: The guides are Markdown rendered by the document renderer, and the PDFs that came of it (L8 §6.2).
+        applies_to: ["self/internal/lite/guide/**"]
+        allow_only: ["std", "self/internal/kernel/errs", "self/internal/lite/documents", "self/internal/lite/typeset", "self/internal/lite/guide"]
+        message: "guide may import only the standard library, kernel/errs, documents and typeset"
+
+      - name: lite-e2e-test-only
+        description: >
+          The end-to-end bridge (L8 D-L8.1) answers the frontend over HTTP for tests. The application, and every Lite package, must
+          never import it — only cmd/lite-e2e runs it — so the shipped binary holds no HTTP server.
+        applies_to: ["self/internal/lite/**", "self/apps/lite/**"]
+        except: ["self/internal/lite/e2e"]
+        forbid: ["self/internal/lite/e2e/**"]
+        message: "only cmd/lite-e2e may import internal/lite/e2e"
+
       - name: lite-network-only-in-httpsource
         description: >
           One package reaches the internet: fx/infra/httpsource, the exchange-rate providers (L3 §14.6). Anything else in
           Lite that opens a connection is a feature nobody reviewed as one — and a test that could reach the network.
         applies_to: ["self/internal/lite/**", "self/cmd/lite-demoseed/**"]
-        except: ["self/internal/lite/fx/infra/httpsource"]
+        # The end-to-end bridge listens on loopback for the browser that drives the journeys (L8 D-L8.1); it is never shipped.
+        except: ["self/internal/lite/fx/infra/httpsource", "self/internal/lite/e2e"]
         forbid: ["net", "net/http", "net/http/**", "net/rpc", "net/smtp"]
         message: "only internal/lite/fx/infra/httpsource may open network connections"
 

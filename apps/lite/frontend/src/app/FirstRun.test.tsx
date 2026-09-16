@@ -85,10 +85,10 @@ describe("FirstRunGate", () => {
     renderWithProviders(<FirstRunGate>{shell}</FirstRunGate>, { client, locale: "en" });
     const field = await screen.findByLabelText("Today's exchange rate (Syrian pound per 1 USD)");
     await userEvent.type(field, "15.000");
-    expect(screen.getByTestId("rate-readback")).toHaveTextContent("1 USD = 15 Syrian pound");
+    expect(screen.getByTestId("rate-readback")).toHaveTextContent("1 USD = 15 SYP");
     await userEvent.clear(field);
     await userEvent.type(field, "١٥٠٠٠");
-    expect(screen.getByTestId("rate-readback")).toHaveTextContent("1 USD = 15,000 Syrian pound");
+    expect(screen.getByTestId("rate-readback")).toHaveTextContent("1 USD = 15,000 SYP");
   });
 
   it("fetches a rate from the internet into the field, names where it came from, and still sends what the field holds", async () => {

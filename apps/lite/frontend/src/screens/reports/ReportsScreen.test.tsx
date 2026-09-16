@@ -128,7 +128,7 @@ describe("ReportsScreen", () => {
     expect(screen.getByTestId("month-total")).toHaveTextContent("Month total16.50 USD2.50 USD1.10 USD37,500 SYP16,500 SYP");
     fireEvent.change(screen.getByLabelText("Month"), { target: { value: "2026-08" } });
     await settle();
-    await userEvent.click(within(screen.getByTestId("month")).getByRole("button", { name: "2026-09-14" }));
+    await userEvent.click(within(screen.getByTestId("month")).getByRole("button", { name: "14/09/2026" }));
     await settle();
     expect(screen.getByRole("tab", { name: "Day" })).toHaveAttribute("aria-selected", "true");
     expect(day).toHaveBeenLastCalledWith("2026-09-14");

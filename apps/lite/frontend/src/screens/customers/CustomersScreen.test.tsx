@@ -48,7 +48,7 @@ describe("CustomersScreen", () => {
     expect(within(row).getByTestId("balance-SYP")).toHaveTextContent("150,000 SYP≈ 10.00 USD at 15,000, for reference");
     expect(within(row).getByTestId("balance-USD")).toHaveTextContent("9.58 USD≈ 143,700 SYP at 15,000, for reference");
     expect(row).not.toHaveTextContent("20.00"); // no combined figure anywhere
-    expect(within(row).getByText("2026-09-01 · 2026-09-12")).toBeInTheDocument();
+    expect(within(row).getByText("01/09/2026 · 12/09/2026")).toBeInTheDocument();
     expect(screen.getByTestId("debt-today-USD")).toHaveTextContent("Payments (1)6.67 USD");
 
     await userEvent.click(screen.getByLabelText("Only customers with a balance"));
@@ -99,7 +99,7 @@ describe("CustomersScreen", () => {
     const dialog = await openStatement(fakeClient({ customers: { statement } }));
     expect(statement).toHaveBeenLastCalledWith(aCustomer().id, "USD");
     expect(within(dialog).getByRole("tab", { name: "US dollar" })).toHaveAttribute("aria-selected", "true");
-    expect(within(dialog).getByTestId("statement-balance")).toHaveTextContent("Balance: 9.58 USDowed since 2026-09-12");
+    expect(within(dialog).getByTestId("statement-balance")).toHaveTextContent("Balance: 9.58 USDowed since 12/09/2026");
     const entries = within(dialog).getAllByTestId("statement-entry");
     expect(entries).toHaveLength(2);
     expect(entries[0]).toHaveTextContent("Payment");

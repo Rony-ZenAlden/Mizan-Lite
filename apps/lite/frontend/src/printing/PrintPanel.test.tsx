@@ -94,7 +94,7 @@ describe("PrintPanel", () => {
     );
     await settle();
     expect(sale).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("status")).toHaveTextContent("أُرسل إلى الطابعة Xprinter XP-80");
+    expect(screen.getByRole("status")).toHaveReadableText("أُرسل إلى الطابعة Xprinter XP-80");
   });
 
   it("a refund's voucher is the owner's: the PIN, then it prints", async () => {

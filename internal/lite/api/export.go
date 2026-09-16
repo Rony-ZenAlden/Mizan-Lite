@@ -102,7 +102,8 @@ var unsafeName = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1f\x{2066}-\x{2069}]+`)
 
 // filename is the proposed name: shop - report - range.ext, with what a file system refuses removed.
 func (w words) filename(x exportable, format string) string {
-	base := unsafeName.ReplaceAllString(w.settings.ShopName+" - "+x.title+" - "+x.subtitle, " ")
+	// A date reads 15/09/2026 in the document; a file name cannot hold "/", so it becomes 15-09-2026.
+	base := unsafeName.ReplaceAllString(strings.ReplaceAll(w.settings.ShopName+" - "+x.title+" - "+x.subtitle, "/", "-"), " ")
 	return strings.Join(strings.Fields(base), " ") + "." + format
 }
 
@@ -331,7 +332,7 @@ func headings(labels ...string) []sheets.Cell {
 func (w words) cur(code string) string { return w.t("currency." + code) }
 
 func (w words) rangeText(from, to string) string {
-	return w.t("doc.range", "from", w.fig(from), "to", w.fig(to))
+	return w.t("doc.range", "from", w.date(from), "to", w.date(to))
 }
 
 // plainCells strips direction marks from a workbook's text: a spreadsheet lays its sheet out itself, and an invisible mark in

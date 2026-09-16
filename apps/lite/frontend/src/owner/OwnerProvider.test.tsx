@@ -127,7 +127,7 @@ describe("the PIN dialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "run" }));
     await userEvent.type(await screen.findByLabelText("رمز المالك"), "739251");
     await userEvent.click(screen.getByRole("button", { name: "تأكيد" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("حاول بعد 30 ثانية");
+    expect(await screen.findByRole("alert")).toHaveReadableText("حاول بعد 30 ثانية");
   });
 
   it("recovers with the code, shows the NEW code until it is written down, then asks for the new PIN", async () => {

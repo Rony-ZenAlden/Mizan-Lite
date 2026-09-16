@@ -1,9 +1,9 @@
 import type { ComponentType } from "react";
 import type { MessageKey } from "@/i18n/messages";
+import { AboutScreen } from "@/screens/about/AboutScreen";
 import { BackupsScreen } from "@/screens/backups/BackupsScreen";
 import { CashScreen } from "@/screens/cash/CashScreen";
 import { CustomersScreen } from "@/screens/customers/CustomersScreen";
-import { HomeScreen } from "@/screens/home/HomeScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
 import { PrinterScreen } from "@/screens/printer/PrinterScreen";
 import { ProductsScreen } from "@/screens/products/ProductsScreen";
@@ -25,7 +25,8 @@ export interface RouteDef {
  * Gate G4 adds the other direction: every *Screen component must appear here.
  */
 export const ROUTES: readonly RouteDef[] = [
-  { path: "/till", labelKey: "nav.till", Screen: TillScreen },
+  // The counter opens on the Till (L8 A-L8.3).
+  { path: "/", labelKey: "nav.till", Screen: TillScreen },
   { path: "/sales", labelKey: "nav.sales", Screen: SalesScreen },
   { path: "/cash", labelKey: "nav.cash", Screen: CashScreen },
   { path: "/customers", labelKey: "nav.customers", Screen: CustomersScreen },
@@ -36,5 +37,5 @@ export const ROUTES: readonly RouteDef[] = [
   { path: "/printer", labelKey: "nav.printer", Screen: PrinterScreen },
   { path: "/backups", labelKey: "nav.backups", Screen: BackupsScreen },
   { path: "/owner", labelKey: "nav.owner", Screen: OwnerScreen },
-  { path: "/", labelKey: "nav.home", Screen: HomeScreen },
+  { path: "/about", labelKey: "nav.about", Screen: AboutScreen },
 ];

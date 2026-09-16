@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useClient } from "@/api/ClientContext";
-import type { Product } from "@/api/client";
+import type { ImportResult, Product } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
@@ -8,6 +8,7 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
 import { TextField } from "@/ui/Field";
+import { ImportDialog } from "./ImportDialog";
 import { ProductForm } from "./ProductForm";
 
 /** How long typing pauses before a search is sent. */
@@ -25,6 +26,8 @@ export function ProductsScreen() {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ImportResult | null>(null);
 
   const load = useCallback(
     async (query: string, inactive: boolean) => {
@@ -60,9 +63,12 @@ export function ProductsScreen() {
     <section className="space-y-4">
       <header className="flex items-center justify-between gap-4">
         <h2 className="text-xl font-semibold">{t("products.title")}</h2>
-        <Button variant="primary" onClick={() => setEditing("new")}>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setImporting(true)}>{t("import.open")}</Button>
+          <Button variant="primary" onClick={() => setEditing("new")}>
           {t("products.new")}
         </Button>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-end gap-4">
@@ -147,6 +153,17 @@ export function ProductsScreen() {
         </div>
       ) : null}
 
+      {imported ? <Alert tone="success" title={t("import.done", { created: String(imported.created), stock: String(imported.withStock) })} /> : null}
+      {importing ? (
+        <ImportDialog
+          onClose={() => setImporting(false)}
+          onImported={(result) => {
+            setImporting(false);
+            setImported(result);
+            reload();
+          }}
+        />
+      ) : null}
       {editing ? (
         <ProductForm
           product={editing === "new" ? undefined : editing}

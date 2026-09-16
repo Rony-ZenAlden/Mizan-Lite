@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { useClient } from "@/api/ClientContext";
+import type { BackupStatus } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { LOCALES, isLocale } from "@/i18n/messages";
-import { formatCountdown, formatDecimal } from "@/i18n/numbers";
+import { formatCountdown } from "@/i18n/numbers";
 import { formatAge } from "@/i18n/time";
 import { useRate } from "@/rates/RateProvider";
 import { useOwner } from "@/owner/OwnerProvider";
 import { Button } from "@/ui/Button";
 import { Alert } from "@/ui/Alert";
+import { ratePair } from "@/i18n/figures";
 import { ROUTES } from "./routes";
 
 /** The application frame: header, navigation, and the routed screen. Mounted only once boot is ready. */
@@ -18,6 +20,26 @@ export function Shell() {
   const { status, lock } = useOwner();
   const { rate } = useRate();
   const [shopName, setShopName] = useState("");
+  const [safety, setSafety] = useState<BackupStatus | null>(null);
+
+  // Proof, in the log, that the packaged webview reached its own backend (L0) — the smoke test waits for this line — and the
+  // backups' state, warned on every screen when it needs attention, since the counter no longer lands on a status page (L8 A-L8.3).
+  useEffect(() => {
+    let cancelled = false;
+    client.app.health().catch(() => {});
+    client.backups
+      .status()
+      .then((st) => {
+        if (!cancelled) setSafety(st);
+      })
+      .catch(() => {
+        // The Backups and About screens say why; a failed read here is not worth a banner of its own.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+  const backupWarning = needsAttention(safety);
 
   // The document was served in the language read from the database before launch. If that read fell
   // back to the default (the file was locked, say), the real stored setting wins once it can be read.
@@ -55,7 +77,7 @@ export function Shell() {
           >
             {rate.set ? (
               <>
-                <bdi dir="ltr">{t("header.rate", { rate: formatDecimal(rate.rate, locale), currency: tDynamic(`currency.${rate.localCurrency}`) })}</bdi>
+                {t("header.rate", ratePair(rate.rate, rate.localCurrency, locale, tDynamic))}
                 {" · "}
                 {rate.stale ? t("header.rate_stale") : formatAge(rate.ageSeconds, locale, t("age.just_now"))}
               </>
@@ -113,6 +135,15 @@ export function Shell() {
               <Alert tone="danger" title={errorText(saveError)} />
             </div>
           ) : null}
+          {backupWarning ? (
+            <div className="mb-4" data-testid="backup-warning">
+              <Alert tone="danger" title={t(backupWarning)}>
+                <Link to="/backups" className="underline">
+                  {t("home.backups_open")}
+                </Link>
+              </Alert>
+            </div>
+          ) : null}
           <Routes>
             {ROUTES.map(({ path, Screen }) => (
               <Route key={path} path={path} element={<Screen />} />
@@ -122,4 +153,17 @@ export function Shell() {
       </div>
     </div>
   );
+}
+
+/** A day and a bit: a daily backup missed once is worth saying. */
+const LAST_BACKUP_TOO_OLD_SECONDS = 36 * 3600;
+
+/** What, if anything, the shop must be told about its backups on every screen. */
+export function needsAttention(st: BackupStatus | null): "backups.warning_none" | "backups.warning_old" | "backups.outside_failed" | "backups.warning_outside_old" | null {
+  if (!st) return null;
+  if (!st.last) return "backups.warning_none";
+  if (st.last.ageSeconds > LAST_BACKUP_TOO_OLD_SECONDS) return "backups.warning_old";
+  if (st.folder && st.outsideFailed) return "backups.outside_failed";
+  if (st.folder && st.outsideStale) return "backups.warning_outside_old";
+  return null;
 }

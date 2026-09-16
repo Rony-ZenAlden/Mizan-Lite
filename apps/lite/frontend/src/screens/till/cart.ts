@@ -27,6 +27,13 @@ export function plusOne(quantity: string): string | null {
   return (BigInt(typed.value) + 1n).toString();
 }
 
+/** One fewer of a counted product: "3" → "2". Null below 2 or when the quantity is not a whole count — the line is removed on purpose, not by a key. */
+export function minusOne(quantity: string): string | null {
+  const typed = normaliseNumber(quantity);
+  if (!typed.ok || !/^\d+$/.test(typed.value) || BigInt(typed.value) < 2n) return null;
+  return (BigInt(typed.value) - 1n).toString();
+}
+
 let counter = 0;
 
 /**

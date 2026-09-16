@@ -165,3 +165,75 @@ func between(t *testing.T, s, open, closing string) string {
 	}
 	return inside
 }
+
+func TestAWorkbookLiteWroteReadsBack(t *testing.T) {
+	body, err := sheets.XLSX(sheets.Workbook{Sheets: []sheets.Sheet{
+		{Name: "المنتجات", Rows: [][]sheets.Cell{
+			{sheets.Text("الاسم"), sheets.Text("السعر")},
+			{sheets.Text("زيت زيتون"), sheets.Number("3.25", 2), {}, sheets.Text("=SUM(A1)")},
+			{},
+			{sheets.Text("لبنة"), sheets.Number("15000", 0)},
+		}},
+		{Name: "units", Rows: [][]sheets.Cell{{sheets.Text("kg")}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := sheets.ReadXLSX(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(read) != 2 || read[0].Name != "المنتجات" || read[1].Name != "units" {
+		t.Fatalf("sheets %+v", read)
+	}
+	rows := read[0].Rows
+	if len(rows) != 4 || rows[1][0] != "زيت زيتون" || rows[1][1] != "3.25" || rows[1][2] != "" || rows[1][3] != "=SUM(A1)" || len(rows[2]) != 0 || rows[3][1] != "15000" {
+		t.Fatalf("rows %q", rows)
+	}
+}
+
+// TestAWorkbookExcelWroteReadsBack reads the parts Excel itself writes: shared strings with rich-text runs, a formula's cached
+// value, a sparse row, and relationship targets written as absolute paths.
+func TestAWorkbookExcelWroteReadsBack(t *testing.T) {
+	parts := map[string]string{
+		"xl/workbook.xml":            `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+		"xl/_rels/workbook.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="/xl/worksheets/sheet1.xml"/></Relationships>`,
+		"xl/sharedStrings.xml":       `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Olive oil</t></si><si><r><t>مربى </t></r><r><t>مشمش</t></r></si></sst>`,
+		"xl/worksheets/sheet1.xml": `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>` +
+			`<row r="2"><c r="A2" t="s"><v>0</v></c><c r="C2"><v>3.25</v></c></row>` +
+			`<row r="3"><c r="B3" t="s"><v>1</v></c><c r="C3"><f>C2*2</f><v>6.5</v></c></row>` +
+			`<row r="4"><c r="A4"><v>1.5E+3</v></c></row></sheetData></worksheet>`,
+	}
+	build := func(skip string) []byte {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		for name, body := range parts {
+			if name == skip {
+				continue
+			}
+			w, _ := zw.Create(name)
+			_, _ = w.Write([]byte(body))
+		}
+		_ = zw.Close()
+		return buf.Bytes()
+	}
+	_, err := sheets.ReadXLSX(build(""))
+	if errs.CodeOf(err) != sheets.CodeExponent {
+		t.Fatalf("an exponent: %v", err)
+	}
+	parts["xl/worksheets/sheet1.xml"] = strings.Replace(parts["xl/worksheets/sheet1.xml"], "1.5E+3", "1500", 1)
+	read, err := sheets.ReadXLSX(build(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := read[0].Rows
+	if len(rows) != 4 || len(rows[0]) != 0 || rows[1][0] != "Olive oil" || rows[1][2] != "3.25" || rows[2][1] != "مربى مشمش" || rows[2][2] != "6.5" || rows[3][0] != "1500" {
+		t.Fatalf("rows %q", rows)
+	}
+	if _, err := sheets.ReadXLSX(build("xl/workbook.xml")); errs.CodeOf(err) != sheets.CodeNotAWorkbook {
+		t.Fatalf("a missing part: %v", err)
+	}
+	if _, err := sheets.ReadXLSX([]byte("not a zip")); errs.CodeOf(err) != sheets.CodeNotAWorkbook {
+		t.Fatalf("not a zip: %v", err)
+	}
+}

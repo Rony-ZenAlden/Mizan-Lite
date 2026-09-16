@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAge, formatDateTime } from "./time";
+import { formatAge, formatDate, formatDateTime } from "./time";
 
 describe("formatAge", () => {
   it("words an age in both languages with the platform's plurals and Latin digits", () => {
@@ -18,9 +18,20 @@ describe("formatAge", () => {
 });
 
 describe("formatDateTime", () => {
-  it("formats a timestamp with Latin digits, and leaves an unreadable one as it is", () => {
-    expect(formatDateTime("2026-09-14T06:00:00.000Z", "ar")).not.toMatch(/[٠-٩]/);
-    expect(formatDateTime("2026-09-14T06:00:00.000Z", "en")).toMatch(/2026/);
-    expect(formatDateTime("not a time", "en")).toBe("not a time");
+  it("is day/month/year and a 24-hour time in the machine's zone, digits only, the same in both languages (Q-L8.6)", () => {
+    const at = new Date(2026, 8, 15, 15, 5);
+    expect(formatDateTime(at.toISOString())).toBe("15/09/2026 15:05");
+    expect(formatDateTime(at.toISOString())).toBe("15/09/2026 15:05");
+    expect(formatDateTime(at.toISOString())).toMatch(/^[0-9/: ]+$/);
+    expect(formatDateTime("not a time")).toBe("not a time");
+  });
+});
+
+describe("formatDate", () => {
+  it("turns Go's business dates and months into what the shop reads", () => {
+    expect(formatDate("2026-09-15")).toBe("15/09/2026");
+    expect(formatDate("2026-09")).toBe("09/2026");
+    expect(formatDate("")).toBe("");
+    expect(formatDate("yesterday")).toBe("yesterday");
   });
 });

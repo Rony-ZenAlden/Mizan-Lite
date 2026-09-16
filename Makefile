@@ -116,6 +116,26 @@ LITE_LDFLAGS := -X main.version=$(LITE_VERSION)
 lite-ci: ## Mizan Lite: full local CI — Go, cross-compile, archlint + drills, frontend, bundle gate
 	scripts/lite-check.sh
 
+.PHONY: lite-e2e
+lite-e2e: ## Mizan Lite: the end-to-end journeys and the visual pack (needs Chrome, or LITE_E2E_CHANNEL=msedge)
+	cd apps/lite/frontend && npm run build >/dev/null && npx playwright test -c e2e/playwright.config.ts
+
+.PHONY: lite-guides
+lite-guides: ## Mizan Lite: render docs/mizan_lite/guide/*.md to the PDFs the application ships
+	go run ./cmd/lite-guides
+
+.PHONY: lite-package-macos
+lite-package-macos: ## Mizan Lite: build and package the macOS .dmg into dist/lite/
+	scripts/lite-package-macos.sh
+
+.PHONY: lite-package-windows
+lite-package-windows: ## Mizan Lite: cross-build the Windows installer (WebView2 inside) into dist/lite/
+	scripts/lite-package-windows.sh
+
+.PHONY: lite-release
+lite-release: ## Mizan Lite: a release from a clean tree — CI, packages, smoke, checksums
+	scripts/lite-release.sh
+
 .PHONY: lite-dev
 lite-dev: ## Mizan Lite: run with hot reload (requires the wails CLI)
 	cd apps/lite && wails dev

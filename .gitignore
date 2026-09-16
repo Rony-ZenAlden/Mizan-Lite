@@ -47,6 +47,8 @@ npm-debug.log*
 *.db
 *.db-wal
 *.db-shm
+# L8 D-L8.6: the upgrade matrix's fixture shops, one per past schema — committed on purpose.
+!/internal/lite/bootstrap/testdata/schemas/*.db
 *.mizanbak
 /data/
 
@@ -93,3 +95,8 @@ testdata/rapid/
 # Keep a dist placeholder so `go:embed all:frontend/dist` compiles before a frontend build.
 /apps/lite/frontend/dist/*
 !/apps/lite/frontend/dist/index.html
+# L8: the journeys' screenshots and reports. `make lite-e2e` produces them on any machine; the
+# visual pack is looked at, not diffed. (The packages land in /dist, ignored at the top.)
+/build/lite-e2e/
+/apps/lite/frontend/playwright-report/
+/apps/lite/frontend/test-results/

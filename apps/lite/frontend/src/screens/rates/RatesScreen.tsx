@@ -11,6 +11,7 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { TextField } from "@/ui/Field";
+import { ratePair } from "@/i18n/figures";
 import { CashNoteSection } from "./CashNoteSection";
 
 /** How many past rates the history shows. */
@@ -93,7 +94,7 @@ export function RatesScreen() {
   };
 
   const pair = (value: string, currency: string) => (
-    <bdi dir="ltr">{t("rates.pair", { rate: formatDecimal(value, locale), currency: tDynamic(`currency.${currency}`) })}</bdi>
+    <span>{t("rates.pair", ratePair(value, currency, locale, tDynamic))}</span>
   );
   const provider = (name: string) => tDynamic(`rates.provider.${name}`);
   const justNow = t("age.just_now");
@@ -225,7 +226,7 @@ export function RatesScreen() {
                 {history.map((row) => (
                   <tr key={row.id} className="border-t border-border">
                     <td className="p-2">
-                      <bdi dir="ltr">{formatDateTime(row.recordedAt, locale)}</bdi>
+                      <bdi dir="ltr">{formatDateTime(row.recordedAt)}</bdi>
                     </td>
                     <td className="p-2">
                       <bdi dir="ltr">{formatDecimal(row.rate, locale)}</bdi>

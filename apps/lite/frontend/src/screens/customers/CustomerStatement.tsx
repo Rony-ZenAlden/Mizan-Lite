@@ -3,7 +3,7 @@ import { useClient } from "@/api/ClientContext";
 import type { Customer, Entry, Sale, Statement } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
-import { formatDateTime } from "@/i18n/time";
+import { formatDate, formatDateTime } from "@/i18n/time";
 import { ExportButtons } from "@/exports/ExportButtons";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { printsItself, usePrinterSettings } from "@/printing/PrintPanel";
@@ -132,7 +132,7 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
                   {t("statement.balance")} <Money value={balance} currency={currency} />
                 </>
               )}
-              {statement.owedSince ? <span className="ms-2 text-sm font-normal text-text-muted">{t("statement.owed_since", { date: statement.owedSince })}</span> : null}
+              {statement.owedSince ? <span className="ms-2 text-sm font-normal text-text-muted">{t("statement.owed_since", { date: formatDate(statement.owedSince) })}</span> : null}
             </p>
             <div className="flex flex-wrap gap-2">
               {owes ? (
@@ -164,7 +164,7 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
                   {statement.entries.map((e) => (
                     <tr key={e.id} className={`border-t border-border ${e.reversed ? "text-text-muted line-through" : ""}`} data-testid="statement-entry">
                       <td className="p-2">
-                        <bdi dir="ltr">{formatDateTime(e.occurredAt, locale)}</bdi>
+                        <bdi dir="ltr">{formatDateTime(e.occurredAt)}</bdi>
                       </td>
                       <td className="p-2">{tDynamic(`debt.kind.${e.kind}`)}</td>
                       <td className="p-2">
@@ -176,13 +176,11 @@ export function CustomerStatement({ customer, localCurrency, onChanged, onClose 
                       <td className="p-2 text-xs">
                         {e.tendered ? (
                           <span className="block">
-                            <bdi dir="ltr">
-                              {t("statement.cash", {
-                                tendered: `${formatDecimal(e.tendered, locale)} ${tDynamic(`currency.short.${e.tenderedCurrency}`)}`,
-                                change: `${formatDecimal(e.change, locale)} ${tDynamic(`currency.short.${e.changeCurrency}`)}`,
-                                rate: formatDecimal(e.rate, locale),
-                              })}
-                            </bdi>
+                            {t("statement.cash", {
+                              tendered: `${formatDecimal(e.tendered, locale)} ${tDynamic(`currency.short.${e.tenderedCurrency}`)}`,
+                              change: `${formatDecimal(e.change, locale)} ${tDynamic(`currency.short.${e.changeCurrency}`)}`,
+                              rate: formatDecimal(e.rate, locale),
+                            })}
                           </span>
                         ) : null}
                         {e.note ? <span className="block">{e.note}</span> : null}

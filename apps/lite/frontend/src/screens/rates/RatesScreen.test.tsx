@@ -26,7 +26,7 @@ describe("RatesScreen", () => {
     renderWithProviders(<RatesScreen />, { locale: "en" });
     await settle();
     const card = screen.getByTestId("rate-in-force");
-    expect(card).toHaveTextContent("1 USD = 15,000 Syrian pound");
+    expect(card).toHaveTextContent("1 USD = 15,000 SYP");
     expect(card).toHaveTextContent("Set by the owner · Recorded 3 hours ago");
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
@@ -90,7 +90,7 @@ describe("RatesScreen", () => {
     await enterPin();
     expect(acceptProposal).toHaveBeenLastCalledWith("f9");
     expect(elevate).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("rate-in-force")).toHaveTextContent("1 USD = 121.9579 Syrian pound");
+    expect(screen.getByTestId("rate-in-force")).toHaveTextContent("1 USD = 121.9579 SYP");
     expect(screen.queryByRole("button", { name: "Accept this rate" })).not.toBeInTheDocument();
   });
 

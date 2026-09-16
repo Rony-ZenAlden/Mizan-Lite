@@ -39,7 +39,8 @@ describe("catalog parity", () => {
   it("the Arabic catalog is actually Arabic", () => {
     // Guards against the easiest parity mistake: English pasted into the Arabic file.
     const latinOnly = Object.entries(CATALOGS.ar.common as Record<string, string>).filter(
-      ([key, value]) => !/[\u0600-\u06FF]/.test(value) && key !== "language.en",
+      // A template of placeholders and symbols only ("{usd} = {local}") has nothing to translate; one with Latin words does.
+      ([key, value]) => !/[\u0600-\u06FF]/.test(value) && /[A-Za-z]/.test(value.replace(/\{\w+\}/g, "")) && key !== "language.en",
     );
     expect(latinOnly).toEqual([]);
   });

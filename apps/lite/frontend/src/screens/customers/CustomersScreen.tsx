@@ -11,6 +11,7 @@ import { Checkbox } from "@/ui/Checkbox";
 import { TextField } from "@/ui/Field";
 import { Balances } from "./Balances";
 import { CustomerForm } from "./CustomerForm";
+import { formatDate } from "@/i18n/time";
 import { CustomerStatement } from "./CustomerStatement";
 
 /** How long typing pauses before a search is sent. */
@@ -121,7 +122,7 @@ export function CustomersScreen() {
                   <td className="p-2">
                     <bdi dir="ltr">
                       {c.balances
-                        .map((b) => b.owedSince)
+                        .map((b) => formatDate(b.owedSince))
                         .filter(Boolean)
                         .join(" · ")}
                     </bdi>
@@ -129,7 +130,7 @@ export function CustomersScreen() {
                   <td className="p-2">
                     <bdi dir="ltr">
                       {c.balances
-                        .map((b) => b.lastPayment)
+                        .map((b) => formatDate(b.lastPayment))
                         .filter(Boolean)
                         .join(" · ")}
                     </bdi>

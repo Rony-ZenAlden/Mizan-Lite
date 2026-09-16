@@ -57,6 +57,7 @@ func main() {
 			res.HistoryDays, res.HistorySales, res.HistoryVoids, res.HistoryReceipts, res.Expenses, res.Counts)
 		fmt.Printf("  net profit:    %s USD at cost, %s SYP at each sale's rate, over the history and today\n", res.HistoryProfitUSD, res.HistoryProfitLocal)
 	}
+	fmt.Printf("  printing:      printer %q, %d print jobs, %d numbered vouchers; %d backups, copied to the demo outside folder\n", demoseed.DemoPrinter, res.PrintJobs, res.Vouchers, res.Backups)
 	fmt.Printf("  owner PIN:     %s\n", *pin)
 	fmt.Printf("  recovery code: %s\n", res.RecoveryCode)
 }

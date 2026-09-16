@@ -161,14 +161,14 @@ export function BackupsScreen() {
               {list.map((b) => (
                 <tr key={b.name} className="border-t border-border" data-testid="backup-row">
                   <td className="p-2">
-                    <bdi dir="ltr">{formatDateTime(b.takenAt, locale)}</bdi>
+                    <bdi dir="ltr">{formatDateTime(b.takenAt)}</bdi>
                     <span className="block text-xs text-text-muted">{formatAge(b.ageSeconds, locale, t("age.just_now"))}</span>
                   </td>
                   <td className="p-2">
                     <ReasonLabel reason={b.reason} />
                   </td>
                   <td className="p-2">
-                    <bdi dir="ltr">{t("backups.size_mb", { size: megabytes(b.sizeBytes, locale) })}</bdi>
+                    {t("backups.size_mb", { size: megabytes(b.sizeBytes, locale) })}
                   </td>
                   <td className="p-2">{b.outside ? t("backups.outside_yes") : t("backups.outside_no")}</td>
                   <td className="p-2">
@@ -239,7 +239,7 @@ function RestoreDialog({ loss, onClose }: { loss: Loss; onClose: () => void }) {
       ) : (
         <div className="space-y-3">
           <p data-testid="restore-when">
-            {t("restore.from", { when: formatDateTime(loss.backup.takenAt, locale) })} · <ReasonLabel reason={loss.backup.reason} />
+            {t("restore.from", { when: formatDateTime(loss.backup.takenAt) })} · <ReasonLabel reason={loss.backup.reason} />
           </p>
           {nothingLost ? (
             <p data-testid="restore-loss">{t("restore.nothing_lost")}</p>

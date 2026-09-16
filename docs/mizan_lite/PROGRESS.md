@@ -1,7 +1,7 @@
 # Mizan Lite — progress
 
 > **The resume point.** Read this first when picking Lite back up.
-> **Last updated:** 2026-09-15 (L7 committed). **Branch:** `lite/l0-skeleton`.
+> **Last updated:** 2026-09-16 (L8 committed and tagged `lite-v0.9.0`; the pilot packages built). **Branch:** `lite/l0-skeleton`.
 
 ---
 
@@ -12,7 +12,10 @@
 **L4 is complete and committed** (`76463fd`) — the till, sales, receipts, voids, discounts with the PIN, cash rounding to 500: [phases/L4_TILL.md](phases/L4_TILL.md) §14–§21; D-L4.i1–i11 approved 2026-09-14.
 **L5 is complete and committed** (`97b7875`) — customers, credit sales, a debt book per customer and currency, repayments at the day's rate, openings, write-offs, refunds, reversals: [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) §15–§22; D-L5.i1–i12 approved 2026-09-14.
 **L6 is complete and committed** (`2c86f17`) — reports (a day, a month, products, stock value reconciled, the profit on the shelf), a cash book and the cash drawer per currency; a void states the cash to hand back: [phases/L6_REPORTS.md](phases/L6_REPORTS.md) §15–§22; D-L6.i1–i15 approved 2026-09-15.
-**L7 is committed** — export of every report, statements, the debt ledger and the sales history to Excel and A4 PDF through the system's Save dialog; 80 mm thermal receipts and vouchers rendered in Go as Arabic bitmaps, through the printer's driver (default) or raw ESC/POS; verified backups copied to an outside folder, their status on Home, and restore with the owner's PIN, the loss stated and a safety snapshot: [phases/L7_HARDWARE_BACKUP.md](phases/L7_HARDWARE_BACKUP.md) §15–§22. D-L7.1–18, the answers and D-L7.i1–i19 approved 2026-09-15. **Two checks remain with the owner: a receipt printed on the shop's printer and an export opened in Excel** (O14, L7 §22.1).
+**L7 is committed** (`d356598`) — export of every report, statements, the debt ledger and the sales history to Excel and A4 PDF through the system's Save dialog; 80 mm thermal receipts and vouchers rendered in Go as Arabic bitmaps, through the printer's driver (default) or raw ESC/POS; verified backups copied to an outside folder, their status on Home, and restore with the owner's PIN, the loss stated and a safety snapshot: [phases/L7_HARDWARE_BACKUP.md](phases/L7_HARDWARE_BACKUP.md) §15–§22. D-L7.1–18, the answers and D-L7.i1–i19 approved 2026-09-15. **Two checks remain with the owner: a receipt printed on the shop's printer and an export opened in Excel** (O14, L7 §22.1).
+**L8 is complete and committed** — end-to-end journeys in a real browser against the real Go graph, the Arabic and English polish those journeys found, an Excel import for the first products and stock, the About screen and the support file, the shop's guides rendered into the application, the upgrade matrix over every past schema, and the two installers: [phases/L8_RELEASE.md](phases/L8_RELEASE.md) §15–§22. D-L8.1–20, the owner's five answers and D-L8.i1–i21 approved 2026-09-16. **Release 0.9.0 is the pilot** ([RELEASE.md](RELEASE.md), [phases/PILOT.md](phases/PILOT.md)); three checks remain with the owner — the Windows protocol (O1), a receipt on paper and an export in Excel (O14), and the reading of the Arabic.
+
+**The whole Definition of Done, L0 through L8, is read again in one place:** [phases/L8_DOD_REVIEW.md](phases/L8_DOD_REVIEW.md).
 
 | Phase | Status | Record |
 |---|---|---|
@@ -23,13 +26,15 @@
 | L4 — the till: sales, checkout, receipts | ✅ committed `76463fd` | [phases/L4_TILL.md](phases/L4_TILL.md) |
 | L5 — customers and debts | ✅ committed `97b7875` | [phases/L5_CUSTOMERS.md](phases/L5_CUSTOMERS.md) |
 | L6 — reports: profit, stock value, cash drawer | ✅ committed `2c86f17` | [phases/L6_REPORTS.md](phases/L6_REPORTS.md) |
-| L7 — export, printing, backup and restore | ✅ committed — printer and Excel checks with the owner (O14) | [phases/L7_HARDWARE_BACKUP.md](phases/L7_HARDWARE_BACKUP.md) |
-| L8 — release | not started | [DESIGN.md §10](DESIGN.md) |
+| L7 — export, printing, backup and restore | ✅ committed `d356598` — printer and Excel checks with the owner (O14) | [phases/L7_HARDWARE_BACKUP.md](phases/L7_HARDWARE_BACKUP.md) |
+| L8 — release: E2E, polish, packaging, the shop's documents | ✅ committed, tagged `lite-v0.9.0` — the Windows protocol, paper and Excel with the owner | [phases/L8_RELEASE.md](phases/L8_RELEASE.md) |
 
 ## 2. How to verify the current state
 
 ```bash
-make lite-ci              # Go (race), Windows cross-compile, archlint + drills, golangci-lint v2, frontend, bundle gate
+make lite-ci              # Go (race), Windows cross-compile, archlint + drills, golangci-lint v2, frontend, bundle gate, E2E journeys
+make lite-e2e             # the browser journeys and the visual pack alone (needs Chrome or Edge)
+make lite-release         # CI + the upgrade matrix + both packages + the smoke test + checksums → build/lite-release/
 make lite-build-macos     # universal .app → apps/lite/build/bin/
 make lite-build-windows   # .exe → apps/lite/build/bin/  (builds here; cannot be run here)
 ```
@@ -50,23 +55,23 @@ make lite-build-macos && MIZAN_LITE_DATA_DIR=~/Desktop/lite-demo "apps/lite/buil
 
 | # | Item | Owner | Since |
 |---|---|---|---|
-| O1 | **The Windows build has never been run.** No Windows machine or VM is available. This includes L7's printing through the Windows spooler and GDI, and the Save and folder dialogs. | owner: provide a machine, or accept until L8 | L0 |
+| O1 | **The Windows build has never been run.** No Windows machine or VM is available. This includes L7's printing through the Windows spooler and GDI, and the Save and folder dialogs. **0.9.0's installer is built and waiting**; the checklist for the machine that runs it is [phases/WINDOWS_PROTOCOL.md](phases/WINDOWS_PROTOCOL.md) (Q-L8.1: the owner runs it). | owner | L0 |
 | ~~O2~~ | ~~Nobody has visually confirmed the app~~ — **closed 2026-09-13**: the owner confirmed the interface lays out and runs correctly on macOS | — | L0 |
-| O3 | WebView2 on a Windows 10 machine without it, offline — embed the runtime in the installer. | L8 | L0 |
+| O3 | ~~WebView2 on a Windows 10 machine without it, offline~~ — **built 2026-09-16**: the 213 MB standalone runtime is inside `Mizan Lite 0.9.0 Setup.exe` and installed before the application (D-L8.i16). Its *running* is step 3 of the Windows protocol (O1). | owner (with O1) | L0 |
 | ~~O4~~ | ~~SYP cash-rounding denomination~~ — **closed 2026-09-14**: 500 pounds, to the nearest (Q-L4.1); the owner can change it with the PIN | — | approval |
-| O5 | **The L1–L7 screens (products, PIN dialog, first run, owner, stock, rates, the Till, Sales, receipt and cash rounding, Customers, the statement, payments and the till's credit, Reports, the Cash drawer and the void form's *Hand back*, and now Printer settings, Backups, Home's backup status, the export buttons and the receipt's *As printed* tab) have not been looked at** — screenshots blocked here. L7's printouts and exports themselves were rendered and looked at (L7 §19). | owner | L1–L7 |
-| O6 | Argon2id verify time on low-end Windows hardware not measured (it holds the single writer while it runs). | L8 | L1 |
+| ~~O5~~ | ~~The L1–L7 screens have not been looked at~~ — **closed 2026-09-16**: every screen at two sizes and the main dialogs, in both languages, are in `build/lite-e2e/screens` (65 images), looked at, with structural checks on each in CI. Looking found eight defects (L8 §4, S1–S8), all fixed. The owner's own reading of the Arabic is Q-L8.14, in [phases/L8_DOD_REVIEW.md](phases/L8_DOD_REVIEW.md). | — | L1–L7 |
+| O6 | Argon2id verify time on low-end Windows hardware not measured (it holds the single writer while it runs). **`scripts/lite-timing.ps1` measures it**; it needs the owner's machine (with O1). | owner | L1 |
 | ~~O7~~ | ~~Nullable comparisons in CHECKs pass on NULL~~ — **closed 2026-09-14**: guarded in `sales` (L4) and `debt_entries` (L5), NULL cases refused by name through the runner; DESIGN §5's debt draft confirmed to accept a NULL amount (L5 R4). | — | L2 note |
-| O8 | Cost at scale is partly measured: who owes what over 50,000 debt entries takes 43 ms; a year of sales reports a month in 32 ms and a year of products in 356 ms (L6). The stock and sales verifiers over a year, `Search`/statements over thousands of customers, and the drawer of a shop never counted over years (it reads every day since the first) are not. | L8 | L2 |
-| O9 | Quitting the packaged app through AppleScript reports "User cancelled (-128)" although it quits cleanly (L2 R8). | L8 | L2 |
+| O8 | Cost at scale is partly measured (on this machine; the low-end Windows figures come with O1): who owes what over 50,000 debt entries takes 43 ms; a year of sales reports a month in 32 ms and a year of products in 356 ms (L6). The stock and sales verifiers over a year, `Search`/statements over thousands of customers, and the drawer of a shop never counted over years (it reads every day since the first) are not. | after the pilot | L2 |
+| O9 | Quitting the packaged app through AppleScript reports "User cancelled (-128)" although it quits cleanly (L2 R8). Harmless; `scripts/lite-smoke-macos.sh` quits by signal instead and checks the close in the log. | after the pilot | L2 |
 | ~~O10~~ | ~~The internet rate is official-style, not the market rate~~ — **closed 2026-09-14**: the owner set manual mode as the default; the internet rate is shown for reference | — | L3 |
-| O11 | The free rate providers have no agreement; a change of scale or coverage is caught by the 20% guard and the opt-in live test, not prevented. | L8 | L3 |
+| O11 | The free rate providers have no agreement; a change of scale or coverage is caught by the 20% guard and the opt-in live test, not prevented. Manual mode is the default, so a shop is never priced by a provider it did not choose. | after the pilot | L3 |
 | ~~O12~~ | **Closed 2026-09-14** — the rebuild ran through the runner in `TestTheLedgerRebuildKeepsEveryRow` and on a real L3 shop in the packaged app, every row intact (L4 §18). L2's planned ledger rebuild (A-L2.3) fails as written — `stock_levels` and the self-reference block the drop under the runner's foreign keys. The working order is designed and verified on real data in L4 §6.2; it must be proven through the runner in L4's migration test. | L4 | L4 note |
 | O14 | **Nothing has been printed on paper and no export opened in Excel** — no thermal printer or Excel here. L7's Definition of Done needs both, on the owner's machine (Q-L7.1). | owner | L7 |
-| O15 | A restore has not been watched in the packaged app (proven in Go: the graph restarts on the restored file and the webview reload is called). | owner / L8 | L7 |
-| O16 | Two backups of one reason in the same second share a name, so one is kept (`platform/backup` names by the second). | L8 | L7 |
+| ~~O15~~ | ~~A restore has not been watched in the packaged app~~ — **closed 2026-09-16** by journey J9: the loss stated, the PIN, the safety snapshot, the restart, and the shop's state afterwards read back from Go, in both languages. | — | L7 |
+| O16 | Two backups of one reason in the same second share a name, so one is kept (`platform/backup` names by the second). Unreachable in a shop — the reasons are hours apart — and a shared-code change; carried as a finding for Mizan (M5). | after the pilot | L7 |
 
-**Closed in L6:** O13 — a void's cash return is now derived from the receipt (`Sale.VoidReturn()`), stated in the void form before the PIN and summed by the drawer; receipt 12 of the seeded shop hands back 20,000 SYP (L6 D-L6.i2, §19).
+**Closed in L8:** O3 (built), O5, O15 — see above. **Closed in L6:** O13 — a void's cash return is now derived from the receipt (`Sale.VoidReturn()`), stated in the void form before the PIN and summed by the drawer; receipt 12 of the seeded shop hands back 20,000 SYP (L6 D-L6.i2, §19).
 
 ## 4. Findings for Mizan (not fixed in Mizan)
 
@@ -78,6 +83,7 @@ Discovered while building Lite. Each is argued in the phase record that found it
 | M2 | `Info.plist` declares macOS 10.13; Go 1.27 builds for macOS 13 | Declare 13.0 | L0 F4 |
 | M3 | The Windows database lives in Roaming AppData | Move to Local AppData (needs a data move) | L0 F5 |
 | M4 | The pre-migration snapshot's manifest records an empty app version | Thread the build version into `platform/migrate` | L0 F8 |
+| M5 | `platform/backup` names a backup by the second, so two of one reason in the same second collide and one is kept | Name by the second **and a counter**, or refuse the second | L7 O16 |
 
 **Fixed in shared code during L0** (committed): the `platform/database` DSN defect on paths containing `#` or
 `%` (F1); Mizan's error-code gate now skips `internal/lite` (F6); golangci-lint upgraded to v2 for both
@@ -85,6 +91,12 @@ editions, with five small Mizan fixes its first honest run found (F2).
 
 ## 5. Next
 
-1. Owner **prints on the shop's 80 mm printer** (O14): Printer settings → choose it → *Print a test page*; then a sale's receipt and a payment's voucher. If the driver path's receipt is scaled or cut, try *Straight to the printer (ESC/POS)*.
-2. Owner **opens an export in Excel** (O14): Reports → a tab → *Excel*; check the sheet reads right to left and the sums work.
-3. L8's design note: end-to-end testing, Arabic and English polish, release packaging, the shop's documentation.
+**0.9.0 is built and tagged. What stands between it and 1.0.0 is three checks and a pilot week.**
+
+1. Owner **runs the Windows protocol** (O1) on a Windows machine: [phases/WINDOWS_PROTOCOL.md](phases/WINDOWS_PROTOCOL.md) — install
+   `Mizan Lite 0.9.0 Setup.exe` (offline, on a machine without WebView2 if possible), set the shop up, sell, print, export, back
+   up, restore, then upgrade over the top and check the shop's data survived.
+2. Owner **prints on the shop's 80 mm printer and opens an export in Excel** (O14) — the two checks L7 was committed with.
+3. Owner **reads the Arabic** in `build/lite-e2e/screens` and in [guide/SHOP_GUIDE.ar.md](guide/SHOP_GUIDE.ar.md) (Q-L8.14):
+   the words a shopkeeper would use, not the words a program would.
+4. Then the **pilot week** in a real shop: [phases/PILOT.md](phases/PILOT.md). 1.0.0 is cut at its exit criteria.

@@ -26,6 +26,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -38,9 +40,11 @@ import (
 	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/printing"
 	reportsdomain "github.com/mizan-erp/mizan/internal/lite/reports/domain"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
+	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
@@ -237,6 +241,11 @@ type Result struct {
 	// cost, pounds at each sale's rate — which diverge as the pound moves (DESIGN §9.4).
 	HistoryProfitUSD   string
 	HistoryProfitLocal string
+	// PrintJobs, Vouchers and Backups are L7's part (L8 "the seeder complete"): receipts and a voucher printed (and one that
+	// failed), the payments' voucher numbers, and a backup copied to an outside folder inside the data directory.
+	PrintJobs int
+	Vouchers  int
+	Backups   int
 }
 
 // NewClock is a clock fixed on now, for the graph the seeder steps through its history: the command wires Lite and imports
@@ -344,6 +353,9 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 		return Result{}, err
 	}
 	if err := seedCustomers(ctx, app, book, opts.PIN, byName, &res); err != nil {
+		return Result{}, err
+	}
+	if err := seedPrinting(ctx, app, opts.PIN, &res); err != nil {
 		return Result{}, err
 	}
 	if err := check(ctx, app, opts.PIN, &res); err != nil {
@@ -812,4 +824,77 @@ func absolute(v int64) int64 {
 		return -v
 	}
 	return v
+}
+
+// DemoPrinter is the receipt printer a seeded shop is set up with: a name no computer has, so a print reports "not installed"
+// honestly until the owner chooses a real one in Printer settings.
+const DemoPrinter = "Demo XP-80 (طابعة تجريبية)"
+
+// seedPrinting exercises L7 the way a shop does (L8 §2.1): the printer settings and the receipt's lines, a day's last receipt
+// printed and reprinted as a copy, a payment's voucher printed, a print that failed, and a backup copied to an outside folder —
+// a folder inside the data directory, so the seeder writes nowhere else.
+func seedPrinting(ctx context.Context, app *bootstrap.App, pin string, res *Result) error {
+	if _, err := app.Owner.Elevate(ctx, pin); err != nil {
+		return err
+	}
+	defer func() { _, _ = app.Owner.EndElevation(ctx) }()
+	printer, paper, path, auto, drawer := DemoPrinter, "80", "driver", "credit", "false"
+	phone, address, footer := "011 612 3456", "دمشق — المزة، شارع الفيلات", "شكراً لزيارتكم"
+	outside := filepath.Join(app.Paths.Data, "outside-folder-demo")
+	if err := os.MkdirAll(outside, 0o750); err != nil {
+		return errs.Wrap(err, errs.CategoryInternal, CodeStockInconsistent, "creating the demo outside folder")
+	}
+	if _, err := app.Settings.Update(ctx, settingsdomain.Update{Printing: settingsdomain.PrintingUpdate{Printer: &printer, PaperMM: &paper,
+		Path: &path, AutoPrint: &auto, Drawer: &drawer, Phone: &phone, Address: &address, Footer: &footer, BackupFolder: &outside}}); err != nil {
+		return err
+	}
+	day, err := app.Sales.Day(ctx, "")
+	if err != nil {
+		return err
+	}
+	if len(day.Sales) > 0 {
+		last := day.Sales[len(day.Sales)-1]
+		for copyNo := 1; copyNo <= 2; copyNo++ {
+			if _, err = app.Printing.Record(ctx, printing.Job{Kind: printing.KindSale, SubjectID: last.ID, CopyNo: copyNo, Printer: printer, Path: path, Sent: true}); err != nil {
+				return err
+			}
+			res.PrintJobs++
+		}
+	}
+	entries, err := app.Customers.EntriesBetween(ctx, "0001-01-01", "9999-12-31")
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Entry.Kind != customersdomain.KindPayment {
+			continue
+		}
+		if _, numbered, voucherErr := app.Printing.Voucher(ctx, e.Entry.ID); voucherErr != nil {
+			return voucherErr
+		} else if numbered {
+			res.Vouchers++
+		}
+		if res.PrintJobs < 3 {
+			if _, err = app.Printing.Record(ctx, printing.Job{Kind: printing.KindPayment, SubjectID: e.Entry.ID, CopyNo: 1, Printer: printer, Path: path, Sent: true}); err != nil {
+				return err
+			}
+			if _, err = app.Printing.Record(ctx, printing.Job{Kind: printing.KindTest, CopyNo: 1, Printer: printer, Path: "raw", ErrorCode: "lite.printers.not_found"}); err != nil {
+				return err
+			}
+			res.PrintJobs += 2
+		}
+	}
+	if _, err = app.Safety.TakeNow(ctx); err != nil {
+		return err
+	}
+	status, err := app.Safety.Status(ctx)
+	if err != nil {
+		return err
+	}
+	if status.LastOutside == nil || status.OutsideFailed != "" {
+		return errs.Internal(CodeStockInconsistent, "the seeded backup was not copied to the outside folder")
+	}
+	list, err := app.Safety.List(ctx)
+	res.Backups = len(list)
+	return err
 }

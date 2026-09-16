@@ -95,6 +95,16 @@ if [ "$run_fe" = 1 ]; then
   step "frontend: tests and gates";   npx vitest run
   step "frontend: production build";  npx vite build >/dev/null && echo "  ok"
   step "frontend: G5 on the built bundle"; npx vitest run --config vitest.bundle.config.ts
+
+  # L8 §3: the built frontend against a real graph in a real browser. The browser is the one the machine already has — Chrome on
+  # a Mac, Edge (WebView2's engine) on Windows — and nothing is downloaded. No browser, no run: reported, never passed.
+  step "end-to-end journeys and the visual pack (browser)"
+  channel="${LITE_E2E_CHANNEL:-chrome}"
+  if [ -d "/Applications/Google Chrome.app" ] || [ -n "${LITE_E2E_CHANNEL:-}" ]; then
+    npx playwright test -c e2e/playwright.config.ts
+  else
+    notrun+=("end-to-end journeys: no ${channel} on this machine — install it, or set LITE_E2E_CHANNEL=msedge")
+  fi
   cd - >/dev/null
 fi
 

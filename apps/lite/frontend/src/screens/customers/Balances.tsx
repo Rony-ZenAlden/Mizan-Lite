@@ -35,13 +35,10 @@ export function Balances({ balances, withReference = false, rate = "" }: { balan
           )}
           {withReference && b.reference ? (
             <span className="ms-2 text-xs text-text-muted">
-              <bdi dir="ltr">
-                {t("customers.reference", {
-                  amount: formatDecimal(unsigned(b.reference), locale),
-                  currency: tDynamic(`currency.short.${b.referenceCurrency}`),
-                  rate: formatDecimal(rate, locale),
-                })}
-              </bdi>
+              {t("customers.reference", {
+                amount: `${formatDecimal(unsigned(b.reference), locale)} ${tDynamic(`currency.short.${b.referenceCurrency}`)}`,
+                rate: formatDecimal(rate, locale),
+              })}
             </span>
           ) : null}
         </li>

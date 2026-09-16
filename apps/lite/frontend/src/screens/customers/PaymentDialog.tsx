@@ -3,13 +3,13 @@ import { useClient } from "@/api/ClientContext";
 import type { Entry, PaymentQuote } from "@/api/client";
 import { BindingError } from "@/api/envelope";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { formatDecimal } from "@/i18n/numbers";
 import { Money } from "@/screens/sales/Money";
 import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
 import { Dialog } from "@/ui/Dialog";
+import { ratePair } from "@/i18n/figures";
 import { SelectField, TextField } from "@/ui/Field";
 
 /** How long typing pauses before a payment is priced again. */
@@ -128,7 +128,7 @@ export function PaymentDialog({
             autoComplete="off"
           />
         )}
-        <SelectField label={t("payment.change_in")} value={changeCurrency} onChange={(e) => setChangeCurrency(e.target.value)} error={errors.field("changeCurrency")}>
+        <SelectField label={t("payment.change_in")} value={changeCurrency} onChange={(e) => setChangeCurrency(e.target.value)} error={errors.field("changeCurrency")} hint={t("till.change_default_hint")}>
           <option value="">{t("till.change_default")}</option>
           {currencies.map((c) => (
             <option key={c} value={c}>
@@ -161,7 +161,7 @@ export function PaymentDialog({
               <Money value={quote.balanceAfter} currency={quote.currency} className="font-semibold" />
             </dd>
             <dd className="col-span-2 text-xs text-text-muted">
-              <bdi dir="ltr">{t("till.rate", { rate: formatDecimal(quote.rate, locale), currency: tDynamic(`currency.short.${localCurrency}`) })}</bdi>
+              {t("till.rate", ratePair(quote.rate, localCurrency, locale, tDynamic))}
             </dd>
           </dl>
         ) : null}

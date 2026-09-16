@@ -72,10 +72,27 @@ func (w words) when(stamp string) string {
 	if !ok {
 		return w.fig(stamp)
 	}
-	return w.fig(at.In(w.tz).Format("2006-01-02 15:04"))
+	return w.fig(at.In(w.tz).Format(timeLayout))
 }
 
-func (w words) now() string { return w.fig(w.app.Now().In(w.tz).Format("2006-01-02 15:04")) }
+func (w words) now() string { return w.fig(w.app.Now().In(w.tz).Format(timeLayout)) }
+
+// timeLayout is how the shop reads a moment, on paper as on screen: day/month/year and a 24-hour time, digits only (L8 Q-L8.6).
+const timeLayout = "02/01/2006 15:04"
+
+// date is a business date ("2026-09-15") as the shop reads it ("15/09/2026"), isolated; a month ("2026-09") as "09/2026".
+func (w words) date(d string) string { return w.fig(shopDate(d)) }
+
+// shopDate reorders a business date or month without isolating it — for workbook cells, which carry no bidi marks.
+func shopDate(d string) string {
+	if len(d) == 10 && d[4] == '-' && d[7] == '-' {
+		return d[8:10] + "/" + d[5:7] + "/" + d[0:4]
+	}
+	if len(d) == 7 && d[4] == '-' {
+		return d[5:7] + "/" + d[0:4]
+	}
+	return d
+}
 
 // amount is a figure grouped and isolated with no currency name, for a column whose heading names the currency.
 func (w words) amount(value string) string {

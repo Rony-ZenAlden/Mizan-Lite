@@ -121,7 +121,7 @@ func (w words) takings(d DayReportDTO) (documents.Table, sheets.Sheet) {
 }
 
 func (w words) dayExport(d DayReportDTO) exportable {
-	x := exportable{title: w.t("doc.report_day"), subtitle: w.fig(d.Date)}
+	x := exportable{title: w.t("doc.report_day"), subtitle: w.date(d.Date)}
 	if d.Profit.UnknownLines > 0 {
 		x.blocks = append(x.blocks, documents.Paragraph{Bold: true, Text: w.t("reports.unknown_cost", "count", w.fig(strconv.Itoa(d.Profit.UnknownLines)),
 			"usd", w.fig(documents.Group(d.Profit.UnknownUSD)), "local", w.fig(documents.Group(d.Profit.UnknownLocal)), "currency", w.short(d.LocalCurrency))})
@@ -143,7 +143,7 @@ func (w words) dayExport(d DayReportDTO) exportable {
 }
 
 func (w words) monthExport(m MonthReportDTO) exportable {
-	x := exportable{title: w.t("doc.report_month"), subtitle: w.fig(m.Month)}
+	x := exportable{title: w.t("doc.report_month"), subtitle: w.date(m.Month)}
 	heads := []string{w.t("reports.col.date"), w.t("reports.col.sales"), w.t("reports.col.revenue_usd"), w.t("reports.col.gross_usd"),
 		w.t("reports.col.net_usd"), w.t("reports.col.gross_local"), w.t("reports.col.net_local")}
 	t := documents.Table{Headings: heads, Widths: []int{13, 7, 12, 12, 12, 14, 14}}
@@ -158,7 +158,7 @@ func (w words) monthExport(m MonthReportDTO) exportable {
 			num(d.NetUSD), num(d.Profit.ProfitLocal), num(d.NetLocal)})
 	}
 	for _, d := range m.Days {
-		row(w.fig(d.Date), d, false)
+		row(w.date(d.Date), d, false)
 	}
 	t.Total = nil
 	row(w.t("reports.month_total"), m.Total, true)
@@ -256,8 +256,8 @@ func (w words) stockExport(s StockReportDTO) exportable {
 		left.Rows = append(left.Rows, []documents.Cell{documents.T(w.name(l.NameAR, l.NameEN)), documents.T(w.t("reports.left_out." + l.Reason))})
 		leftSheet.Rows = append(leftSheet.Rows, []sheets.Cell{sheets.Text(w.name(l.NameAR, l.NameEN)), sheets.Text(w.t("reports.left_out." + l.Reason))})
 	}
-	x.blocks = []documents.Block{documents.Heading{Text: w.t("reports.stock.value_on", "date", w.fig(s.To))}, value,
-		documents.Heading{Text: w.t("reports.stock.movements", "from", w.fig(c.From), "to", w.fig(c.To))}, documents.Pairs{Rows: pairs},
+	x.blocks = []documents.Block{documents.Heading{Text: w.t("reports.stock.value_on", "date", w.date(s.To))}, value,
+		documents.Heading{Text: w.t("reports.stock.movements", "from", w.date(c.From), "to", w.date(c.To))}, documents.Pairs{Rows: pairs},
 		documents.Heading{Text: w.t("reports.shelf.title")}, shelf}
 	if len(s.LeftOut) > 0 {
 		x.blocks = append(x.blocks, documents.Heading{Text: w.t("reports.shelf.left_out", "count", w.fig(strconv.Itoa(len(s.LeftOut))))}, left)
@@ -267,12 +267,12 @@ func (w words) stockExport(s StockReportDTO) exportable {
 }
 
 func (w words) drawerExport(d DrawerDTO) exportable {
-	x := exportable{title: w.t("doc.report_drawer"), subtitle: w.fig(d.Date)}
+	x := exportable{title: w.t("doc.report_drawer"), subtitle: w.date(d.Date)}
 	termsSheet := sheets.Sheet{Name: w.t("doc.sheet_drawer"), Frozen: 1, Rows: [][]sheets.Cell{headings(w.t("cash.currency"), w.t("reports.col.line"), w.t("cash.amount"))}}
 	for _, c := range d.Currencies {
 		opening := w.t("cash.opening_never")
 		if c.OpeningCountDate != "" {
-			opening = w.t("cash.opening_counted", "date", w.fig(c.OpeningCountDate))
+			opening = w.t("cash.opening_counted", "date", w.date(c.OpeningCountDate))
 		}
 		rows := []struct {
 			label, value string
@@ -358,10 +358,10 @@ func (w words) statementExport(name string, statements []StatementDTO) exportabl
 	for _, st := range statements {
 		pairs := []documents.Pair{{Label: w.t("statement.balance"), Value: documents.T(w.money(st.Balance, st.Currency)), Bold: true}}
 		if st.OwedSince != "" {
-			pairs = append(pairs, documents.Pair{Label: w.t("customers.col.owed_since"), Value: documents.T(w.fig(st.OwedSince))})
+			pairs = append(pairs, documents.Pair{Label: w.t("customers.col.owed_since"), Value: documents.T(w.date(st.OwedSince))})
 		}
 		if st.LastPayment != "" {
-			pairs = append(pairs, documents.Pair{Label: w.t("customers.col.last_payment"), Value: documents.T(w.fig(st.LastPayment))})
+			pairs = append(pairs, documents.Pair{Label: w.t("customers.col.last_payment"), Value: documents.T(w.date(st.LastPayment))})
 		}
 		t := documents.Table{Headings: heads, Widths: []int{20, 12, 16, 16, 26}}
 		sh := sheets.Sheet{Name: w.cur(st.Currency), Frozen: 1, Rows: [][]sheets.Cell{headings(w.t("statement.col.when"), w.t("statement.col.kind"), w.t("statement.col.amount"),
@@ -398,9 +398,9 @@ func (w words) ledgerExport(out OutstandingDTO, entries []EntryDTO, from, to str
 	for _, c := range out.Customers {
 		for _, b := range c.Balances {
 			owing.Rows = append(owing.Rows, []documents.Cell{documents.T(w.user(c.Name)), documents.T(w.fig(c.Phone)), documents.T(w.cur(b.Currency)),
-				documents.M(w.money(b.Balance, b.Currency)), documents.T(w.fig(b.OwedSince)), documents.T(w.fig(b.LastPayment))})
+				documents.M(w.money(b.Balance, b.Currency)), documents.T(w.date(b.OwedSince)), documents.T(w.date(b.LastPayment))})
 			owingSheet.Rows = append(owingSheet.Rows, []sheets.Cell{sheets.Text(c.Name), sheets.Text(c.Phone), sheets.Text(b.Currency), num(b.Balance),
-				sheets.Text(b.OwedSince), sheets.Text(b.LastPayment)})
+				sheets.Text(shopDate(b.OwedSince)), sheets.Text(shopDate(b.LastPayment))})
 		}
 	}
 	bookHeads := []string{w.t("statement.col.when"), w.t("customers.col.name"), w.t("statement.col.kind"), w.t("statement.col.amount"), w.t("statement.col.balance"), w.t("statement.col.details")}
@@ -448,7 +448,7 @@ func (w words) salesExport(rows []historySale, from, to string) exportable {
 		}
 		salesSheet.Rows = append(salesSheet.Rows, []sheets.Cell{count(int(s.ReceiptNo)), sheets.Text(w.when(s.SoldAt)), sheets.Text(w.t("sales.status." + s.Status)),
 			sheets.Text(w.t("doc.payment." + s.Payment)), sheets.Text(s.Settlement), num(s.Total), num(s.Tendered), sheets.Text(s.TenderCurrency), num(s.Change),
-			sheets.Text(s.ChangeCurrency), sheets.Text(s.CreditCustomerName), num(s.CreditAmount), num(h.costUSD), sheets.Text(s.VoidBusinessDate), sheets.Text(s.VoidReason),
+			sheets.Text(s.ChangeCurrency), sheets.Text(s.CreditCustomerName), num(s.CreditAmount), num(h.costUSD), sheets.Text(shopDate(s.VoidBusinessDate)), sheets.Text(s.VoidReason),
 			num(voidReturn), num(s.Rate)})
 		for i, l := range s.Lines {
 			costUSD, costLocal := sheets.Text(w.t("reports.col.no_cost")), sheets.Text("")

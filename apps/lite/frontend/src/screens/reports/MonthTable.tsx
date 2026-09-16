@@ -2,6 +2,7 @@ import type { MonthReport } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatInteger } from "@/i18n/numbers";
 import { Money } from "@/screens/sales/Money";
+import { formatDate } from "@/i18n/time";
 import { Button } from "@/ui/Button";
 
 /** A month: a row per day that had anything in it, and the month's totals — the sum of its days (Q-L6.8). */
@@ -34,7 +35,7 @@ export function MonthTable({ report, onOpenDay }: { report: MonthReport; onOpenD
             <tr key={d.date} className="border-t border-border">
               <td className="p-2">
                 <Button onClick={() => onOpenDay(d.date)}>
-                  <bdi dir="ltr">{d.date}</bdi>
+                  <bdi dir="ltr">{formatDate(d.date)}</bdi>
                 </Button>
               </td>
               <td className="p-2">{formatInteger(d.profit.sales, locale)}</td>

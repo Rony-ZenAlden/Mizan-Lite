@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 
 // Any console.error or console.warn FAILS the test that produced it.
 //
@@ -34,3 +34,21 @@ afterEach(() => {
     throw new Error(`the test wrote to the console:\n  ${consoleCalls.join("\n  ")}`);
   }
 });
+
+// Arabic sentences carry invisible isolates around the values in them (i18n/messages.inSentence). A reader does not see them,
+// so a test compares what a reader sees.
+const readable = (text: string | null | undefined) => (text ?? "").replace(/[⁦-⁩]/g, "").replace(/\s+/g, " ").trim();
+
+expect.extend({
+  toHaveReadableText(element: Element | null, expected: string) {
+    const actual = readable(element?.textContent);
+    const pass = actual.includes(readable(expected));
+    return { pass, message: () => `expected the text a reader sees${pass ? " not" : ""} to contain\n  ${expected}\nbut it was\n  ${actual}` };
+  },
+});
+
+declare module "vitest" {
+  interface Assertion<T> {
+    toHaveReadableText(expected: string): T;
+  }
+}

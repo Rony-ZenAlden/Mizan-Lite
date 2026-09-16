@@ -3,11 +3,12 @@ import { useClient } from "@/api/ClientContext";
 import { BindingError } from "@/api/envelope";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { LOCALES, type Locale } from "@/i18n/messages";
-import { formatDecimal, normaliseNumber } from "@/i18n/numbers";
+import { normaliseNumber } from "@/i18n/numbers";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
 import { PinField, TextField } from "@/ui/Field";
+import { ratePair } from "@/i18n/figures";
 import { Spinner } from "@/ui/Spinner";
 
 type View = { kind: "checking" } | { kind: "form" } | { kind: "recovery"; code: string } | { kind: "done" } | { kind: "error"; error: unknown };
@@ -184,7 +185,7 @@ function FirstRunForm({ onComplete }: { onComplete: (recoveryCode: string) => vo
           />
           {typedRate.ok ? (
             <p className="text-sm font-medium" data-testid="rate-readback">
-              <bdi dir="ltr">{t("firstrun.rate_readback", { rate: formatDecimal(readback, locale), currency: tDynamic(`currency.${localCurrency}`) })}</bdi>
+              {t("firstrun.rate_readback", ratePair(readback, localCurrency, locale, tDynamic))}
             </p>
           ) : null}
           <Button onClick={() => void fetchRate()} disabled={fetching}>

@@ -2,6 +2,7 @@ import type { StockReport } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal, formatInteger } from "@/i18n/numbers";
 import { Money, isZero } from "@/screens/sales/Money";
+import { formatDate } from "@/i18n/time";
 import { Alert } from "@/ui/Alert";
 
 type Named = { nameAr: string; nameEn: string };
@@ -28,7 +29,7 @@ export function StockSection({ report }: { report: StockReport }) {
   return (
     <div className="space-y-6">
       <section className="space-y-2">
-        <h3 className="font-semibold">{t("reports.stock.value_on", { date: report.to })}</h3>
+        <h3 className="font-semibold">{t("reports.stock.value_on", { date: formatDate(report.to) })}</h3>
         <p data-testid="stock-total">
           <Money value={report.totalUsd} currency="USD" /> ·{" "}
           {report.valueRate ? (
@@ -84,7 +85,7 @@ export function StockSection({ report }: { report: StockReport }) {
       </section>
 
       <section className="space-y-2">
-        <h3 className="font-semibold">{t("reports.stock.movements", { from: c.from, to: c.to })}</h3>
+        <h3 className="font-semibold">{t("reports.stock.movements", { from: formatDate(c.from), to: formatDate(c.to) })}</h3>
         <dl data-testid="reconciliation" className="grid max-w-md grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-lg border border-border bg-surface-raised p-4 text-sm">
           {line("reports.stock.opening", c.opening)}
           {line("reports.stock.received", c.received)}

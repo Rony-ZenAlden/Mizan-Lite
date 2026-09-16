@@ -3,7 +3,7 @@ import { useClient } from "@/api/ClientContext";
 import type { CashEntry, Drawer, DrawerCurrency } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
-import { formatDateTime } from "@/i18n/time";
+import { formatDate, formatDateTime } from "@/i18n/time";
 import { ExportButtons } from "@/exports/ExportButtons";
 import { useOwner } from "@/owner/OwnerProvider";
 import { Money, isZero } from "@/screens/sales/Money";
@@ -121,7 +121,7 @@ export function CashScreen() {
                   {drawer.entries.map((e) => (
                     <tr key={e.id} className={`border-t border-border ${e.reversed ? "text-text-muted line-through" : ""}`}>
                       <td className="p-2">
-                        <bdi dir="ltr">{formatDateTime(e.occurredAt, locale)}</bdi>
+                        <bdi dir="ltr">{formatDateTime(e.occurredAt)}</bdi>
                       </td>
                       <td className="p-2">
                         {tDynamic(`cash.kind.${e.kind}`)}
@@ -170,7 +170,7 @@ function DrawerCard({ terms: c, ownerView, onCount }: { terms: DrawerCurrency; o
     <div data-testid={`drawer-${c.currency}`} className="space-y-2 rounded-lg border border-border bg-surface-raised p-4 text-sm">
       <h3 className="font-semibold">{tDynamic(`currency.${c.currency}`)}</h3>
       <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
-        <dt>{c.openingCountDate ? t("cash.opening_counted", { date: c.openingCountDate }) : t("cash.opening_never")}</dt>
+        <dt>{c.openingCountDate ? t("cash.opening_counted", { date: formatDate(c.openingCountDate) }) : t("cash.opening_never")}</dt>
         <dd>
           <Money value={c.opening} currency={c.currency} />
         </dd>
@@ -190,7 +190,7 @@ function DrawerCard({ terms: c, ownerView, onCount }: { terms: DrawerCurrency; o
         </dd>
         {c.counted ? (
           <>
-            <dt>{t("cash.counted_at", { time: formatDateTime(c.countedAt, locale) })}</dt>
+            <dt>{t("cash.counted_at", { time: formatDateTime(c.countedAt) })}</dt>
             <dd>
               <Money value={c.count} currency={c.currency} />
             </dd>

@@ -29,7 +29,7 @@ describe("CashScreen", () => {
     renderWithProviders(<CashScreen />, { client: fakeClient({ cash: { drawer: async () => counted(aDrawer()) } }), locale: "en" });
     await settle();
     const pounds = screen.getByTestId("drawer-SYP");
-    expect(pounds).toHaveTextContent("Start of day, from the count of 2026-09-1340,000 SYP");
+    expect(pounds).toHaveTextContent("Start of day, from the count of 13/09/202640,000 SYP");
     expect(pounds).toHaveTextContent("plus cash received for sales97,500 SYP");
     expect(pounds).toHaveTextContent("less change given15,000 SYP");
     expect(pounds).toHaveTextContent("less handed back on voids20,000 SYP");
@@ -134,8 +134,8 @@ describe("CashScreen", () => {
   it("reads in Arabic", async () => {
     renderWithProviders(<CashScreen />, { client: fakeClient({ cash: { drawer: async () => counted(aDrawer()) } }), locale: "ar" });
     await settle();
-    expect(screen.getByRole("heading", { name: "الصندوق" })).toBeInTheDocument();
-    expect(screen.getByTestId("drawer-SYP")).toHaveTextContent("ناقص مُعاد عند إلغاء فواتير20,000 ل.س");
+    expect(screen.getByRole("heading", { name: "حركة الصندوق" })).toBeInTheDocument();
+    expect(screen.getByTestId("drawer-SYP")).toHaveReadableText("ناقص مُعاد عند إلغاء فواتير20,000 ل.س");
     expect(screen.getByTestId("expected-SYP")).toHaveTextContent("97,500 ل.س");
   });
 });

@@ -131,3 +131,38 @@ func contains(list []string, s string) bool {
 	}
 	return false
 }
+
+// TestTheGuidesHaveTheSameSectionsInBothLanguages (L8 D-L8.16): the shop's documents are written in Arabic first and followed in
+// English. A section added to one and forgotten in the other leaves a reader without it, which is how a translation rots.
+func TestTheGuidesHaveTheSameSectionsInBothLanguages(t *testing.T) {
+	root := filepath.Join(repoRoot(t), filepath.FromSlash(liteDocs), "guide")
+	levels := func(name string) []int {
+		raw, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		var out []int
+		for _, line := range strings.Split(string(raw), "\n") {
+			if strings.HasPrefix(line, "#") {
+				out = append(out, len(line)-len(strings.TrimLeft(line, "#")))
+			}
+		}
+		return out
+	}
+	for _, pair := range [][2]string{
+		{"SHOP_GUIDE.ar.md", "SHOP_GUIDE.md"},
+		{"INSTALL.ar.md", "INSTALL.md"},
+		{"TROUBLESHOOTING.ar.md", "TROUBLESHOOTING.md"},
+	} {
+		arabic, english := levels(pair[0]), levels(pair[1])
+		if len(arabic) != len(english) {
+			t.Errorf("%s has %d headings and %s has %d", pair[0], len(arabic), pair[1], len(english))
+			continue
+		}
+		for i := range arabic {
+			if arabic[i] != english[i] {
+				t.Errorf("%s and %s differ at heading %d: level %d against %d", pair[0], pair[1], i+1, arabic[i], english[i])
+			}
+		}
+	}
+}

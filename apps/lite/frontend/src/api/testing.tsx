@@ -447,6 +447,19 @@ export function fakeClient(overrides: Overrides = {}): Client {
       health: async () => ({ version: "1.0.0-test", schemaVersion: 2, platform: "darwin", dataDir: `/data/${FAKE_CLIENT_SENTINEL}` }),
       firstRunStatus: async () => ({ complete: true }),
       completeFirstRun: async () => ({ recoveryCode: "ABCD-EFGH-JKMN-PQRS" }),
+      about: async () => ({
+        version: "0.9.0",
+        schemaVersion: 8,
+        platform: "windows",
+        arch: "amd64",
+        dataDir: "C:\\Users\\shop\\AppData\\Local\\Mizan Lite",
+        logsDir: "C:\\Users\\shop\\AppData\\Local\\Mizan Lite\\logs",
+        backupsDir: "C:\\Users\\shop\\AppData\\Local\\Mizan Lite\\backups",
+        guides: ["install-ar", "install-en", "quick-card-ar", "shop-guide-ar", "shop-guide-en", "troubleshooting-ar", "troubleshooting-en"],
+        notices: "Mizan Lite — third-party notices\n\n== IBM Plex Sans Arabic (font) — SIL Open Font License 1.1",
+      }),
+      saveGuide: async (name) => ({ path: `/Users/shop/Documents/${name}.pdf`, bytes: 1, cancelled: false }),
+      saveSupportFile: async () => ({ path: "/Users/shop/Documents/support.zip", bytes: 1, cancelled: false }),
     },
     settings: {
       get: async () => ({ locale: "ar", shopName: "بقالية المونة", direction: "rtl", debtCurrency: "USD" }),
@@ -458,6 +471,18 @@ export function fakeClient(overrides: Overrides = {}): Client {
       }),
     },
     catalog: {
+      importTemplate: async () => ({ path: "/Users/shop/Documents/products.xlsx", bytes: 1, cancelled: false }),
+      importPreview: async () => ({
+        path: "/Users/shop/Documents/products.xlsx",
+        digest: "abc",
+        rows: [
+          { row: 2, nameAr: "رز مصري", nameEn: "Egyptian rice", barcode: "6290000000011", unitCode: "kg", currency: "USD", price: "1.10", quantity: "25.5", cost: "0.80" },
+          { row: 3, nameAr: "سكر", nameEn: "", barcode: "", unitCode: "kg", currency: "SYP", price: "12000", quantity: "", cost: "" },
+        ],
+        problems: [],
+        cancelled: false,
+      }),
+      importApply: async () => ({ created: 2, withStock: 1 }),
       units: async () => [
         { code: "kg", kind: "mass", inputDecimals: 3 },
         { code: "l", kind: "volume", inputDecimals: 3 },

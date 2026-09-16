@@ -26,6 +26,11 @@ import { unwrap, type Plain } from "./envelope";
 
 export type BootStatus = Plain<api.BootStatusDTO>;
 export type Health = Plain<api.HealthDTO>;
+export type About = Plain<api.AboutDTO>;
+export type ImportPreview = Plain<api.ImportPreviewDTO>;
+export type ImportRow = Plain<api.ImportRowDTO>;
+export type ImportProblem = Plain<api.ImportProblemDTO>;
+export type ImportResult = Plain<api.ImportResultDTO>;
 export type SettingsState = Plain<api.SettingsDTO>;
 export type SettingsInput = Plain<api.SettingsInput>;
 export type FirstRunInput = Plain<api.FirstRunInput>;
@@ -122,6 +127,9 @@ export function createClient() {
       firstRunStatus: () => unwrap(App.FirstRunStatus),
       completeFirstRun: (input: FirstRunInput) =>
         unwrap(() => App.CompleteFirstRun(api.FirstRunInput.createFrom(input))),
+      about: () => unwrap(App.About),
+      saveGuide: (name: string) => unwrap(() => App.SaveGuide(name)),
+      saveSupportFile: (includeDatabase: boolean) => unwrap(() => App.SaveSupportFile(includeDatabase)),
     },
     settings: {
       get: () => unwrap(Settings.Get),
@@ -132,6 +140,9 @@ export function createClient() {
       currencies: () => unwrap(Catalog.Currencies),
       products: (query: ProductQuery) => unwrap(() => Catalog.Products(api.ProductQueryDTO.createFrom(query))),
       product: (id: string) => unwrap(() => Catalog.Product(id)),
+      importTemplate: () => unwrap(Catalog.ImportTemplate),
+      importPreview: () => unwrap(Catalog.ImportPreview),
+      importApply: (path: string, digest: string) => unwrap(() => Catalog.ImportApply(api.ImportApplyInput.createFrom({ path, digest }))),
       createProduct: (input: CreateProductInput) =>
         unwrap(() => Catalog.CreateProduct(api.CreateProductInput.createFrom(input))),
       updateProduct: (input: UpdateProductInput) =>

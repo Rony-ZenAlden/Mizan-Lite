@@ -36,4 +36,12 @@ describe("G4 — screens, routes and navigation are one set", () => {
       expect(CATALOGS.en.common, route.path).toHaveProperty([route.labelKey]);
     }
   });
+
+  it("no two navigation items read the same in either language (L8 S4: two screens were both الصندوق)", () => {
+    for (const locale of ["ar", "en"] as const) {
+      const labels = ROUTES.map((r) => (CATALOGS[locale].common as Record<string, string>)[r.labelKey]);
+      const repeated = labels.filter((label, i) => labels.indexOf(label) !== i);
+      expect(repeated, locale).toEqual([]);
+    }
+  });
 });

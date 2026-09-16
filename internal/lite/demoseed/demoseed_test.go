@@ -458,3 +458,42 @@ func TestTheSeederKeepsADebtBook(t *testing.T) {
 		t.Fatalf("sales findings = %+v, %v", findings, err)
 	}
 }
+
+// TestTheSeederExercisesPrintingAndBackups is L8's "the seeder complete": L7's printer settings, print jobs with a copy and a
+// failure, numbered payment vouchers, and a backup verified in an outside folder inside the data directory.
+func TestTheSeederExercisesPrintingAndBackups(t *testing.T) {
+	ctx := context.Background()
+	app := start(t)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.PrintJobs != 4 || res.Vouchers != res.Payments || res.Backups < 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	current, err := app.Settings.Get(ctx)
+	if err != nil || current.Receipt.Printer != demoseed.DemoPrinter || current.Receipt.Footer == "" ||
+		filepath.Dir(current.BackupFolder) != app.Paths.Data {
+		t.Fatalf("settings %+v, %v", current, err)
+	}
+	jobs, err := app.Printing.Jobs(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed, copies := 0, 0
+	for _, j := range jobs {
+		if !j.Sent {
+			failed++
+		}
+		if j.CopyNo > 1 {
+			copies++
+		}
+	}
+	if failed != 1 || copies != 1 {
+		t.Fatalf("%d failed, %d copies in %+v", failed, copies, jobs)
+	}
+	status, err := app.Safety.Status(ctx)
+	if err != nil || status.LastOutside == nil || status.OutsideFailed != "" {
+		t.Fatalf("outside copy %+v, %v", status, err)
+	}
+}

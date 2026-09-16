@@ -146,7 +146,7 @@ export function SalesScreen() {
                 <tr key={sale.id} className="border-t border-border">
                   <td className="p-2">{formatInteger(sale.receiptNo, locale)}</td>
                   <td className="p-2">
-                    <bdi dir="ltr">{formatDateTime(sale.soldAt, locale)}</bdi>
+                    <bdi dir="ltr">{formatDateTime(sale.soldAt)}</bdi>
                   </td>
                   <td className="p-2">
                     <Money value={sale.total} currency={sale.settlement} />

@@ -93,9 +93,25 @@ drill lite-pure-text "textkey, numinput, bizdate and tender may import only" \
   internal/lite/textkey/zz_drill.go "package textkey
 import _ \"$M/internal/platform/database\""
 
-drill lite-cmd-entry "cmd/lite-demoseed may import only" \
+drill lite-cmd-entry "Lite's commands may import only" \
   cmd/lite-demoseed/zz_drill.go "package main
 import _ \"$M/internal/platform/config\""
+
+drill lite-support-pure "support may import only" \
+  internal/lite/support/zz_drill.go "package support
+import _ \"$M/internal/lite/settings\""
+
+drill lite-guide-pure "guide may import only" \
+  internal/lite/guide/zz_drill.go "package guide
+import _ \"$M/internal/lite/settings\""
+
+drill lite-e2e-test-only "only cmd/lite-e2e may import internal/lite/e2e" \
+  apps/lite/zz_drill.go "package main
+import _ \"$M/internal/lite/e2e\""
+
+drill lite-network-only-in-httpsource "only internal/lite/fx/infra/httpsource may open network connections" \
+  internal/lite/printing/zz_drill.go "package printing
+import _ \"net/http\""
 
 drill lite-catalog-isolated "catalog may not import another Lite module" \
   internal/lite/catalog/zz_drill.go "package catalog

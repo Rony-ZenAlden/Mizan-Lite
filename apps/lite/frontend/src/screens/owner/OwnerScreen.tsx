@@ -6,6 +6,7 @@ import { formatCountdown } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
+import { formatDateTime } from "@/i18n/time";
 import { PinField } from "@/ui/Field";
 
 /** How many history entries the screen shows. */
@@ -114,7 +115,7 @@ export function OwnerScreen() {
                 {events.map((e) => (
                   <tr key={e.id} className="border-t border-border">
                     <td className="p-2">
-                      <bdi dir="ltr">{e.occurredAt.replace("T", " ").slice(0, 16)}</bdi>
+                      <bdi dir="ltr">{formatDateTime(e.occurredAt)}</bdi>
                     </td>
                     <td className="p-2">{tDynamic(`owner.event.${e.kind}`)}</td>
                     <td className="p-2">

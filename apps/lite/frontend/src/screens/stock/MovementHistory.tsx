@@ -7,6 +7,7 @@ import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
+import { formatDate } from "@/i18n/time";
 import { CostCorrectionDialog } from "./CostCorrectionDialog";
 
 /** How many of a product's newest movements the history shows. */
@@ -117,7 +118,7 @@ export function MovementHistory({
               {history.movements.map((m) => (
                 <tr key={m.id} className="border-t border-border">
                   <td className="p-2">
-                    <bdi dir="ltr">{m.businessDate}</bdi>
+                    <bdi dir="ltr">{formatDate(m.businessDate)}</bdi>
                   </td>
                   <td className="p-2">{tDynamic(`stock.kind.${m.kind}`)}</td>
                   <td className="p-2">{quantity(m.quantity)}</td>

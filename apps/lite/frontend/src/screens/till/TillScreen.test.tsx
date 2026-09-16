@@ -461,3 +461,66 @@ describe("TillScreen — printing the receipt (Q-L7.2)", () => {
     expect(within(receipt).getByRole("button", { name: "Print again" })).toBeInTheDocument();
   });
 });
+
+describe("TillScreen — the counter's keys (L8 D-L8.9)", () => {
+  it("+ and − change the last counted line, F4 switches to credit, F9 and Enter on an empty scan field pay", async () => {
+    const checkout = vi.fn<(input: CheckoutInput) => Promise<Sale>>(async () => aSale());
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote, checkout } }), locale: "en" });
+    await settle();
+    expect(screen.getByTestId("till-keys")).toHaveTextContent("F9 to pay");
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.keyboard("+");
+    await userEvent.keyboard("+");
+    expect(screen.getByLabelText("Quantity of Apricot jam")).toHaveValue("3");
+    await userEvent.keyboard("-");
+    expect(screen.getByLabelText("Quantity of Apricot jam")).toHaveValue("2");
+    expect(scanField()).toHaveValue("");
+
+    await userEvent.keyboard("{F2}");
+    expect(screen.getByLabelText("Quantity of Apricot jam")).toHaveFocus();
+
+    await userEvent.keyboard("{F4}");
+    expect(await screen.findByRole("dialog", { name: "Who is this sale on credit to?" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "Cash" }));
+    await settle();
+
+    await userEvent.keyboard("{F9}");
+    await settle();
+    expect(checkout).toHaveBeenCalledTimes(1);
+    expect(checkout.mock.calls[0]![0].cart.lines[0]!.quantity).toBe("2");
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Receipt No. 7" })).getByRole("button", { name: "Close" }));
+
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.click(scanField());
+    await userEvent.keyboard("{Enter}");
+    await settle();
+    expect(checkout).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("TillScreen — paying while the cart is being priced (found by the end-to-end journey J3)", () => {
+  it("F9 pressed before Go's quote arrives pays once the quote is there; a change to the cart first cancels it", async () => {
+    const checkout = vi.fn<(input: CheckoutInput) => Promise<Sale>>(async () => aSale());
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote, checkout } }), locale: "en" });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await userEvent.keyboard("{F9}");
+    expect(checkout).not.toHaveBeenCalled();
+    await settle();
+    expect(checkout).toHaveBeenCalledTimes(1);
+    await userEvent.click(within(await screen.findByRole("dialog", { name: "Receipt No. 7" })).getByRole("button", { name: "Close" }));
+
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.keyboard("+");
+    await userEvent.keyboard("{F9}");
+    await userEvent.keyboard("+");
+    await settle();
+    expect(checkout).toHaveBeenCalledTimes(1);
+  });
+});

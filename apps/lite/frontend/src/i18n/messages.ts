@@ -50,8 +50,28 @@ export function translateDynamic(locale: Locale, key: string, params?: Record<st
   if (!params) return template;
   // `{name}`, the same syntax Go's catalog interpolates.
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
-    Object.prototype.hasOwnProperty.call(params, name) ? params[name]! : match,
+    Object.prototype.hasOwnProperty.call(params, name) ? inSentence(locale, params[name]!) : match,
   );
+}
+
+const LRI = "\u2066";
+const FSI = "\u2068";
+const PDI = "\u2069";
+
+/**
+ * A value placed into an Arabic sentence, isolated so it cannot reorder the words around it (L8 S1–S5): a figure — anything that
+ * starts with a digit, a sign or ≈ — left to right, as `Money` shows it; anything else (a name, a word) in its own first strong
+ * direction. The same rule Go applies on paper (D-L7.3, D-L7.i5). English sentences are left as they are: a left-to-right line
+ * keeps figures in order, and an isolate there changes nothing a reader sees.
+ */
+export function inSentence(locale: Locale, value: string): string {
+  if (locale !== "ar" || value === "") return value;
+  return (/^[\s]*[-+−≈0-9]/.test(value) ? LRI : FSI) + value + PDI;
+}
+
+/** Removes the isolates `inSentence` adds — for comparing what a reader sees. */
+export function withoutIsolates(text: string): string {
+  return text.replace(/[\u2066-\u2069]/g, "");
 }
 
 /** Resolves a key known at compile time. A mistyped key does not compile. */

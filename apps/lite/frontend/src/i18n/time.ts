@@ -16,9 +16,24 @@ export function formatAge(seconds: number, locale: Locale, justNow: string): str
   return format.format(-Math.floor(s / 86_400), "day");
 }
 
-/** A UTC timestamp Go sent, shown in the machine's own time zone: "14 Sept 2026, 09:00". */
-export function formatDateTime(iso: string, locale: Locale): string {
+const two = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * A UTC timestamp Go sent, in the machine's own time zone, as the shop reads a date: "15/09/2026 15:15" (Q-L8.6). Digits and
+ * separators only — no month names, no ص/م, no direction marks — so the same text reads the same inside Arabic and English and
+ * cannot be reordered by the bidirectional algorithm (L8 S1). The same format as paper (Go's `words.when`).
+ */
+export function formatDateTime(iso: string): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return iso;
-  return new Intl.DateTimeFormat(tag(locale), { dateStyle: "medium", timeStyle: "short" }).format(at);
+  return `${two(at.getDate())}/${two(at.getMonth() + 1)}/${at.getFullYear()} ${two(at.getHours())}:${two(at.getMinutes())}`;
+}
+
+/** A business date Go sent ("2026-09-15") as "15/09/2026"; a month ("2026-09") as "09/2026"; anything else as it came. */
+export function formatDate(date: string): string {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (day) return `${day[3]}/${day[2]}/${day[1]}`;
+  const month = /^(\d{4})-(\d{2})$/.exec(date);
+  if (month) return `${month[2]}/${month[1]}`;
+  return date;
 }

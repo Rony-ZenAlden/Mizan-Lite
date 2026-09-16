@@ -56,8 +56,13 @@ func (s *shell) localRateProvider(ctx context.Context) (httpsource.Provider, boo
 		return httpsource.Provider{}, false
 	}
 	stored, err := app.Settings.Get(ctx)
-	if err != nil || stored.RateSource != settingsdomain.RateSourceLocal || stored.LocalRateURL == "" {
+	if err != nil || stored.RateSource != settingsdomain.RateSourceLocal {
 		return httpsource.Provider{}, false
+	}
+	// With no address of its own the shop gets the market page Mizan ships with (2026-09-17), so choosing the local source
+	// works without being asked for anything. A shop that HAS its own endpoint keeps using it.
+	if stored.LocalRateURL == "" {
+		return httpsource.SPTodayProvider(), true
 	}
 	return httpsource.LocalProvider(httpsource.LocalConfig{URL: stored.LocalRateURL, Field: stored.LocalRateField}), true
 }

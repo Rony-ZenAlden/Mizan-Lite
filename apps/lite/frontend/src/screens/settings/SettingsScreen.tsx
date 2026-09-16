@@ -130,6 +130,9 @@ export function SettingsScreen() {
         </SelectField>
         {source === "local" ? (
           <div className="space-y-3" data-testid="settings-local">
+            <p className="text-xs text-text-muted" data-testid="settings-local-builtin">
+              {t("settings.local_builtin")}
+            </p>
             <TextField
               label={t("settings.local_url")}
               value={url}

@@ -43,6 +43,8 @@ describe("SettingsScreen — the shop's settings in one place (owner's request, 
     expect(screen.queryByTestId("settings-local")).not.toBeInTheDocument();
     await userEvent.selectOptions(picker, "local");
     expect(screen.getByTestId("settings-local")).toBeInTheDocument();
+    // It works with no address: the built-in Damascus source is used until the shop gives one of its own.
+    expect(screen.getByTestId("settings-local-builtin")).toHaveTextContent("Built in: the Damascus dollar rate");
 
     await userEvent.type(screen.getByLabelText("Local market address"), "https://rates.example.sy/api");
     await userEvent.type(screen.getByLabelText("The field inside the JSON"), "usd.sell");

@@ -28,7 +28,7 @@ func build(t *testing.T) (*setup.Service, *settings.Service, *owner.Service, *da
 	db := litetest.OpenMigrated(t)
 	clk := clock.NewFixed(time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC))
 	st := settings.NewService(db, settingsdb.NewStore(db), clk, litetest.Logger())
-	ow := owner.NewService(db, ownerdb.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger())
+	ow := owner.NewService(db, ownerdb.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy())
 	return setup.NewService(db, st, ow, &rates{}), st, ow, db
 }
 
@@ -139,7 +139,7 @@ func TestARefusedRateLeavesNoShopBehind(t *testing.T) {
 	db := litetest.OpenMigrated(t)
 	clk := clock.NewFixed(time.Date(2026, 9, 14, 6, 0, 0, 0, time.UTC))
 	st := settings.NewService(db, settingsdb.NewStore(db), clk, litetest.Logger())
-	ow := owner.NewService(db, ownerdb.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger())
+	ow := owner.NewService(db, ownerdb.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy())
 	refusal := errs.Validation("lite.fx.rate_decimals", "a rate takes at most four decimals")
 	svc := setup.NewService(db, st, ow, &rates{refuse: refusal})
 
@@ -162,7 +162,7 @@ func TestAnOpeningRateIsRecordedWithTheShop(t *testing.T) {
 	db := litetest.OpenMigrated(t)
 	clk := clock.NewFixed(time.Date(2026, 9, 14, 6, 0, 0, 0, time.UTC))
 	st := settings.NewService(db, settingsdb.NewStore(db), clk, litetest.Logger())
-	ow := owner.NewService(db, ownerdb.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger())
+	ow := owner.NewService(db, ownerdb.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy())
 	r := &rates{}
 	if _, err := setup.NewService(db, st, ow, r).Run(ctx, setup.Input{ShopName: "المونة", Locale: "ar", PIN: "246813", Rate: "١٤٨٠٠"}); err != nil {
 		t.Fatal(err)

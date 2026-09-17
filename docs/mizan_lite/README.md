@@ -36,6 +36,7 @@ what is not verified — once built.
 | **L8** | End-to-end testing, polish, release and deployment | [phases/L8_RELEASE.md](phases/L8_RELEASE.md) · [phases/L8_DOD_REVIEW.md](phases/L8_DOD_REVIEW.md) | ✅ committed, tagged `lite-v0.9.0` — the Windows protocol, paper and Excel with the owner |
 
 | **L9** | Cost price and profit margin; the stocktake | [phases/L9_COST_AND_AUDIT.md](phases/L9_COST_AND_AUDIT.md) · [phases/L9_AUDIT_DRAFT.sql](phases/L9_AUDIT_DRAFT.sql) | 🔨 cost price shipped in 0.9.2; the stocktake designed, not built |
+| **L10** | Dropping the two noughts: one money pipeline, three readings of the pound | [DECISIONS.md](DECISIONS.md) — D-L10.1–5 | ✅ shipped, tagged `lite-v0.9.5` |
 
 ## Conventions
 

@@ -1,8 +1,8 @@
 package moneyfmt_test
 
 import (
-	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 )
@@ -58,13 +58,42 @@ func TestDollarsAreNeverRedenominated(t *testing.T) {
 func TestDualCarriesBothFigures(t *testing.T) {
 	shop := syp(moneyfmt.Dual)
 	got := shop.Display("15000", "SYP")
-	parts := strings.Split(got, moneyfmt.DualSeparator)
-	if len(parts) != 2 || parts[0] != "150" || parts[1] != "15000" {
-		t.Fatalf("Display = %q, want the new figure and the old one", got)
+	if got != "150 (15000)" {
+		t.Fatalf("Display = %q, want the new figure with the old one in brackets", got)
+	}
+	fresh, legacy, ok := moneyfmt.SplitDual(got)
+	if !ok || fresh != "150" || legacy != "15000" {
+		t.Fatalf("SplitDual(%q) = %q, %q, %v", got, fresh, legacy, ok)
 	}
 	// A person types the new figure in dual mode: the old one is there to be recognised, not typed.
 	if base := shop.Base("150", "SYP"); base != "15000" {
 		t.Fatalf("Base(150) = %q, want 15000", base)
+	}
+}
+
+// TestADualReadingIsPrintableWhereverItLands is the fault this shape was chosen to prevent: a screen, a receipt or a
+// workbook cell that prints the figure without knowing it carries two must still show something a person can read. The
+// old separator was a control character, which every such place drew as a broken box.
+func TestADualReadingIsPrintableWhereverItLands(t *testing.T) {
+	shop := syp(moneyfmt.Dual)
+	for _, stored := range []string{"15000", "13675", "0", "-20000", "7"} {
+		shown := shop.Display(stored, "SYP")
+		for _, r := range shown {
+			if unicode.IsControl(r) || !unicode.IsPrint(r) {
+				t.Errorf("Display(%q) = %q carries %U, which no screen or printer can draw", stored, shown, r)
+			}
+		}
+		// And what a bare printer draws is the reading the owner asked for: "137 (13700)".
+		fresh, legacy, ok := moneyfmt.SplitDual(shown)
+		if !ok || fresh+" ("+legacy+")" != shown {
+			t.Errorf("Display(%q) = %q does not read as a figure and its old self", stored, shown)
+		}
+	}
+	// A single figure is not a dual reading, and must not be taken apart as one.
+	for _, single := range []string{"15000", "4.88", "-2000", "0"} {
+		if _, _, ok := moneyfmt.SplitDual(single); ok {
+			t.Errorf("SplitDual(%q) claimed two figures", single)
+		}
 	}
 }
 
@@ -77,7 +106,7 @@ func TestWhatAPersonTypesComesBackUnchanged(t *testing.T) {
 			stored := shop.Base(typed, "SYP")
 			read := shop.Display(stored, "SYP")
 			if mode == moneyfmt.Dual {
-				read = strings.Split(read, moneyfmt.DualSeparator)[0]
+				read, _, _ = moneyfmt.SplitDual(read)
 			}
 			if read != typed {
 				t.Errorf("%s: typed %q, stored %q, read back %q", mode, typed, stored, read)
@@ -93,7 +122,7 @@ func TestWhatTheBooksHoldSurvivesTheRoundTrip(t *testing.T) {
 		for _, stored := range []string{"15000", "500", "13675", "1", "0", "1234567"} {
 			shown := shop.Display(stored, "SYP")
 			if mode == moneyfmt.Dual {
-				shown = strings.Split(shown, moneyfmt.DualSeparator)[0]
+				shown, _, _ = moneyfmt.SplitDual(shown)
 			}
 			if back := shop.Base(shown, "SYP"); back != stored {
 				t.Errorf("%s: books held %q, shown %q, typed back as %q", mode, stored, shown, back)

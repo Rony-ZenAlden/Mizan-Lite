@@ -181,6 +181,7 @@
   "lite.settings.invalid_locale": "The chosen language is not supported.",
   "lite.settings.invalid_money_display": "Choose how money is shown.",
   "lite.settings.invalid_paper": "The paper is 80 mm or 58 mm.",
+  "lite.settings.invalid_pin_required": "PIN protection is either on or off.",
   "lite.settings.invalid_print_path": "Choose how receipts are sent.",
   "lite.settings.invalid_rate_adjust": "The margin must be a number between -50 and +50.",
   "lite.settings.invalid_rate_mode": "Unknown rate mode.",

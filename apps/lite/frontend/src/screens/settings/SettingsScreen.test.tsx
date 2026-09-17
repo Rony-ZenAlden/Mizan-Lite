@@ -1,6 +1,7 @@
-import { act, screen } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { BindingError } from "@/api/envelope";
 import { aRate, aSettings, fakeClient, renderWithProviders } from "@/api/testing";
 import { SettingsScreen } from "./SettingsScreen";
 
@@ -18,6 +19,7 @@ describe("SettingsScreen — the shop's settings in one place (owner's request, 
     expect(screen.getByTestId("settings-general")).toHaveTextContent("Language and general preferences");
     expect(screen.getByTestId("settings-currency")).toHaveTextContent("Currency");
     expect(screen.getByTestId("settings-rate")).toHaveTextContent("Exchange rate");
+    expect(screen.getByTestId("settings-security")).toHaveTextContent("Security");
 
     // The currency group shows what the shop has, and points at where each is changed rather than duplicating a control.
     const currency = screen.getByTestId("settings-currency");
@@ -105,5 +107,74 @@ describe("SettingsScreen — dropping the two noughts (L10, 2026-09-17)", () => 
     renderWithProviders(<SettingsScreen />, { client: fakeClient(), locale: "en" });
     await settle();
     expect(screen.getByTestId("money-display")).toHaveTextContent("It changes nothing in your books");
+  });
+});
+
+describe("SettingsScreen — the language lives here now (owner's request, 2026-09-17)", () => {
+  it("names each language in its own language, marked with its own lang attribute", async () => {
+    renderWithProviders(<SettingsScreen />, { client: fakeClient(), locale: "en" });
+    await settle();
+    const picker = screen.getByLabelText("Language");
+    expect(picker.querySelector('option[value="ar"]')).toHaveAttribute("lang", "ar");
+    expect(picker.querySelector('option[value="en"]')).toHaveAttribute("lang", "en");
+  });
+
+  it("switches the language at once, in the same render, and saves it", async () => {
+    const update = vi.fn(async () => aSettings({ locale: "en", direction: "ltr" }));
+    renderWithProviders(<SettingsScreen />, { client: fakeClient({ settings: { update } }), locale: "ar" });
+    await settle();
+    expect(document.documentElement).toHaveAttribute("dir", "rtl");
+
+    await userEvent.selectOptions(screen.getByLabelText("اللغة"), "en");
+
+    expect(document.documentElement).toHaveAttribute("lang", "en");
+    expect(document.documentElement).toHaveAttribute("dir", "ltr");
+    expect(update).toHaveBeenCalledWith({ locale: "en" });
+    await settle();
+  });
+
+  it("reverts when the language cannot be saved, so the screen never claims one that will not survive a restart", async () => {
+    const update = vi.fn(async () => {
+      throw new BindingError({ code: "lite.api.internal", messageKey: "lite.api.internal" });
+    });
+    renderWithProviders(<SettingsScreen />, { client: fakeClient({ settings: { update } }), locale: "ar" });
+    await settle();
+
+    await userEvent.selectOptions(screen.getByLabelText("اللغة"), "en");
+
+    await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", "rtl"));
+    await settle();
+  });
+});
+
+describe("SettingsScreen — the PIN switch (owner's request, 2026-09-17)", () => {
+  it("is off on a shop that has not chosen, and turning it on saves it", async () => {
+    const update = vi.fn(async () => aSettings({ pinRequired: true }));
+    renderWithProviders(<SettingsScreen />, { client: fakeClient({ settings: { update } }), locale: "en" });
+    await settle();
+
+    const toggle = screen.getByTestId("pin-required");
+    expect(toggle).not.toBeChecked();
+    // The group says what turning it on costs, and what it does not change.
+    const security = screen.getByTestId("settings-security");
+    expect(security).toHaveTextContent("PIN verification required for sensitive actions");
+    expect(security).toHaveTextContent("still written to the owner's record");
+    // And that two acts ask for the PIN whichever way it is set.
+    expect(security).toHaveTextContent("always ask for the PIN");
+
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole("button", { name: "Save the settings" }));
+    await settle();
+
+    expect(update).toHaveBeenCalledWith({ pinRequired: true });
+  });
+
+  it("shows the switch as the shop left it", async () => {
+    renderWithProviders(<SettingsScreen />, {
+      client: fakeClient({ settings: { get: async () => aSettings({ pinRequired: true }) } }),
+      locale: "en",
+    });
+    await settle();
+    expect(screen.getByTestId("pin-required")).toBeChecked();
   });
 });

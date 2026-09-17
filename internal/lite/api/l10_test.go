@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/mizan-erp/mizan/internal/lite/api"
 	"github.com/mizan-erp/mizan/internal/lite/litetest"
@@ -89,6 +90,42 @@ func TestTheRedenominationReachesTheTillTheReportsAndTheReceipt(t *testing.T) {
 	setDisplay(t, set, moneyfmt.Legacy)
 	if got := set.Sales.Receipt(saleID); got.Data.Total != "97500" {
 		t.Fatalf("back in the old pound the total is %q — the stored figure was changed", got.Data.Total)
+	}
+}
+
+// TestADualReceiptCarriesNothingAPrinterCannotDraw is the owner's report of 2026-09-17, kept from coming back.
+//
+// A dual reading used to divide its two figures with an ASCII unit separator. Every place that printed the figure
+// without knowing to split it — the receipt, the A4 page, the rate line at the top of the screen, a workbook cell —
+// drew a control character, which a webview and a printer both show as a broken box: "1 USD = 137 ☒ 13700 SYP". The
+// separator is now brackets, which need no cooperation from whoever draws them.
+func TestADualReceiptCarriesNothingAPrinterCannotDraw(t *testing.T) {
+	set, oil := tillShop(t) // olive oil at $3.25, the rate 15,000
+	cart := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "2"}}}
+	sale := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: quoted(t, set, cart).Token})
+	if !sale.OK {
+		t.Fatal(sale.Error)
+	}
+	setDisplay(t, set, moneyfmt.Dual)
+
+	doc, err := api.PrintDocument(set, "sale", sale.Data.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	printed := textOf(doc)
+	for _, r := range printed {
+		// Bidi isolates are the one control character a printed line is allowed (L7 H3); nothing else may reach paper.
+		if unicode.IsControl(r) && !strings.ContainsRune("\u2066\u2067\u2068\u2069\u200e\u200f\n\t", r) {
+			t.Fatalf("the receipt carries %U, which a printer draws as a broken box:\n%s", r, printed)
+		}
+	}
+	// The rate line reads as the owner asked: the new figure, then the old one in brackets, each grouped.
+	if !strings.Contains(printed, "150 (15,000)") {
+		t.Fatalf("the rate line does not read \"150 (15,000)\":\n%s", printed)
+	}
+	// And the total, 97,500 old pounds, reads the same way.
+	if !strings.Contains(printed, "975 (97,500)") {
+		t.Fatalf("the total does not read \"975 (97,500)\":\n%s", printed)
 	}
 }
 

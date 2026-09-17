@@ -23,16 +23,19 @@ import (
 const pin = "246813"
 
 type fixture struct {
-	svc   *owner.Service
-	store owner.Store
-	clk   *clock.Fixed
+	svc    *owner.Service
+	store  owner.Store
+	clk    *clock.Fixed
+	policy *ownertest.Policy
 }
 
 func fake(t *testing.T) fixture {
 	t.Helper()
 	clk := clock.NewFixed(time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC))
 	store := ownertest.NewFake()
-	return fixture{svc: owner.NewService(litetest.Immediate{}, store, ownertest.Hasher(), clk, rand.Reader, litetest.Logger()), store: store, clk: clk}
+	policy := ownertest.NewPolicy()
+	svc := owner.NewService(litetest.Immediate{}, store, ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), policy)
+	return fixture{svc: svc, store: store, clk: clk, policy: policy}
 }
 
 func (f fixture) setUp(t *testing.T) string {
@@ -346,12 +349,12 @@ func TestAWeakerStoredHashIsUpgradedOnSuccessAndStillVerifies(t *testing.T) {
 	clk := clock.NewFixed(time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC))
 	store := ownertest.NewFake()
 	weak := crypto.NewArgon2id(crypto.Params{Memory: 32, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32})
-	if _, err := owner.NewService(litetest.Immediate{}, store, weak, clk, rand.Reader, litetest.Logger()).SetUp(ctx, pin); err != nil {
+	if _, err := owner.NewService(litetest.Immediate{}, store, weak, clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy()).SetUp(ctx, pin); err != nil {
 		t.Fatal(err)
 	}
 	before, _, _ := store.Credentials(ctx)
 
-	svc := owner.NewService(litetest.Immediate{}, store, ownertest.Hasher(), clk, rand.Reader, litetest.Logger())
+	svc := owner.NewService(litetest.Immediate{}, store, ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy())
 	if _, err := svc.Elevate(ctx, "٢٤٦٨١٣"); err != nil { // typed in Arabic-Indic digits
 		t.Fatal(err)
 	}
@@ -371,7 +374,7 @@ func TestAWeakerStoredHashIsUpgradedOnSuccessAndStillVerifies(t *testing.T) {
 
 func onDatabase(t *testing.T, db *database.Store, clk clock.Clock) *owner.Service {
 	t.Helper()
-	return owner.NewService(db, sqlite.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger())
+	return owner.NewService(db, sqlite.NewStore(db), ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy())
 }
 
 // TestAWrongPINIsCountedEvenThoughItFails pins the commit-then-refuse shape of the attempt. A refusal
@@ -458,7 +461,7 @@ func TestARolledBackActLeavesNoRecordOfIt(t *testing.T) {
 func TestAFailedSetUpLeavesNoCredential(t *testing.T) {
 	ctx := context.Background()
 	db := litetest.OpenMigrated(t)
-	svc := owner.NewService(db, sqlite.NewStore(db), ownertest.Hasher(), clock.System(), exhausted{}, litetest.Logger())
+	svc := owner.NewService(db, sqlite.NewStore(db), ownertest.Hasher(), clock.System(), exhausted{}, litetest.Logger(), ownertest.NewPolicy())
 	if _, err := svc.SetUp(ctx, pin); err == nil {
 		t.Fatal("SetUp succeeded with no randomness for the recovery code")
 	}
@@ -478,7 +481,7 @@ func TestOwnerModeIsNotGrantedWhenTheAttemptFailsToSave(t *testing.T) {
 	ctx := context.Background()
 	clk := clock.NewFixed(time.Date(2026, 9, 13, 9, 0, 0, 0, time.UTC))
 	store := ownertest.NewFake()
-	svc := owner.NewService(litetest.Immediate{}, store, ownertest.Hasher(), clk, rand.Reader, litetest.Logger())
+	svc := owner.NewService(litetest.Immediate{}, store, ownertest.Hasher(), clk, rand.Reader, litetest.Logger(), ownertest.NewPolicy())
 	if _, err := svc.SetUp(ctx, pin); err != nil {
 		t.Fatal(err)
 	}
@@ -514,10 +517,10 @@ func TestEveryGuardedReadIsOpenAndRecordsNothing(t *testing.T) {
 	}
 }
 
-// TestOnlyRestoreAndBringingInABackupStillAskForThePIN pins the owner's decision of 2026-09-16: a single-computer shop
-// with no login should not be stopped for a PIN to void a receipt or read a report. What stays reserved is the pair that
-// replaces the books wholesale. Every act is recorded either way.
-func TestOnlyRestoreAndBringingInABackupStillAskForThePIN(t *testing.T) {
+// TestWithTheSwitchOffOnlyRestoreAndBringingInABackupAskForThePIN pins the owner's decision of 2026-09-16, which is
+// still the default: a single-computer shop with no login should not be stopped for a PIN to void a receipt or read a
+// report. What stays reserved is the pair that replaces the books wholesale. Every act is recorded either way.
+func TestWithTheSwitchOffOnlyRestoreAndBringingInABackupAskForThePIN(t *testing.T) {
 	ctx := context.Background()
 	f := fake(t)
 	f.setUp(t)
@@ -538,5 +541,81 @@ func TestOnlyRestoreAndBringingInABackupStillAskForThePIN(t *testing.T) {
 		if err := f.svc.Require(ctx, owner.Act{Action: action}); errs.CodeOf(err) != domain.CodeRequired {
 			t.Fatalf("%s was allowed without the PIN: %v", action, err)
 		}
+	}
+	// And the figures an owner might keep from a helper are open at the counter.
+	if !f.svc.Allowed(ctx) {
+		t.Fatal("a guarded read was refused with the switch off")
+	}
+}
+
+// TestWithTheSwitchOnEveryGuardedActAsksForThePIN is the master switch the owner asked for on 2026-09-17: a shop that
+// leaves a helper at the till turns it on, and every high-privilege act — a void, a discount, a price change, a stock
+// correction, a settings change — stops for the PIN, as do the owner's figures.
+func TestWithTheSwitchOnEveryGuardedActAsksForThePIN(t *testing.T) {
+	ctx := context.Background()
+	f := fake(t)
+	f.setUp(t)
+	f.policy.Set(true)
+
+	guarded := []string{"sales.sale.void", "sales.discount", "catalog.price.change", "stock.adjust.lower",
+		"fx.rate.set", "printers.settings", "cashbook.expense", "customers.write_off"}
+	for _, action := range guarded {
+		if err := f.svc.Require(ctx, owner.Act{Action: action}); errs.CodeOf(err) != domain.CodeRequired {
+			t.Fatalf("%s went through without the PIN: %v", action, err)
+		}
+	}
+	// A refused act is not a recorded act: the history says what the shop DID.
+	if got := count(f.events(t), domain.EventGuardedAct); got != 0 {
+		t.Fatalf("%d refused acts were written to the history", got)
+	}
+	if f.svc.Allowed(ctx) {
+		t.Fatal("the owner's figures were readable without the PIN")
+	}
+
+	// In owner mode the same acts go through, and are recorded.
+	if _, err := f.svc.Elevate(ctx, pin); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range guarded {
+		if err := f.svc.Require(ctx, owner.Act{Action: action}); err != nil {
+			t.Fatalf("%s was refused in owner mode: %v", action, err)
+		}
+	}
+	if got := count(f.events(t), domain.EventGuardedAct); got != len(guarded) {
+		t.Fatalf("acts recorded = %d, want %d", got, len(guarded))
+	}
+	if !f.svc.Allowed(ctx) {
+		t.Fatal("the owner could not read their own figures in owner mode")
+	}
+
+	// Turned off again, the counter is smooth once more — without a restart.
+	f.policy.Set(false)
+	f.svc.EndElevation(ctx)
+	if err := f.svc.Require(ctx, owner.Act{Action: "sales.discount"}); err != nil {
+		t.Fatalf("the switch was turned off and a discount still asked for the PIN: %v", err)
+	}
+}
+
+// TestASwitchThatCannotBeReadDoesNotLockTheShopOut: the policy lives in the settings table, which can fail to read like
+// any other. Failing closed would stop a shopkeeper mid-sale over a database hiccup for a setting they never turned on;
+// failing open is what every shop ran before this switch existed, and the act is still recorded either way.
+func TestASwitchThatCannotBeReadDoesNotLockTheShopOut(t *testing.T) {
+	ctx := context.Background()
+	f := fake(t)
+	f.setUp(t)
+	f.policy.Fail(errors.New("the settings table is unreadable"))
+
+	if err := f.svc.Require(ctx, owner.Act{Action: "sales.discount"}); err != nil {
+		t.Fatalf("an unreadable switch stopped a sale: %v", err)
+	}
+	if !f.svc.Allowed(ctx) {
+		t.Fatal("an unreadable switch hid the owner's figures")
+	}
+	if got := count(f.events(t), domain.EventGuardedAct); got != 1 {
+		t.Fatalf("the act was not recorded: %d", got)
+	}
+	// The pair that replaces the books does not depend on the switch, so it is unaffected.
+	if err := f.svc.Require(ctx, owner.Act{Action: "backups.restore"}); errs.CodeOf(err) != domain.CodeRequired {
+		t.Fatalf("an unreadable switch opened the restore: %v", err)
 	}
 }

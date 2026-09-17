@@ -80,8 +80,8 @@ type Shop struct {
 // Display converts a base figure — the pounds the books hold — into what a person reads.
 //
 // The result is decimal text, never localised: grouping and digit shaping belong to whoever draws it, here or in the
-// webview. Dual returns the two figures separated by DualSeparator, so a caller that wants to draw them apart can split
-// on it and one that does not can print it as it stands.
+// webview. Dual returns the new figure with the old one after it in brackets — "150 (15000)" — which is both the
+// rendering a person should read and a shape a caller can take apart again with SplitDual.
 func (s Shop) Display(text, currency string) string {
 	if !s.applies(currency) || text == "" {
 		return text
@@ -90,15 +90,43 @@ func (s Shop) Display(text, currency string) string {
 	case New:
 		return shift(text, -Noughts)
 	case Dual:
-		return shift(text, -Noughts) + DualSeparator + text
+		return shift(text, -Noughts) + DualOpen + text + DualClose
 	default:
 		return text
 	}
 }
 
-// DualSeparator divides the two figures of a dual reading. A caller that draws them in one line replaces it with " (" and
-// ")"; one that draws them on two lines splits on it.
-const DualSeparator = "\x1f" // an ASCII unit separator: never part of a figure, and never printable by accident
+// DualOpen and DualClose bracket the old figure that follows the new one in a dual reading.
+//
+// # Why brackets and not a control character
+//
+// The first cut of this package divided the two figures with an ASCII unit separator, on the reasoning that it could
+// never be part of a figure and so could never be mistaken for one. That was true and useless: every place that printed
+// the string without knowing to split it drew a control character, which a webview and a printer both render as a
+// broken box — "1 USD = 137 ☒ 13700 SYP" (the owner's report, 2026-09-17). A separator that must be understood to be
+// readable will be misunderstood somewhere, because there are more places that draw money than places that know about
+// this package.
+//
+// Brackets need no understanding. A site that knows nothing draws "137 (13700)", which is what a person should read
+// anyway; a site that wants the two apart still has SplitDual. The shape is unambiguous because a figure produced by
+// this application is digits, at most one point and at most one leading minus — never a bracket.
+const (
+	DualOpen  = " ("
+	DualClose = ")"
+)
+
+// SplitDual takes a dual reading apart into the new figure and the old one. ok is false for anything else, including a
+// single figure, which the caller should draw as it stands.
+func SplitDual(text string) (fresh, legacy string, ok bool) {
+	if !strings.HasSuffix(text, DualClose) {
+		return text, "", false
+	}
+	cut := strings.LastIndex(text, DualOpen)
+	if cut <= 0 {
+		return text, "", false
+	}
+	return text[:cut], text[cut+len(DualOpen) : len(text)-len(DualClose)], true
+}
 
 // Base converts what a person typed into the figure the books hold.
 //

@@ -27,7 +27,10 @@ type SettingsDTO struct {
 	// RateSource is where a fetched rate comes from — "standard" or "local" — with the shop's own endpoint and the
 	// dotted path to the number inside its JSON (2026-09-17). The URL is empty until a shop sets one up.
 	// MoneyDisplay is how the shop reads its currency (L10).
-	MoneyDisplay   string `json:"moneyDisplay"`
+	MoneyDisplay string `json:"moneyDisplay"`
+	// PINRequired is the master switch under Settings > Security: whether guarded acts stop for the owner's PIN
+	// (2026-09-17).
+	PINRequired    bool   `json:"pinRequired"`
 	RateSource     string `json:"rateSource"`
 	LocalRateURL   string `json:"localRateUrl"`
 	LocalRateField string `json:"localRateField"`
@@ -39,6 +42,8 @@ type SettingsInput struct {
 	ShopName *string `json:"shopName,omitempty"`
 	// MoneyDisplay is how the shop reads its currency: "legacy", "new" or "dual" (L10).
 	MoneyDisplay *string `json:"moneyDisplay,omitempty"`
+	// PINRequired is the master PIN switch (2026-09-17).
+	PINRequired *bool `json:"pinRequired,omitempty"`
 	// The exchange rate's source and the shop's own endpoint (2026-09-17).
 	RateSource     *string `json:"rateSource,omitempty"`
 	LocalRateURL   *string `json:"localRateUrl,omitempty"`
@@ -48,7 +53,8 @@ type SettingsInput struct {
 func toSettingsDTO(s domain.Settings) SettingsDTO {
 	return SettingsDTO{Locale: string(s.Locale), ShopName: s.ShopName, Direction: string(s.Locale.Direction()),
 		DebtCurrency: s.DebtCurrency, LocalCurrency: s.LocalCurrency, CashNote: strconv.FormatInt(s.CashNote, 10),
-		MoneyDisplay: s.MoneyDisplay, RateSource: s.RateSource, LocalRateURL: s.LocalRateURL, LocalRateField: s.LocalRateField}
+		MoneyDisplay: s.MoneyDisplay, PINRequired: s.PINRequired,
+		RateSource: s.RateSource, LocalRateURL: s.LocalRateURL, LocalRateField: s.LocalRateField}
 }
 
 // Get returns the current settings.
@@ -59,8 +65,14 @@ func (s *Settings) Get() envelope.Result[SettingsDTO] {
 	})
 }
 
-// ActRateSource names a change of rate source in the owner's history.
-const ActRateSource = "fx.source.set"
+// ActRateSource names a change of rate source in the owner's history, and ActPINRequired a change of the master PIN
+// switch.
+const (
+	ActRateSource   = "fx.source.set"
+	ActPINRequired  = "security.pin_required.set"
+	ActShopName     = "settings.shop_name.set"
+	ActMoneyDisplay = "settings.money_display.set"
+)
 
 // Update applies a partial change and returns the settings as they now are.
 func (s *Settings) Update(in SettingsInput) envelope.Result[SettingsDTO] {
@@ -77,16 +89,44 @@ func (s *Settings) Update(in SettingsInput) envelope.Result[SettingsDTO] {
 		}
 		var updated domain.Settings
 		err := app.DB.Do(ctx, func(ctx context.Context) error {
+			// The master PIN switch is guarded BEFORE it is written, and nothing else here is.
+			//
+			// The guard reads the switch to decide whether to ask, so guarding it afterwards would ask about the value
+			// being set rather than the one in force: turning the PIN off would let itself through, which is the one
+			// direction that must not be free. Asked first, turning it ON costs nothing and turning it OFF costs the
+			// PIN — which is the way round a shop needs.
+			if in.PINRequired != nil {
+				if err := requireOwner(ctx, app, ActPINRequired, strconv.FormatBool(*in.PINRequired)); err != nil {
+					return err
+				}
+			}
 			var updateErr error
 			updated, updateErr = app.Settings.Update(ctx, domain.Update{Locale: in.Locale, ShopName: in.ShopName,
-				MoneyDisplay: in.MoneyDisplay,
-				RateSource:   in.RateSource, LocalRateURL: url, LocalRateField: in.LocalRateField})
+				MoneyDisplay: in.MoneyDisplay, PINRequired: in.PINRequired,
+				RateSource: in.RateSource, LocalRateURL: url, LocalRateField: in.LocalRateField})
 			if updateErr != nil {
 				return updateErr
 			}
 			// The rate's source is the shop's money: recorded like every other act (D-091.5).
 			if in.RateSource != nil || in.LocalRateURL != nil || in.LocalRateField != nil {
-				return requireOwner(ctx, app, ActRateSource, updated.RateSource)
+				if err := requireOwner(ctx, app, ActRateSource, updated.RateSource); err != nil {
+					return err
+				}
+			}
+			// The shop's name goes on every receipt, and the money display changes what every figure on every screen
+			// means. Both are the settings the owner meant by "settings" (2026-09-17), so both are guarded acts.
+			//
+			// The language is NOT among them. It changes nothing about the shop's money, and a helper who reads one
+			// language should not need the owner's PIN to read the screen at all.
+			if in.ShopName != nil {
+				if err := requireOwner(ctx, app, ActShopName, updated.ShopName); err != nil {
+					return err
+				}
+			}
+			if in.MoneyDisplay != nil {
+				if err := requireOwner(ctx, app, ActMoneyDisplay, updated.MoneyDisplay); err != nil {
+					return err
+				}
 			}
 			return nil
 		})

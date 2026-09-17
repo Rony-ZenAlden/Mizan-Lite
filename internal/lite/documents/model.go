@@ -124,7 +124,15 @@ type Meta struct {
 
 // Group puts thousands separators in a decimal Go formatted — "1710500" → "1,710,500", "-1234.50" → "-1,234.50" — as the
 // screen's formatDecimal does. Text that is not a plain decimal is returned as it is.
+//
+// A shop reading both its pounds at once sends one figure with the other after it in brackets — "150 (15000)", the shape
+// moneyfmt.Display gives a dual reading. Each half is grouped on its own so a receipt reads "150 (15,000)" rather than
+// leaving the old figure, which is the long one, as an undivided run of digits. This package cannot import moneyfmt
+// (lite-documents-pure), so it knows the shape rather than the package; a test in moneyfmt holds the two together.
 func Group(s string) string {
+	if fresh, legacy, ok := splitDual(s); ok {
+		return Group(fresh) + " (" + Group(legacy) + ")"
+	}
 	neg := strings.HasPrefix(s, "-")
 	digits := strings.TrimPrefix(s, "-")
 	whole, frac, hasFrac := strings.Cut(digits, ".")
@@ -151,6 +159,18 @@ func Group(s string) string {
 		out = "-" + out
 	}
 	return out
+}
+
+// splitDual takes "150 (15000)" apart. ok is false for anything else, including a single figure.
+func splitDual(s string) (fresh, legacy string, ok bool) {
+	if !strings.HasSuffix(s, ")") {
+		return s, "", false
+	}
+	cut := strings.LastIndex(s, " (")
+	if cut <= 0 {
+		return s, "", false
+	}
+	return s[:cut], s[cut+2 : len(s)-1], true
 }
 
 // Money is an amount with its currency's short name, the figure isolated and grouped: "76,000 ل.س", "13.00 USD".

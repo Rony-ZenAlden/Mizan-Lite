@@ -3,7 +3,7 @@ import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { useClient } from "@/api/ClientContext";
 import type { BackupStatus } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { LOCALES, isLocale } from "@/i18n/messages";
+import { isLocale } from "@/i18n/messages";
 import { formatCountdown } from "@/i18n/numbers";
 import { formatAge } from "@/i18n/time";
 import { useRate } from "@/rates/RateProvider";
@@ -16,7 +16,7 @@ import { ROUTES } from "./routes";
 /** The application frame: header, navigation, and the routed screen. Mounted only once boot is ready. */
 export function Shell() {
   const client = useClient();
-  const { t, tDynamic, locale, setLocale, adoptStored, saveError, errorText } = useLocale();
+  const { t, tDynamic, locale, adoptStored, saveError, errorText } = useLocale();
   const { status, lock } = useOwner();
   const { rate } = useRate();
   const [shopName, setShopName] = useState("");
@@ -94,20 +94,6 @@ export function Shell() {
             <Button onClick={() => void lock()}>{t("header.lock")}</Button>
           </div>
         ) : null}
-        <div role="group" aria-label={t("language.label")} className="flex gap-1">
-          {LOCALES.map((option) => (
-            <button
-              key={option}
-              type="button"
-              lang={option}
-              aria-pressed={option === locale}
-              onClick={() => void setLocale(option)}
-              className={`rounded-md px-3 py-1 text-sm ${option === locale ? "bg-primary text-primary-fg" : "text-text-muted hover:bg-surface"}`}
-            >
-              {t(option === "ar" ? "language.ar" : "language.en")}
-            </button>
-          ))}
-        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

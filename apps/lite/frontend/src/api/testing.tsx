@@ -25,6 +25,7 @@ export function aSettings(overrides: Partial<SettingsState> = {}): SettingsState
     localCurrency: "SYP",
     cashNote: "500",
     moneyDisplay: "legacy",
+    pinRequired: false,
     rateSource: "standard",
     localRateUrl: "",
     localRateField: "",

@@ -494,3 +494,25 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-L9.6 | An audit is scoped by a free-text section, not a category scheme the catalogue does not have | approved — **designed, not built** | [L9 §3](phases/L9_COST_AND_AUDIT.md) |
 | D-L9.7 | Only a closed audit moves stock; each line snapshots the system quantity when it is added | proposed — **designed, not built** | [L9 §3](phases/L9_COST_AND_AUDIT.md) |
 | D-L9.8 | The audit schema ships as migration 0010 with the module that uses it, not before | approved | [L9_AUDIT_DRAFT.sql](phases/L9_AUDIT_DRAFT.sql) |
+
+## L10 — dropping the two noughts (approved 2026-09-17, shipped 0.9.5)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-L10.1 | Every money figure changes shape in **one place** — `internal/lite/moneyfmt` — on the way out (`Display`) and on the way in (`Base`). The eight formatters and twenty-one parsers that preceded it were how a redenomination gets shipped nine-tenths done | approved | `moneyfmt` |
+| D-L10.2 | The shift is **decimal-text point-moving**, not arithmetic: exact, unroundable, and it cannot lose a unit | approved | `moneyfmt.shift` |
+| D-L10.3 | Only the **local** currency shifts. A price of $3.25 is $3.25 whichever pound the shop reads | approved | `moneyfmt.applies` |
+| D-L10.4 | A **two-sided gate** holds it: every moved figure must move by exactly two noughts, and every unchanged non-zero figure must be on a frozen, hand-audited list | approved | `TestNoLocalMoneyFieldEscapesThePipeline` |
+| D-L10.5 | In dual mode a person types the **new** figure. Letting a shop type either would leave no way to say which it meant | approved | `moneyfmt.Base` |
+
+## 0.9.6 — the owner's changes after using 0.9.5 (approved 2026-09-17)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-096.1 | A dual reading is **"150 (15000)"**, not two figures divided by a control character. The unit separator was unambiguous and unreadable: every place that printed a figure without knowing to split it drew a broken box, and the thermal printer dropped it altogether, fusing `975` and `97500` into `97597500` — a plausible wrong number on a customer's receipt. Brackets need no cooperation from whoever draws them | approved — the owner reported the box | `moneyfmt.DualOpen`, `documents.Group`, `numbers.ts` |
+| D-096.2 | The owner's PIN has a **master switch** under Settings > Security. Off (the default, D-091.4) the counter is never stopped; on, every guarded act and every guarded read asks | approved | `settings.KeyPINRequired`, `owner.Service.guarding` |
+| D-096.3 | The switch is guarded **before** it is written, so it is judged against the setting in force. Turning the PIN on is free; turning it off costs the PIN. Guarded afterwards, the protection would have let itself be switched off | approved — the ordering is the security property | `api.Settings.Update` |
+| D-096.4 | A switch that **cannot be read** is treated as off. Failing closed would stop a shopkeeper mid-sale over a database hiccup for a setting they never turned on; failing open is what every shop ran before the switch existed, and the act is recorded either way | approved, with the trade-off stated | `owner.Service.guarding` |
+| D-096.5 | `backups.restore` and `backups.import` ask for the PIN **whatever the switch says**. A switch stored in the settings a restore would overwrite is not a place to put the shop's last defence | approved | `owner.ReservedActs` |
+| D-096.6 | The **language leaves the header**. It is set once, in Settings > Language and general preferences, not from a pair of buttons beside the till. The shop's name, the rate and owner mode are what the header carries | approved | `Shell.tsx`, `SettingsScreen.tsx` |
+| D-096.7 | The shop's **name** and the **money display** join the guarded acts; the **language** does not. The first two change what every receipt and every figure say; a helper who reads one language should not need the owner's PIN to read the screen | approved | `api.ActShopName`, `api.ActMoneyDisplay` |

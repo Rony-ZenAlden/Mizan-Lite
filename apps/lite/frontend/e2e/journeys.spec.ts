@@ -251,12 +251,24 @@ for (const locale of LOCALES) {
       await page.getByRole("button", { name: label(locale, "rates.save") }).click(); // no PIN since 2026-09-16
       await expect.poll(async () => (await call<{ rate: string }>(page.request, "FX", "Current")).rate).toMatch(/^15,?300/);
 
+      // The language moved out of the header and into Settings on 2026-09-17, so this is where a shop now switches it.
       const other: Locale = locale === "ar" ? "en" : "ar";
-      await page.getByRole("button", { name: label(other, `language.${other}`), exact: true }).click();
+      await go(page, locale, "nav.settings");
+      await expect(page.getByRole("button", { name: label(locale, "language.ar"), exact: true })).toHaveCount(0);
+      await page.getByLabel(label(locale, "settings.language")).selectOption(other);
       await expect(page.locator("html")).toHaveAttribute("dir", other === "ar" ? "rtl" : "ltr");
       await expect(page.getByRole("navigation", { name: label(other, "nav.label") })).toBeVisible();
-      await checkStructure(page, other, "rates after switching language");
+      await checkStructure(page, other, "settings after switching language");
       expect((await call<{ locale: string }>(page.request, "Settings", "Get")).locale).toBe(other);
+
+      // And the master PIN switch the owner asked for on 2026-09-17: on costs nothing, off costs the PIN.
+      await page.getByTestId("pin-required").check();
+      await page.getByRole("button", { name: label(other, "settings.save") }).click();
+      await expect.poll(async () => (await call<{ pinRequired: boolean }>(page.request, "Settings", "Get")).pinRequired).toBe(true);
+      await page.getByTestId("pin-required").uncheck();
+      await page.getByRole("button", { name: label(other, "settings.save") }).click();
+      await enterPin(page, other);
+      await expect.poll(async () => (await call<{ pinRequired: boolean }>(page.request, "Settings", "Get")).pinRequired).toBe(false);
     });
   });
 }

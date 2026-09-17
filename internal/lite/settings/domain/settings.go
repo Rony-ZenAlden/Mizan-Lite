@@ -80,6 +80,20 @@ const KeyMoneyDisplay = "currency.display"
 // CodeInvalidMoneyDisplay is a display that is not one of the three.
 const CodeInvalidMoneyDisplay = "lite.settings.invalid_money_display"
 
+// KeyPINRequired is the master switch for the owner's PIN (the owner's request, 2026-09-17).
+//
+// Off — the default, and what every shop has run since 2026-09-16 — a shop at a counter is never stopped for a PIN; the
+// acts that matter are still written to the owner's history, which is what an owner reads afterwards. On, the PIN is
+// asked for before every guarded act and before the figures an owner may not want a helper reading.
+//
+// Two acts ask regardless of the switch (owner.ReservedActs): restoring over the live database, and bringing in a
+// foreign backup to restore from. Those destroy the books rather than change them, and a switch in the very settings
+// they would overwrite is not a place to put the shop's last defence.
+const KeyPINRequired = "security.pin_required"
+
+// CodeInvalidPINRequired is a stored switch that is neither on nor off.
+const CodeInvalidPINRequired = "lite.settings.invalid_pin_required"
+
 // CodeInvalidRateMode is returned when a rate mode is not one Lite has.
 const CodeInvalidRateMode = "lite.settings.invalid_rate_mode"
 
@@ -231,6 +245,8 @@ type Settings struct {
 	RateAdjustPercentMicro int64
 	// MoneyDisplay is how the shop reads its local currency: "legacy", "new" or "dual" (L10).
 	MoneyDisplay string
+	// PINRequired is whether guarded acts stop for the owner's PIN (2026-09-17). False on a fresh shop.
+	PINRequired bool
 	// RateSource is where a fetched rate comes from: the published providers, or the shop's own local-market endpoint
 	// with the published ones behind it (2026-09-17).
 	RateSource string
@@ -322,6 +338,15 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.MoneyDisplay = string(moneyfmt.Parse(value))
+		case KeyPINRequired:
+			switch value {
+			case "true":
+				out.PINRequired = true
+			case "false":
+				out.PINRequired = false
+			default:
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+			}
 		case KeyRateSource:
 			source, err := ParseRateSource(value)
 			if err != nil {
@@ -375,6 +400,8 @@ type Update struct {
 	RateAdjustPercent *string
 	// MoneyDisplay is how the shop reads its currency (L10).
 	MoneyDisplay *string
+	// PINRequired is the master switch for the owner's PIN (2026-09-17).
+	PINRequired *bool
 	// RateSource, LocalRateURL and LocalRateField are where fetched rates come from (2026-09-17).
 	RateSource     *string
 	LocalRateURL   *string
@@ -427,6 +454,10 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 			next.MoneyDisplay = chosen
 			changes = append(changes, Change{Key: KeyMoneyDisplay, Value: chosen})
 		}
+	}
+	if u.PINRequired != nil && *u.PINRequired != s.PINRequired {
+		next.PINRequired = *u.PINRequired
+		changes = append(changes, Change{Key: KeyPINRequired, Value: strconv.FormatBool(*u.PINRequired)})
 	}
 	if u.RateSource != nil {
 		source, err := ParseRateSource(*u.RateSource)

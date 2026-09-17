@@ -181,6 +181,7 @@
   "lite.settings.invalid_locale": "اللغة المختارة غير مدعومة.",
   "lite.settings.invalid_money_display": "اختر طريقة عرض العملة.",
   "lite.settings.invalid_paper": "الورق 80 مم أو 58 مم.",
+  "lite.settings.invalid_pin_required": "حماية رمز PIN إما مفعّلة أو موقفة.",
   "lite.settings.invalid_print_path": "اختر طريقة إرسال الفواتير.",
   "lite.settings.invalid_rate_adjust": "نسبة التعديل يجب أن تكون رقماً بين -50 و +50.",
   "lite.settings.invalid_rate_mode": "وضع سعر غير معروف.",

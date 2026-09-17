@@ -1,5 +1,5 @@
 import { useLocale } from "@/i18n/LocaleProvider";
-import { formatDecimal, isDual, splitDual } from "@/i18n/numbers";
+import { formatDecimal, splitDual } from "@/i18n/numbers";
 
 /**
  * An amount Go formatted, with its currency's short name: "73,000 ل.س", "4.88 USD". Isolated left-to-right, so the
@@ -12,11 +12,12 @@ import { formatDecimal, isDual, splitDual } from "@/i18n/numbers";
 export function Money({ value, currency, className }: { value: string; currency: string; className?: string }) {
   const { tDynamic, locale } = useLocale();
   const short = tDynamic(`currency.short.${currency}`);
-  if (isDual(value)) {
-    const [fresh, legacy] = splitDual(formatDecimal(value, locale));
+  const dual = splitDual(value);
+  if (dual) {
     return (
       <bdi dir="ltr" className={className} data-testid="money-dual">
-        {fresh} {short} <span className="text-[0.8em] opacity-70">({legacy})</span>
+        {formatDecimal(dual[0], locale)} {short}{" "}
+        <span className="text-[0.8em] opacity-70">({formatDecimal(dual[1], locale)})</span>
       </bdi>
     );
   }

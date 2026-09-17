@@ -23,12 +23,11 @@ export function formatInteger(value: number | bigint | string, locale: Locale): 
  * frontend can never round, truncate or float a price (DESIGN D9).
  */
 export function formatDecimal(value: string, locale: Locale): string {
-  // A shop reading both currencies receives two figures in one string, divided by DUAL_SEPARATOR (L10). Each is grouped
-  // on its own; whoever draws them decides how they sit together.
-  if (value.includes(DUAL_SEPARATOR)) {
-    return splitDual(value)
-      .map((part) => formatDecimal(part, locale))
-      .join(DUAL_SEPARATOR);
+  // A shop reading both currencies receives two figures in one string — "150 (15000)" (L10). Each is grouped on its
+  // own and the brackets are kept, so a caller that knows nothing about dual readings still draws "150 (15,000)".
+  const dual = splitDual(value);
+  if (dual) {
+    return `${formatDecimal(dual[0], locale)}${DUAL_OPEN}${formatDecimal(dual[1], locale)}${DUAL_CLOSE}`;
   }
   const [whole = "0", fraction] = value.split(".");
   const grouped = formatInteger(whole, locale);
@@ -36,20 +35,31 @@ export function formatDecimal(value: string, locale: Locale): string {
 }
 
 /**
- * DUAL_SEPARATOR divides the new figure from the old one in a dual reading of the currency (moneyfmt.DualSeparator). An
- * ASCII unit separator: never part of a figure, and never printable by accident, so a figure that still carries it has
- * reached a screen that has not been taught to read it.
+ * A dual reading of the currency is the new figure with the old one after it in brackets — "150 (15000)", matching
+ * moneyfmt.DualOpen and moneyfmt.DualClose.
+ *
+ * It used to be divided by an ASCII unit separator, which read as a broken box on every screen that drew the figure
+ * without knowing to split it. Brackets need nobody's cooperation: the worst a screen can do with them is show the
+ * reading a person wanted anyway.
  */
-export const DUAL_SEPARATOR = "\u001f";
+export const DUAL_OPEN = " (";
+export const DUAL_CLOSE = ")";
 
-/** splitDual is the new figure and the old one, or the single figure a shop reading one currency receives. */
-export function splitDual(value: string): string[] {
-  return value.split(DUAL_SEPARATOR);
+/**
+ * A figure this application produced is digits, at most one point, at most one leading minus, and — once grouped —
+ * separators from the locale. Never a bracket, so a bracketed pair is unambiguous.
+ */
+const DUAL_PATTERN = /^\s*(-?[\d.,\u066b\u066c\u0660-\u0669\u06f0-\u06f9\s]+?)\s*\(\s*(-?[\d.,\u066b\u066c\u0660-\u0669\u06f0-\u06f9\s]+?)\s*\)\s*$/u;
+
+/** splitDual is the new figure and the old one, or null when the value is the single figure most shops read. */
+export function splitDual(value: string): [string, string] | null {
+  const found = DUAL_PATTERN.exec(value);
+  return found ? [found[1]!, found[2]!] : null;
 }
 
 /** isDual reports whether a figure carries both readings. */
 export function isDual(value: string): boolean {
-  return value.includes(DUAL_SEPARATOR);
+  return DUAL_PATTERN.test(value);
 }
 
 export const CODE_NUMBER_INVALID = "lite.number.invalid";

@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { aRate, aSettings, fakeClient, renderWithProviders } from "@/api/testing";
@@ -23,33 +23,33 @@ describe("Shell", () => {
     expect(screen.getByRole("link", { name: "Till" })).toHaveAttribute("href", "/");
   });
 
-  it("switches to English at once, in the same render, and saves it", async () => {
-    const update = vi.fn(async () => (aSettings({ locale: "en", direction: "ltr" })));
-    renderWithProviders(<Shell />, { client: fakeClient({ settings: { update } }), locale: "ar" });
-    await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", "rtl"));
-
-    await userEvent.click(screen.getByRole("button", { name: "English" }));
-
-    expect(document.documentElement).toHaveAttribute("lang", "en");
-    expect(document.documentElement).toHaveAttribute("dir", "ltr");
-    expect(update).toHaveBeenCalledWith({ locale: "en" });
-    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
-    expect(await screen.findByText("Mizan Lite")).toBeInTheDocument();
-    await settled("en");
+  // The owner's request of 2026-09-17: the header carries the shop, the rate and owner mode, and nothing else. The
+  // language moved into Settings > Language and general preferences, where it is set once rather than sat beside the
+  // till being pressed by accident.
+  it("offers no language control in the header", async () => {
+    renderWithProviders(<Shell />, { client: fakeClient(), locale: "ar" });
+    await settled("ar");
+    expect(screen.queryByRole("button", { name: "العربية" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "English" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "اللغة" })).not.toBeInTheDocument();
   });
 
-  it("reverts and explains when the language cannot be saved", async () => {
+  it("still explains a language that could not be saved, wherever it was set from", async () => {
     const update = vi.fn(async () => {
       throw new BindingError({ code: "lite.api.internal", messageKey: "lite.api.internal" });
     });
     renderWithProviders(<Shell />, { client: fakeClient({ settings: { update } }), locale: "ar" });
+    await settled("ar");
 
-    await userEvent.click(screen.getByRole("button", { name: "English" }));
+    await userEvent.click(screen.getByRole("link", { name: "الإعدادات" }));
+    await userEvent.selectOptions(await screen.findByLabelText("اللغة"), "en");
 
-    // Back in Arabic, so the screen never claims a language that will not survive a restart.
+    // Back in Arabic, so the screen never claims a language that will not survive a restart, and the header says why.
     await waitFor(() => expect(document.documentElement).toHaveAttribute("dir", "rtl"));
     expect(await screen.findByRole("alert")).toHaveTextContent("حدث خطأ داخلي");
-    await settled("ar");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
   });
 
   it("adopts the stored language when the document was served in a different one", async () => {
@@ -74,13 +74,6 @@ describe("Shell", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("names each language in its own language, marked with its own lang attribute", async () => {
-    const client = fakeClient({ settings: { get: async () => (aSettings({ locale: "en", direction: "ltr" })) } });
-    renderWithProviders(<Shell />, { client, locale: "en" });
-    await settled("en");
-    expect(screen.getByRole("button", { name: "العربية" })).toHaveAttribute("lang", "ar");
-    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("lang", "en");
-  });
 });
 
 describe("Shell header", () => {

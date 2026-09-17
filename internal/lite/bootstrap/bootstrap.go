@@ -230,7 +230,8 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		return nil, wrapKeepingParams(err, CodeStartupFailed, "reading settings")
 	}
 
-	app.Owner = owner.NewService(db, ownerdb.NewStore(db), opts.PINHasher, opts.Clock, opts.Random, opts.Logger)
+	app.Owner = owner.NewService(db, ownerdb.NewStore(db), opts.PINHasher, opts.Clock, opts.Random, opts.Logger,
+		ownerPolicy{settings: app.Settings})
 	app.Catalog = catalog.NewService(db, catalogdb.NewStore(db, opts.Clock), ownerGate{owner: app.Owner})
 	app.FX = fx.NewService(db, fxdb.NewStore(db), fxSettings{settings: app.Settings}, fxGate{owner: app.Owner},
 		opts.RateSource, opts.Clock, opts.Location)
@@ -587,6 +588,15 @@ func (c stockCatalogue) Currencies(ctx context.Context) ([]stockdomain.Currency,
 
 func stockProduct(p catalogdomain.Product, ref catalogdomain.Reference) stockdomain.Product {
 	return stockdomain.Product{ID: p.ID, UnitDecimals: ref.Units[p.UnitCode].InputDecimals, Active: p.Active}
+}
+
+// ownerPolicy satisfies the owner guard's Policy port with the settings service: the master PIN switch the shop sets
+// under Settings > Security (2026-09-17).
+type ownerPolicy struct{ settings *settings.Service }
+
+func (p ownerPolicy) PINRequired(ctx context.Context) (bool, error) {
+	current, err := p.settings.Get(ctx)
+	return current.PINRequired, err
 }
 
 // fxGate satisfies fx's OwnerGate port with the owner service.

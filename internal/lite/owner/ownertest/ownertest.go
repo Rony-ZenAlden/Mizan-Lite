@@ -41,6 +41,28 @@ func (f *Fake) FailUpdates() { f.mu.Lock(); f.failUpdate = true; f.mu.Unlock() }
 // NewFake returns a store before first run.
 func NewFake() *Fake { return &Fake{} }
 
+// Policy is the shop's master PIN switch for a test: off unless the test turns it on.
+type Policy struct {
+	mu       sync.Mutex
+	required bool
+	err      error
+}
+
+// NewPolicy is a switch in the position every shop starts in — off.
+func NewPolicy() *Policy { return &Policy{} }
+
+// Set turns the switch on or off, as the settings screen would.
+func (p *Policy) Set(required bool) { p.mu.Lock(); p.required = required; p.mu.Unlock() }
+
+// Fail makes the switch unreadable, so a test can prove what the guard does when it cannot be read.
+func (p *Policy) Fail(err error) { p.mu.Lock(); p.err = err; p.mu.Unlock() }
+
+func (p *Policy) PINRequired(context.Context) (bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.required, p.err
+}
+
 func (f *Fake) Credentials(context.Context) (owner.Credentials, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

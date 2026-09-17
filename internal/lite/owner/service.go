@@ -52,6 +52,14 @@ type Store interface {
 	Events(ctx context.Context, limit int) ([]Event, error)
 }
 
+// Policy is where the guard learns whether this shop asks for the PIN at all — the master switch under Settings >
+// Security (the owner's request, 2026-09-17). The composition root satisfies it with the settings service; this package
+// never reads a setting itself, so it keeps knowing nothing about how a shop is configured.
+type Policy interface {
+	// PINRequired reports whether guarded acts and guarded reads stop for the PIN.
+	PINRequired(ctx context.Context) (bool, error)
+}
+
 // Transactor runs fn atomically. platform/database.Store satisfies it.
 type Transactor interface {
 	Do(ctx context.Context, fn func(ctx context.Context) error) error
@@ -82,6 +90,7 @@ type Service struct {
 	clk    clock.Clock
 	random io.Reader
 	log    *slog.Logger
+	policy Policy
 	newID  func() (id.ID, error)
 
 	// elevatedUntil is owner mode. In memory ONLY (D-L1.8): never a token in JavaScript, never a row in the
@@ -91,8 +100,13 @@ type Service struct {
 }
 
 // NewService builds the service. random is crypto/rand.Reader in the application.
-func NewService(tx Transactor, store Store, hasher crypto.Hasher, clk clock.Clock, random io.Reader, log *slog.Logger) *Service {
-	return &Service{tx: tx, store: store, hasher: hasher, clk: clk, random: random, log: log, newID: id.New}
+//
+// policy is the shop's master PIN switch. It is a constructor argument rather than something set afterwards because a
+// service built without one would silently guard nothing, and "I forgot to wire the security policy" is not a mistake
+// this package should let anybody make quietly.
+func NewService(tx Transactor, store Store, hasher crypto.Hasher, clk clock.Clock, random io.Reader, log *slog.Logger,
+	policy Policy) *Service {
+	return &Service{tx: tx, store: store, hasher: hasher, clk: clk, random: random, log: log, policy: policy, newID: id.New}
 }
 
 // IsSetUp reports whether first run has created the credential.
@@ -223,14 +237,15 @@ func (s *Service) Events(ctx context.Context, limit int) ([]Event, error) {
 	return s.store.Events(ctx, limit)
 }
 
-// ReservedActs are the only acts that still ask for the PIN (the owner's decision, 2026-09-16). Mizan Lite runs on one
-// computer in one shop, with no login at the counter; the owner judged that asking for a PIN to read a report or void a
-// receipt cost more in friction than it bought in control. What remains reserved is the pair that can destroy the shop's
-// books rather than change them: restoring over the live database, and bringing in a foreign backup file to restore from.
+// ReservedActs ask for the PIN whatever the shop's master switch says.
+//
+// The pair is what can destroy the shop's books rather than change them: restoring over the live database, and bringing
+// in a foreign backup file to restore from. A switch stored in the very settings a restore would overwrite is not a
+// place to put the shop's last defence, so these two do not consult it.
 //
 // Changing the PIN is not listed because it never passed through this gate: ChangePIN takes the current PIN itself.
 //
-// EVERY act is still written to the owner's history, reserved or not — the record is what survives the gate.
+// EVERY act is written to the owner's history whether the gate stopped it or not — the record is what survives the gate.
 var ReservedActs = map[string]bool{
 	"backups.restore": true,
 	"backups.import":  true,
@@ -238,20 +253,42 @@ var ReservedActs = map[string]bool{
 
 // Allowed reports whether a guarded READ may go ahead — average cost, stock value, profit, the drawer's owner view.
 //
-// Since 2026-09-16 every read is open: the owner asked for the figures to be visible at the counter without a PIN. It
-// stays a method, and stays called, so that a shop which wants the figures behind the PIN again is one return statement
-// away rather than a change to every reader.
-func (s *Service) Allowed(context.Context) bool {
-	return true
+// With the switch off (the default since 2026-09-16) every read is open: the owner asked for the figures to be visible
+// at the counter without a PIN. With it on they are behind owner mode, which is what a shop with a helper at the till
+// wants.
+func (s *Service) Allowed(ctx context.Context) bool {
+	return !s.guarding(ctx) || s.elevatedFor(s.clk.Now()) > 0
 }
 
 // Require permits an owner-only act and records it in the CALLER's transaction — so an act that rolls back leaves no
-// record that it happened. Only the acts in ReservedActs still need owner mode; the rest are recorded and allowed.
+// record that it happened.
+//
+// With the switch on, every act needs owner mode. With it off, only ReservedActs do; the rest are recorded and allowed.
 func (s *Service) Require(ctx context.Context, act Act) error {
-	if ReservedActs[act.Action] && s.elevatedFor(s.clk.Now()) <= 0 {
-		return errs.Permission(domain.CodeRequired, "the owner's PIN is required").WithParam("action", act.Action)
+	if ReservedActs[act.Action] || s.guarding(ctx) {
+		if s.elevatedFor(s.clk.Now()) <= 0 {
+			return errs.Permission(domain.CodeRequired, "the owner's PIN is required").WithParam("action", act.Action)
+		}
 	}
 	return s.event(ctx, domain.EventGuardedAct, act)
+}
+
+// guarding is the shop's master switch, read afresh: a shop that turns the PIN on expects the next act to ask for it,
+// not the one after a restart.
+//
+// A switch that cannot be read is treated as off. That is the behaviour every shop has run since 2026-09-16, so a
+// database hiccup degrades to what the application did yesterday rather than locking a shopkeeper out of their own till
+// mid-sale — and the act is still recorded, which is what an owner reads afterwards either way.
+func (s *Service) guarding(ctx context.Context) bool {
+	if s.policy == nil {
+		return false
+	}
+	required, err := s.policy.PINRequired(ctx)
+	if err != nil {
+		s.log.WarnContext(ctx, "the PIN policy could not be read; treating it as off", slog.String("error", err.Error()))
+		return false
+	}
+	return required
 }
 
 // RecordRestored writes a restore into the owner's history of the database it restored (L7 D-L7.15). The restore was guarded by

@@ -211,7 +211,7 @@ func TestTheWireShapeIsWhatTheFrontendUnwraps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl","debtCurrency":"USD","localCurrency":"SYP","cashNote":"500","moneyDisplay":"legacy","rateSource":"standard","localRateUrl":"","localRateField":""}}`
+	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl","debtCurrency":"USD","localCurrency":"SYP","cashNote":"500","moneyDisplay":"legacy","pinRequired":false,"rateSource":"standard","localRateUrl":"","localRateField":""}}`
 	if string(wire) != want {
 		t.Fatalf("wire = %s\nwant %s", wire, want)
 	}

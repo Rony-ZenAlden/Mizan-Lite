@@ -5,6 +5,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
+import { Checkbox } from "@/ui/Checkbox";
 import { SelectField, TextField } from "@/ui/Field";
 import { Spinner } from "@/ui/Spinner";
 
@@ -15,9 +16,13 @@ type Source = "standard" | "local" | "manual";
  * The shop's settings in one place (the owner's request, 2026-09-17): what used to be spread across the header's language
  * buttons, the Rates screen and the Cash screen.
  *
- * Three groups, in the order a shop thinks about them: the language and the shop's name, then its currency, then where the
- * exchange rate comes from. Each group says plainly where the settings it does NOT hold are set, rather than quietly
- * duplicating a control that lives somewhere else — two places to change one figure is how the two disagree.
+ * Four groups, in the order a shop thinks about them: the language and the shop's name, then its currency, then where
+ * the exchange rate comes from, then who may do what. Each group says plainly where the settings it does NOT hold are
+ * set, rather than quietly duplicating a control that lives somewhere else — two places to change one figure is how the
+ * two disagree.
+ *
+ * Since 2026-09-17 the language lives ONLY here: the header's two buttons are gone, which is why this screen's first
+ * group is where a shop now looks for them.
  */
 export function SettingsScreen() {
   const client = useClient();
@@ -30,6 +35,7 @@ export function SettingsScreen() {
   const [field, setField] = useState("");
   const [shopName, setShopName] = useState("");
   const [moneyDisplay, setMoneyDisplay] = useState<"legacy" | "new" | "dual">("legacy");
+  const [pinRequired, setPinRequired] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -40,6 +46,7 @@ export function SettingsScreen() {
       setSettings(current);
       setShopName(current.shopName);
       setMoneyDisplay((current.moneyDisplay || "legacy") as "legacy" | "new" | "dual");
+      setPinRequired(current.pinRequired);
       setUrl(current.localRateUrl);
       setField(current.localRateField);
       setRateMode(rate.mode === "manual" ? "manual" : "automatic");
@@ -73,10 +80,15 @@ export function SettingsScreen() {
         );
       }
       if (shopName !== settings?.shopName) {
-        await client.settings.update({ shopName });
+        await withOwner(() => client.settings.update({ shopName }));
       }
       if (moneyDisplay !== settings?.moneyDisplay) {
-        await client.settings.update({ moneyDisplay });
+        await withOwner(() => client.settings.update({ moneyDisplay }));
+      }
+      // Turning the PIN ON is free; turning it OFF asks for it, because Go guards the switch against the setting as it
+      // stands rather than the one being written.
+      if (pinRequired !== settings?.pinRequired) {
+        await withOwner(() => client.settings.update({ pinRequired }));
       }
       await load();
       setSaved(true);
@@ -101,8 +113,13 @@ export function SettingsScreen() {
         <h3 className="font-semibold">{t("settings.general")}</h3>
         <TextField label={t("settings.shop_name")} value={shopName} onChange={(e) => setShopName(e.target.value)} maxLength={200} />
         <SelectField label={t("settings.language")} value={locale} onChange={(e) => void setLocale(e.target.value as "ar" | "en")}>
-          <option value="ar">{t("language.ar")}</option>
-          <option value="en">{t("language.en")}</option>
+          {/* Each language names itself, in itself, marked with its own tag so a screen reader says it that way. */}
+          <option value="ar" lang="ar">
+            {t("language.ar")}
+          </option>
+          <option value="en" lang="en">
+            {t("language.en")}
+          </option>
         </SelectField>
       </div>
 
@@ -175,6 +192,18 @@ export function SettingsScreen() {
           </div>
         ) : null}
         <p className="text-xs text-text-muted">{t("settings.rate_on_rates_screen")}</p>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border bg-surface-raised p-5" data-testid="settings-security">
+        <h3 className="font-semibold">{t("settings.security")}</h3>
+        <Checkbox
+          label={t("settings.pin_required")}
+          checked={pinRequired}
+          data-testid="pin-required"
+          onChange={(e) => setPinRequired(e.target.checked)}
+        />
+        <p className="text-xs text-text-muted">{t("settings.pin_required_hint")}</p>
+        <p className="text-xs text-text-muted">{t("settings.pin_required_always")}</p>
       </div>
 
       <div className="flex justify-end">

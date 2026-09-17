@@ -9,7 +9,6 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/cashbook"
 	cashbookdomain "github.com/mizan-erp/mizan/internal/lite/cashbook/domain"
-	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/numinput"
 	"github.com/mizan-erp/mizan/internal/lite/reports/domain"
 )
@@ -267,7 +266,7 @@ func (v reportView) day(d domain.Day, withRate bool) DayReportDTO {
 		NetUSD: v.usd(d.NetUSD()), NetLocal: v.local(d.NetLocal()), Unconverted: d.Unconverted(), Takings: make([]TakingsDTO, 0, len(d.Takings)),
 	}
 	if withRate && d.RateFound {
-		dto.Rate = fxdomain.FormatRate(d.Rate.Nano)
+		dto.Rate = rateText(v.shop, d.Rate.Nano)
 	}
 	for _, c := range d.Categories {
 		dto.Categories = append(dto.Categories, CategoryDTO{Category: c.Category, Amount: v.amount(c.Amount)})
@@ -419,10 +418,10 @@ func stockReportDTO(ctx context.Context, app *bootstrap.App, in RangeInput) (Sto
 		BelowCost: s.Shelf.BelowCost, LeftOut: make([]LeftOutDTO, 0, len(s.Shelf.LeftOut)),
 	}
 	if s.Value.RateFound {
-		dto.ValueRate = fxdomain.FormatRate(s.Value.Rate.Nano)
+		dto.ValueRate = rateText(v.shop, s.Value.Rate.Nano)
 	}
 	if s.Shelf.RateFound {
-		dto.ShelfRate = fxdomain.FormatRate(s.Shelf.Rate.Nano)
+		dto.ShelfRate = rateText(v.shop, s.Shelf.Rate.Nano)
 	}
 	for _, l := range s.Shelf.Lines {
 		p := l.Product
@@ -580,7 +579,12 @@ func (c *Cash) entryAct(method string, fn func(ctx context.Context, app *bootstr
 // Record writes an expense, a withdrawal or a deposit. Owner only.
 func (c *Cash) Record(in CashRecordInput) envelope.Result[CashEntryDTO] {
 	return c.entryAct("Cash.Record", func(ctx context.Context, app *bootstrap.App) (cashbookdomain.Entry, error) {
-		return app.Cashbook.Record(ctx, cashbook.RecordInput{Kind: cashbookdomain.Kind(in.Kind), Currency: in.Currency, Amount: in.Amount,
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return cashbookdomain.Entry{}, err
+		}
+		return app.Cashbook.Record(ctx, cashbook.RecordInput{Kind: cashbookdomain.Kind(in.Kind), Currency: in.Currency,
+			Amount:   shop.Base(in.Amount, in.Currency),
 			Category: in.Category, FromDrawer: in.FromDrawer, Note: in.Note})
 	})
 }
@@ -588,7 +592,11 @@ func (c *Cash) Record(in CashRecordInput) envelope.Result[CashEntryDTO] {
 // Count records what the drawer holds in one currency. Anyone at the counter may.
 func (c *Cash) Count(in CashCountInput) envelope.Result[CashEntryDTO] {
 	return c.entryAct("Cash.Count", func(ctx context.Context, app *bootstrap.App) (cashbookdomain.Entry, error) {
-		return app.Cashbook.Count(ctx, cashbook.CountInput{Currency: in.Currency, Counted: in.Counted, Note: in.Note})
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return cashbookdomain.Entry{}, err
+		}
+		return app.Cashbook.Count(ctx, cashbook.CountInput{Currency: in.Currency, Counted: shop.Base(in.Counted, in.Currency), Note: in.Note})
 	})
 }
 

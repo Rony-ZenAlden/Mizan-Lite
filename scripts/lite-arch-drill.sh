@@ -89,8 +89,14 @@ drill mizan-cmd-independent-of-lite "Mizan must not import Mizan Lite" \
   cmd/demoseed/zz_drill.go "package main
 import _ \"$M/internal/lite/paths\""
 
-drill lite-pure-text "textkey, numinput, bizdate and tender may import only" \
+drill lite-pure-text "textkey, numinput, bizdate, tender and moneyfmt may import only" \
   internal/lite/textkey/zz_drill.go "package textkey
+import _ \"$M/internal/platform/database\""
+
+# moneyfmt joined lite-pure-text in L10. Planted in moneyfmt itself, not only in textkey: a rule that covers a package in
+# its applies_to but is never seen failing THERE is a rule nobody has checked reaches it.
+drill lite-pure-text-moneyfmt "textkey, numinput, bizdate, tender and moneyfmt may import only" \
+  internal/lite/moneyfmt/zz_drill.go "package moneyfmt
 import _ \"$M/internal/platform/database\""
 
 drill lite-cmd-entry "Lite's commands may import only" \
@@ -154,7 +160,7 @@ drill lite-setup-forbids-stock "setup may reach other modules only through the p
   internal/lite/setup/zz_drill.go "package setup
 import _ \"$M/internal/lite/stock\""
 
-drill lite-bizdate-pure "textkey, numinput, bizdate and tender may import only" \
+drill lite-bizdate-pure "textkey, numinput, bizdate, tender and moneyfmt may import only" \
   internal/lite/bizdate/zz_drill.go "package bizdate
 import _ \"$M/internal/kernel/clock\""
 
@@ -241,7 +247,7 @@ drill lite-customers-isolated-from-fx "customers may not import another Lite mod
   internal/lite/customers/infra/sqlite/zz_drill.go "package sqlite
 import _ \"$M/internal/lite/fx/domain\""
 
-drill lite-tender-pure "textkey, numinput, bizdate and tender may import only" \
+drill lite-tender-pure "textkey, numinput, bizdate, tender and moneyfmt may import only" \
   internal/lite/tender/zz_drill.go "package tender
 import _ \"$M/internal/kernel/money\""
 

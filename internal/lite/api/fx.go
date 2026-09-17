@@ -12,6 +12,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/fx"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 )
 
@@ -87,30 +88,31 @@ func ageSeconds(d time.Duration) int64 {
 	return int64(math.Floor(d.Seconds()))
 }
 
-func toFetchDTO(f fxdomain.Fetch) FetchDTO {
+func toFetchDTO(f fxdomain.Fetch, shop moneyfmt.Shop) FetchDTO {
 	dto := FetchDTO{ID: f.ID.String(), AttemptedAt: clock.Format(f.AttemptedAt), Outcome: string(f.Outcome), Provider: f.Provider, ErrorCode: f.ErrorCode}
 	if f.Outcome != fxdomain.OutcomeFailed {
-		dto.Rate = fxdomain.FormatRate(f.Nano)
+		dto.Rate = rateText(shop, f.Nano)
 	}
 	return dto
 }
 
-func toRateDTO(c fx.Current, canFetch bool) RateDTO {
+// toRateDTO reads the rate as the shop reads its own currency (L10): a rate is local money per dollar.
+func toRateDTO(c fx.Current, canFetch bool, shop moneyfmt.Shop) RateDTO {
 	dto := RateDTO{Set: c.Found, LocalCurrency: c.Local, Mode: string(c.Mode), CanFetch: canFetch, HasFetch: c.Fetched,
 		AdjustPercent: settingsdomain.FormatRateAdjustPercent(c.AdjustPercentMicro)}
 	if c.Found {
-		dto.Rate = fxdomain.FormatRate(c.Rate.Nano)
+		dto.Rate = rateText(shop, c.Rate.Nano)
 		dto.Source = string(c.Rate.Source)
 		dto.RecordedAt = clock.Format(c.Rate.RecordedAt)
 		dto.AgeSeconds = ageSeconds(c.Age)
 		dto.Stale = c.Stale
 	}
 	if c.Fetched {
-		dto.LastFetch = toFetchDTO(c.Fetch)
+		dto.LastFetch = toFetchDTO(c.Fetch, shop)
 		dto.LastFetch.Change = c.FetchChange
 		dto.LastFetch.AgeSeconds = ageSeconds(c.FetchAge)
 		dto.LastFetch.Acceptable = c.Acceptable
-		dto.LastFetch.EffectiveRate = fxdomain.FormatRate(c.Fetch.EffectiveNano)
+		dto.LastFetch.EffectiveRate = rateText(shop, c.Fetch.EffectiveNano)
 	}
 	return dto
 }
@@ -118,7 +120,11 @@ func toRateDTO(c fx.Current, canFetch bool) RateDTO {
 // current reads the rate in force as a DTO.
 func (f *FX) current(ctx context.Context, app *bootstrap.App) (RateDTO, error) {
 	c, err := app.FX.Current(ctx)
-	return toRateDTO(c, app.FX.CanFetch()), err
+	if err != nil {
+		return RateDTO{}, err
+	}
+	shop, err := moneyShop(ctx, app)
+	return toRateDTO(c, app.FX.CanFetch(), shop), err
 }
 
 // Current is the rate in force, its age, the mode and the last fetch. Everyone may read it.
@@ -160,10 +166,14 @@ func (f *FX) History(limit int) envelope.Result[[]RateHistoryDTO] {
 		if err != nil {
 			return nil, err
 		}
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return nil, err
+		}
 		out := make([]RateHistoryDTO, 0, len(rows))
 		for _, r := range rows {
 			dto := RateHistoryDTO{
-				ID: r.Rate.ID.String(), Rate: fxdomain.FormatRate(r.Rate.Nano), Source: string(r.Rate.Source),
+				ID: r.Rate.ID.String(), Rate: rateText(shop, r.Rate.Nano), Source: string(r.Rate.Source),
 				RecordedAt: clock.Format(r.Rate.RecordedAt), Change: r.Change, Note: r.Rate.Note,
 			}
 			if r.Rate.FetchID != "" {
@@ -183,7 +193,12 @@ func (f *FX) History(limit int) envelope.Result[[]RateHistoryDTO] {
 // lite.fx.large_change until resent with confirmLargeChange.
 func (f *FX) SetRate(in SetRateInput) envelope.Result[RateDTO] {
 	return call(f.core, "FX.SetRate", func(ctx context.Context, app *bootstrap.App) (RateDTO, error) {
-		if _, err := app.FX.SetRate(ctx, fx.SetRateInput{Rate: in.Rate, Note: in.Note, ConfirmLargeChange: in.ConfirmLargeChange}); err != nil {
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return RateDTO{}, err
+		}
+		// A rate is local currency per dollar, so a shop reading new pounds types 150 and the books record 15,000 (L10).
+		if _, err := app.FX.SetRate(ctx, fx.SetRateInput{Rate: shop.Base(in.Rate, shop.Local), Note: in.Note, ConfirmLargeChange: in.ConfirmLargeChange}); err != nil {
 			return RateDTO{}, err
 		}
 		return f.current(ctx, app)
@@ -228,7 +243,11 @@ func (f *FX) SetMode(mode string) envelope.Result[RateDTO] {
 func (f *FX) FetchQuote() envelope.Result[QuoteDTO] {
 	return call(f.core, "FX.FetchQuote", func(ctx context.Context, app *bootstrap.App) (QuoteDTO, error) {
 		q, err := app.FX.Quote(ctx)
-		return QuoteDTO{Provider: q.Provider, Rate: fxdomain.FormatRate(q.Nano)}, err
+		shop, shopErr := moneyShop(ctx, app)
+		if shopErr != nil {
+			return QuoteDTO{}, shopErr
+		}
+		return QuoteDTO{Provider: q.Provider, Rate: rateText(shop, q.Nano)}, err
 	})
 }
 

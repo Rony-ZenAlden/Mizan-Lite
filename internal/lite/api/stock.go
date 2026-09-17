@@ -163,6 +163,11 @@ func (s *Stock) Valuation() envelope.Result[ValuationDTO] {
 		if err != nil {
 			return ValuationDTO{}, err
 		}
+		// The valuation's dollar figures are dollars; its LOCAL ones carry the redenomination (L10).
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return ValuationDTO{}, err
+		}
 		rate, local, usd, hasRate, err := rateView(ctx, app, ref)
 		if err != nil {
 			return ValuationDTO{}, err
@@ -178,14 +183,14 @@ func (s *Stock) Valuation() envelope.Result[ValuationDTO] {
 				if err != nil {
 					return ValuationDTO{}, err
 				}
-				line.ValueLocal = converted.Text()
+				line.ValueLocal = shop.Display(converted.Text(), local.Code)
 				totalLocal += converted.Minor
 			}
 			out.Lines = append(out.Lines, line)
 		}
 		if hasRate {
-			out.TotalLocal = fxdomain.FormatMinor(totalLocal, local.Decimals)
-			out.LocalCurrency, out.Rate = local.Code, fxdomain.FormatRate(rate.Nano)
+			out.TotalLocal = shop.Display(fxdomain.FormatMinor(totalLocal, local.Decimals), local.Code)
+			out.LocalCurrency, out.Rate = local.Code, rateText(shop, rate.Nano)
 		}
 		return out, nil
 	})

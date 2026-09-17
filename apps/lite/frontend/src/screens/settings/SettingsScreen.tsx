@@ -29,6 +29,7 @@ export function SettingsScreen() {
   const [url, setUrl] = useState("");
   const [field, setField] = useState("");
   const [shopName, setShopName] = useState("");
+  const [moneyDisplay, setMoneyDisplay] = useState<"legacy" | "new" | "dual">("legacy");
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,6 +39,7 @@ export function SettingsScreen() {
       const [current, rate] = await Promise.all([client.settings.get(), client.fx.current()]);
       setSettings(current);
       setShopName(current.shopName);
+      setMoneyDisplay((current.moneyDisplay || "legacy") as "legacy" | "new" | "dual");
       setUrl(current.localRateUrl);
       setField(current.localRateField);
       setRateMode(rate.mode === "manual" ? "manual" : "automatic");
@@ -72,6 +74,9 @@ export function SettingsScreen() {
       }
       if (shopName !== settings?.shopName) {
         await client.settings.update({ shopName });
+      }
+      if (moneyDisplay !== settings?.moneyDisplay) {
+        await client.settings.update({ moneyDisplay });
       }
       await load();
       setSaved(true);
@@ -114,9 +119,27 @@ export function SettingsScreen() {
           <dd>{tDynamic(`currency.${settings.debtCurrency}`)}</dd>
         </dl>
         <p className="text-xs text-text-muted">{t("settings.currency_note")}</p>
-        <p className="text-xs text-text-muted" data-testid="redenomination-note">
-          {t("settings.redenomination_soon")}
-        </p>
+
+        {/* Dropping the two noughts (L10): what the shop sees, and what it types. */}
+        <div className="space-y-2 border-t border-border pt-3" data-testid="money-display">
+          <SelectField
+            label={t("settings.money_display")}
+            value={moneyDisplay}
+            onChange={(e) => setMoneyDisplay(e.target.value as "legacy" | "new" | "dual")}
+          >
+            {(["legacy", "new", "dual"] as const).map((name) => (
+              <option key={name} value={name}>
+                {t(`settings.money_display.${name}` as "settings.money_display.legacy")}
+              </option>
+            ))}
+          </SelectField>
+          <p className="text-xs text-text-muted">{t("settings.money_display_hint")}</p>
+          {moneyDisplay !== "legacy" ? (
+            <p className="text-xs text-text-muted" data-testid="money-display-typing">
+              {t("settings.money_display_typing")}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-3 rounded-lg border border-border bg-surface-raised p-5" data-testid="settings-rate">

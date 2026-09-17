@@ -10,6 +10,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	catalogdomain "github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 	"github.com/mizan-erp/mizan/internal/lite/numinput"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
@@ -154,10 +155,14 @@ func (in CartInput) toDomain() (salesdomain.CartInput, error) {
 	return out, nil
 }
 
-// money formats a minor amount in a currency's decimals.
+// money formats a minor amount in a currency's decimals, as the shop reads it (L10).
+//
+// This is the chokepoint: every figure the till and the reports send, and every figure the receipts and A4 documents are
+// built from, becomes text here. A redenomination applied here reaches all of them; one applied at a call site reaches
+// only that call site.
 func (v tillView) money(minor int64, code string) string {
 	d := v.ref.Currencies[code].Decimals
-	return numinput.FormatFixed(minor, d, d)
+	return v.shop.Display(numinput.FormatFixed(minor, d, d), code)
 }
 
 // quantity formats a ×10⁶ quantity in its unit's decimals.
@@ -165,12 +170,40 @@ func (v tillView) quantity(micro int64, unitCode string) string {
 	return numinput.FormatFixed(micro, 6, v.ref.Units[unitCode].InputDecimals)
 }
 
-// tillView is the reference data a sale is formatted against.
-type tillView struct{ ref catalogdomain.Reference }
+// tillView is the reference data a sale is formatted against, and how the shop reads its money.
+type tillView struct {
+	ref catalogdomain.Reference
+	// shop carries the redenomination (L10). Every figure this view formats passes through it, which is why the till, the
+	// reports that embed this view, and the receipts and PDFs built from their DTOs all read the same way at once.
+	shop moneyfmt.Shop
+}
 
 func newTillView(ctx context.Context, app *bootstrap.App) (tillView, error) {
 	ref, err := app.Catalog.Reference(ctx)
-	return tillView{ref: ref}, err
+	if err != nil {
+		return tillView{}, err
+	}
+	shop, err := moneyShop(ctx, app)
+	return tillView{ref: ref, shop: shop}, err
+}
+
+// rateText formats an exchange rate as the shop reads its own currency (L10).
+//
+// A rate is local currency per dollar, so it carries the redenomination with it: a shop reading new pounds is told
+// "1 USD = 150", not 15,000 beside prices that dropped two noughts. Getting this wrong is worse than leaving a price
+// alone, because the rate is what a shopkeeper checks the prices against.
+func rateText(shop moneyfmt.Shop, nano int64) string {
+	return shop.Display(fxdomain.FormatRate(nano), shop.Local)
+}
+
+// moneyShop reads how this shop reads its money. One place, so a caller cannot forget the local currency and redenominate
+// dollars by accident.
+func moneyShop(ctx context.Context, app *bootstrap.App) (moneyfmt.Shop, error) {
+	stored, err := app.Settings.Get(ctx)
+	if err != nil {
+		return moneyfmt.Shop{}, err
+	}
+	return moneyfmt.Shop{Mode: moneyfmt.Parse(stored.MoneyDisplay), Local: stored.LocalCurrency}, nil
 }
 
 func percentText(micro int64) string {
@@ -190,7 +223,7 @@ func (v tillView) quote(q salesdomain.Quote, local string) CartQuoteDTO {
 		OtherCurrency: q.Other.Code, TotalOther: v.money(q.TotalOtherMinor, q.Other.Code),
 		TenderCurrency: q.Tender.Code, Tendered: v.money(q.TenderedMinor, q.Tender.Code), TenderGiven: q.TenderGiven,
 		ChangeCurrency: q.Change.Code, Change: v.money(q.ChangeMinor, q.Change.Code),
-		Discounted: q.Discounted, Rate: fxdomain.FormatRate(q.Rate.Nano), RateRecordedAt: clock.Format(q.Rate.RecordedAt),
+		Discounted: q.Discounted, Rate: rateText(v.shop, q.Rate.Nano), RateRecordedAt: clock.Format(q.Rate.RecordedAt),
 		RateStale: q.Rate.Stale, Token: q.Token,
 	}
 	if q.Settlement.Code != usd {
@@ -289,7 +322,12 @@ func (t *Till) CashNote() envelope.Result[CashNoteDTO] {
 // SetCashNote changes the smallest local note. Owner only.
 func (t *Till) SetCashNote(note string) envelope.Result[CashNoteDTO] {
 	return call(t.core, "Till.SetCashNote", func(ctx context.Context, app *bootstrap.App) (CashNoteDTO, error) {
-		set, err := app.Sales.SetCashNote(ctx, note)
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return CashNoteDTO{}, err
+		}
+		// The smallest note is local money: a shop reading new pounds types 5 and the books record 500.
+		set, err := app.Sales.SetCashNote(ctx, shop.Base(note, shop.Local))
 		if err != nil {
 			return CashNoteDTO{}, err
 		}

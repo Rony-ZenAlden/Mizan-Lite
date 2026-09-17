@@ -11,6 +11,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/catalog"
 	"github.com/mizan-erp/mizan/internal/lite/catalog/domain"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 )
 
 // Catalog is the product catalogue.
@@ -67,6 +68,8 @@ type catalogueView struct {
 	hasRate  bool
 	local    fxdomain.Currency
 	usd      fxdomain.Currency
+	// shop carries the redenomination, so a price on a shelf label reads as the till reads it (L10).
+	shop moneyfmt.Shop
 }
 
 func loadCatalogueView(ctx context.Context, app *bootstrap.App) (catalogueView, error) {
@@ -78,7 +81,11 @@ func loadCatalogueView(ctx context.Context, app *bootstrap.App) (catalogueView, 
 	if err != nil {
 		return catalogueView{}, err
 	}
-	v := catalogueView{ref: ref, packages: map[id.ID]domain.Package{}, units: map[id.ID]string{}}
+	shop, err := moneyShop(ctx, app)
+	if err != nil {
+		return catalogueView{}, err
+	}
+	v := catalogueView{ref: ref, packages: map[id.ID]domain.Package{}, units: map[id.ID]string{}, shop: shop}
 	if v.rate, v.local, v.usd, v.hasRate, err = rateView(ctx, app, ref); err != nil {
 		return catalogueView{}, err
 	}
@@ -96,12 +103,12 @@ func loadCatalogueView(ctx context.Context, app *bootstrap.App) (catalogueView, 
 func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 	dto := ProductDTO{
 		ID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, Barcode: p.Barcode, UnitCode: p.UnitCode,
-		PriceCurrency: p.PriceCurrency, Price: p.PriceText(v.ref), QuickSlot: p.QuickSlot, Active: p.Active,
+		PriceCurrency: p.PriceCurrency, Price: v.shop.Display(p.PriceText(v.ref), p.PriceCurrency), QuickSlot: p.QuickSlot, Active: p.Active,
 		RowVersion: p.RowVersion,
 	}
 	if v.hasRate {
 		if converted, ok, err := v.rate.PriceInOther(p.PriceCurrency, p.PriceMicro, v.local, v.usd); err == nil && ok {
-			dto.ConvertedPrice, dto.ConvertedCurrency = converted.Text(), converted.Currency.Code
+			dto.ConvertedPrice, dto.ConvertedCurrency = v.shop.Display(converted.Text(), converted.Currency.Code), converted.Currency.Code
 		}
 	}
 	if link, ok := v.packages[p.ID]; ok {
@@ -113,10 +120,11 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 		if c, ok := v.ref.Currencies[p.PriceCurrency]; ok {
 			decimals = c.Decimals
 		}
-		dto.CostPrice = domain.FormatMicro(p.CostMicro, decimals)
+		dto.CostPrice = v.shop.Display(domain.FormatMicro(p.CostMicro, decimals), p.PriceCurrency)
 		amount, percent, _ := p.Margin()
-		dto.MarginAmount = signedMicro(amount, decimals)
-		// A margin reads as a percentage with one decimal: "25" and "33.3" are what a shopkeeper recognises.
+		dto.MarginAmount = v.shop.Display(signedMicro(amount, decimals), p.PriceCurrency)
+		// A margin reads as a percentage with one decimal: "25" and "33.3" are what a shopkeeper recognises. A percentage
+		// is not money and is never redenominated — 25% of a price is 25% whichever way the shop reads it.
 		dto.MarginPercent = signedMicro(percent, 1)
 	}
 	return dto
@@ -232,10 +240,19 @@ type CreateProductInput struct {
 // CreateProduct adds a product.
 func (c *Catalog) CreateProduct(in CreateProductInput) envelope.Result[ProductDTO] {
 	return c.withProduct("Catalog.CreateProduct", func(ctx context.Context, app *bootstrap.App) (domain.Product, error) {
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		// What a person typed is in the shop's own reading of its currency; the books hold the base figure (L10).
 		return app.Catalog.Create(ctx, domain.Draft{
 			NameAR: in.NameAR, NameEN: in.NameEN, Barcode: in.Barcode,
-			UnitCode: in.UnitCode, PriceCurrency: in.PriceCurrency, Price: in.Price,
-			Cost: in.CostPrice, MarginPercent: in.MarginPercent, MarginAmount: in.MarginAmount,
+			UnitCode: in.UnitCode, PriceCurrency: in.PriceCurrency,
+			Price: shop.Base(in.Price, in.PriceCurrency),
+			Cost:  shop.Base(in.CostPrice, in.PriceCurrency),
+			// A percentage is not money: 25% is 25% whichever way the shop reads its pounds.
+			MarginPercent: in.MarginPercent,
+			MarginAmount:  shop.Base(in.MarginAmount, in.PriceCurrency),
 		})
 	})
 }
@@ -282,9 +299,19 @@ func (c *Catalog) SetPrice(in SetPriceInput) envelope.Result[ProductDTO] {
 		if err != nil {
 			return domain.Product{}, err
 		}
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		cost := in.CostPrice
+		if cost != catalog.ClearCost { // "-" is a word, not a figure
+			cost = shop.Base(cost, in.PriceCurrency)
+		}
 		return app.Catalog.SetPrice(ctx, catalog.SetPriceInput{
-			ID: parsed, RowVersion: in.RowVersion, Currency: in.PriceCurrency, Price: in.Price,
-			Cost: in.CostPrice, MarginPercent: in.MarginPercent, MarginAmount: in.MarginAmount,
+			ID: parsed, RowVersion: in.RowVersion, Currency: in.PriceCurrency,
+			Price: shop.Base(in.Price, in.PriceCurrency),
+			Cost:  cost, MarginPercent: in.MarginPercent,
+			MarginAmount: shop.Base(in.MarginAmount, in.PriceCurrency),
 		})
 	})
 }

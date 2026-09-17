@@ -116,16 +116,20 @@ rules:
           - "self/internal/lite/textkey"
           - "self/internal/lite/numinput"
           - "self/internal/lite/tender"
-        message: "Lite domain packages may import only stdlib, kernel, textkey, numinput, tender and Lite domain packages"
+          - "self/internal/lite/moneyfmt"
+        message: "Lite domain packages may import only stdlib, kernel, textkey, numinput, tender, moneyfmt and Lite domain packages"
 
       - name: lite-pure-text
         description: textkey, numinput, bizdate and tender stay pure, so domains and services may depend on them.
         # bizdate joined in L2: every stock movement's business date comes from it, and a clock or a database
         # reaching it would make "which day is this" depend on something other than the instant and the zone.
         # tender joined in L5: the till's change and the debt book's repayments round through it (L5 §10.2).
-        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**", "self/internal/lite/tender/**"]
+        # moneyfmt joined in L10: it is the one place a figure changes between what the books hold and what a person
+        # reads, and every DTO and every typed amount passes through it. A clock, a database or a setting reaching into
+        # it would make "what does this figure mean" depend on something other than the figure and the shop's choice.
+        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**", "self/internal/lite/tender/**", "self/internal/lite/moneyfmt/**"]
         allow_only: ["std", "self/internal/kernel/errs"]
-        message: "textkey, numinput, bizdate and tender may import only the standard library and kernel/errs — domain packages and services depend on them"
+        message: "textkey, numinput, bizdate, tender and moneyfmt may import only the standard library and kernel/errs — domain packages and services depend on them"
 
       - name: lite-cmd-entry
         description: Lite's commands wire internal/lite and hold nothing else.

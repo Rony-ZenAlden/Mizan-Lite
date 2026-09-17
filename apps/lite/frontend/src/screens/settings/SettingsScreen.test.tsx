@@ -23,8 +23,8 @@ describe("SettingsScreen — the shop's settings in one place (owner's request, 
     const currency = screen.getByTestId("settings-currency");
     expect(currency).toHaveTextContent("500");
     expect(currency).toHaveTextContent("The smallest note is set on the Cash screen");
-    // And it says the redenomination is coming rather than offering a switch that does nothing yet.
-    expect(screen.getByTestId("redenomination-note")).toHaveTextContent("arrives in a later release");
+    // The redenomination is no longer a promise: it is a control (L10).
+    expect(screen.getByTestId("money-display")).toBeInTheDocument();
   });
 
   it("offers three rate sources and asks for the endpoint only for the local one", async () => {
@@ -72,5 +72,38 @@ describe("SettingsScreen — the shop's settings in one place (owner's request, 
     expect(setMode).toHaveBeenCalledWith("manual");
     // Manual mode fetches nothing, so no source is written alongside it.
     expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ rateSource: expect.anything() }));
+  });
+});
+
+describe("SettingsScreen — dropping the two noughts (L10, 2026-09-17)", () => {
+  it("offers the three readings of the currency and saves the one chosen", async () => {
+    const update = vi.fn(async () => aSettings({ moneyDisplay: "new" }));
+    renderWithProviders(<SettingsScreen />, { client: fakeClient({ settings: { update } }), locale: "en" });
+    await settle();
+
+    const picker = screen.getByLabelText("How money is shown");
+    expect([...picker.querySelectorAll("option")].map((o) => o.textContent)).toEqual([
+      "The old pound only (15,000 SYP)",
+      "The new pound only — two noughts dropped (150 SYP)",
+      "Both (150 SYP with 15,000 beside it)",
+    ]);
+
+    // The old pound is what a shop reads until it says otherwise, and no typing note is shown for it.
+    expect(picker).toHaveValue("legacy");
+    expect(screen.queryByTestId("money-display-typing")).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(picker, "new");
+    // Choosing a new reading tells the shop that what it types changes too — the part that would otherwise surprise it.
+    expect(screen.getByTestId("money-display-typing")).toHaveTextContent("type amounts in the new pound");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save the settings" }));
+    await settle();
+    expect(update).toHaveBeenCalledWith({ moneyDisplay: "new" });
+  });
+
+  it("says plainly that the books do not change", async () => {
+    renderWithProviders(<SettingsScreen />, { client: fakeClient(), locale: "en" });
+    await settle();
+    expect(screen.getByTestId("money-display")).toHaveTextContent("It changes nothing in your books");
   });
 });

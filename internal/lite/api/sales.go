@@ -8,7 +8,6 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
-	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/numinput"
 	"github.com/mizan-erp/mizan/internal/lite/sales"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
@@ -138,7 +137,7 @@ func (v tillView) sale(s salesdomain.Sale) SaleDTO {
 	dto := SaleDTO{
 		ID: s.ID.String(), ReceiptNo: s.ReceiptNo, BusinessDate: s.BusinessDate, SoldAt: clock.Format(s.SoldAt),
 		Status: string(s.Status), Payment: string(s.Payment), ShopName: s.ShopName, LocalCurrency: local,
-		Rate: fxdomain.FormatRate(s.RateNano), RateRecordedAt: clock.Format(s.RateRecordedAt), Settlement: s.SettlementCurrency,
+		Rate: rateText(v.shop, s.RateNano), RateRecordedAt: clock.Format(s.RateRecordedAt), Settlement: s.SettlementCurrency,
 		LinesLocal: v.money(s.LinesLocalMinor, local), LinesUSD: v.money(s.LinesUSDMinor, usd),
 		DiscountLocal: v.money(s.DiscountLocalMinor, local), DiscountUSD: v.money(s.DiscountUSDMinor, usd),
 		Rounding: v.money(s.RoundingMinor, s.SettlementCurrency), Total: v.money(s.TotalMinor, s.SettlementCurrency),

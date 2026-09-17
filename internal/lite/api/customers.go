@@ -11,7 +11,6 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/customers"
 	"github.com/mizan-erp/mizan/internal/lite/customers/domain"
-	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
 	"github.com/mizan-erp/mizan/internal/lite/tender"
 )
 
@@ -220,7 +219,7 @@ func (v debtView) rate() string {
 	if v.rateNano == 0 {
 		return ""
 	}
-	return fxdomain.FormatRate(v.rateNano)
+	return rateText(v.shop, v.rateNano)
 }
 
 func (v debtView) currency(code string) tender.Currency {
@@ -261,7 +260,7 @@ func (v debtView) entry(e domain.Entry, reversed bool) EntryDTO {
 	if e.Kind == domain.KindPayment || e.Kind == domain.KindRefund {
 		dto.TenderedCurrency, dto.Tendered = e.Cash.TenderedCurrency, v.money(e.Cash.TenderedMinor, e.Cash.TenderedCurrency)
 		dto.ChangeCurrency, dto.Change = e.Cash.ChangeCurrency, v.money(e.Cash.ChangeMinor, e.Cash.ChangeCurrency)
-		dto.Rate = fxdomain.FormatRate(e.Cash.RateNano)
+		dto.Rate = rateText(v.shop, e.Cash.RateNano)
 	}
 	return dto
 }
@@ -429,7 +428,7 @@ func (c *Customers) QuotePayment(in PaymentInput) envelope.Result[PaymentQuoteDT
 			Currency: q.Debt.Code, TenderCurrency: q.Tender.Code, Tendered: v.money(q.TenderedMinor, q.Tender.Code),
 			ChangeCurrency: q.Change.Code, Change: v.money(q.ChangeMinor, q.Change.Code), Settled: v.money(q.SettledMinor, q.Debt.Code),
 			BalanceBefore: v.money(q.BalanceBeforeMinor, q.Debt.Code), BalanceAfter: v.money(q.BalanceAfterMinor, q.Debt.Code),
-			All: q.All, Rate: fxdomain.FormatRate(q.RateNano), Token: q.Token,
+			All: q.All, Rate: rateText(v.shop, q.RateNano), Token: q.Token,
 		}, err
 	})
 }

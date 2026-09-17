@@ -23,9 +23,33 @@ export function formatInteger(value: number | bigint | string, locale: Locale): 
  * frontend can never round, truncate or float a price (DESIGN D9).
  */
 export function formatDecimal(value: string, locale: Locale): string {
+  // A shop reading both currencies receives two figures in one string, divided by DUAL_SEPARATOR (L10). Each is grouped
+  // on its own; whoever draws them decides how they sit together.
+  if (value.includes(DUAL_SEPARATOR)) {
+    return splitDual(value)
+      .map((part) => formatDecimal(part, locale))
+      .join(DUAL_SEPARATOR);
+  }
   const [whole = "0", fraction] = value.split(".");
   const grouped = formatInteger(whole, locale);
   return fraction === undefined ? grouped : `${grouped}.${fraction}`;
+}
+
+/**
+ * DUAL_SEPARATOR divides the new figure from the old one in a dual reading of the currency (moneyfmt.DualSeparator). An
+ * ASCII unit separator: never part of a figure, and never printable by accident, so a figure that still carries it has
+ * reached a screen that has not been taught to read it.
+ */
+export const DUAL_SEPARATOR = "\u001f";
+
+/** splitDual is the new figure and the old one, or the single figure a shop reading one currency receives. */
+export function splitDual(value: string): string[] {
+  return value.split(DUAL_SEPARATOR);
+}
+
+/** isDual reports whether a figure carries both readings. */
+export function isDual(value: string): boolean {
+  return value.includes(DUAL_SEPARATOR);
 }
 
 export const CODE_NUMBER_INVALID = "lite.number.invalid";

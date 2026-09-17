@@ -1,15 +1,28 @@
 import { useLocale } from "@/i18n/LocaleProvider";
-import { formatDecimal } from "@/i18n/numbers";
+import { formatDecimal, isDual, splitDual } from "@/i18n/numbers";
 
 /**
  * An amount Go formatted, with its currency's short name: "73,000 ل.س", "4.88 USD". Isolated left-to-right, so the
  * digits and the name keep their order inside Arabic text.
+ *
+ * A shop reading both currencies (L10) receives two figures at once. The new one is the amount; the old one follows it
+ * small and in brackets, so a shopkeeper who still thinks in old pounds can recognise the sum without the screen
+ * pretending there are two prices.
  */
 export function Money({ value, currency, className }: { value: string; currency: string; className?: string }) {
   const { tDynamic, locale } = useLocale();
+  const short = tDynamic(`currency.short.${currency}`);
+  if (isDual(value)) {
+    const [fresh, legacy] = splitDual(formatDecimal(value, locale));
+    return (
+      <bdi dir="ltr" className={className} data-testid="money-dual">
+        {fresh} {short} <span className="text-[0.8em] opacity-70">({legacy})</span>
+      </bdi>
+    );
+  }
   return (
     <bdi dir="ltr" className={className}>
-      {formatDecimal(value, locale)} {tDynamic(`currency.short.${currency}`)}
+      {formatDecimal(value, locale)} {short}
     </bdi>
   );
 }

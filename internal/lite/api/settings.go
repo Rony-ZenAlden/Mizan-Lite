@@ -26,6 +26,8 @@ type SettingsDTO struct {
 	CashNote      string `json:"cashNote"`
 	// RateSource is where a fetched rate comes from — "standard" or "local" — with the shop's own endpoint and the
 	// dotted path to the number inside its JSON (2026-09-17). The URL is empty until a shop sets one up.
+	// MoneyDisplay is how the shop reads its currency (L10).
+	MoneyDisplay   string `json:"moneyDisplay"`
 	RateSource     string `json:"rateSource"`
 	LocalRateURL   string `json:"localRateUrl"`
 	LocalRateField string `json:"localRateField"`
@@ -35,6 +37,8 @@ type SettingsDTO struct {
 type SettingsInput struct {
 	Locale   *string `json:"locale,omitempty"`
 	ShopName *string `json:"shopName,omitempty"`
+	// MoneyDisplay is how the shop reads its currency: "legacy", "new" or "dual" (L10).
+	MoneyDisplay *string `json:"moneyDisplay,omitempty"`
 	// The exchange rate's source and the shop's own endpoint (2026-09-17).
 	RateSource     *string `json:"rateSource,omitempty"`
 	LocalRateURL   *string `json:"localRateUrl,omitempty"`
@@ -44,7 +48,7 @@ type SettingsInput struct {
 func toSettingsDTO(s domain.Settings) SettingsDTO {
 	return SettingsDTO{Locale: string(s.Locale), ShopName: s.ShopName, Direction: string(s.Locale.Direction()),
 		DebtCurrency: s.DebtCurrency, LocalCurrency: s.LocalCurrency, CashNote: strconv.FormatInt(s.CashNote, 10),
-		RateSource: s.RateSource, LocalRateURL: s.LocalRateURL, LocalRateField: s.LocalRateField}
+		MoneyDisplay: s.MoneyDisplay, RateSource: s.RateSource, LocalRateURL: s.LocalRateURL, LocalRateField: s.LocalRateField}
 }
 
 // Get returns the current settings.
@@ -75,7 +79,8 @@ func (s *Settings) Update(in SettingsInput) envelope.Result[SettingsDTO] {
 		err := app.DB.Do(ctx, func(ctx context.Context) error {
 			var updateErr error
 			updated, updateErr = app.Settings.Update(ctx, domain.Update{Locale: in.Locale, ShopName: in.ShopName,
-				RateSource: in.RateSource, LocalRateURL: url, LocalRateField: in.LocalRateField})
+				MoneyDisplay: in.MoneyDisplay,
+				RateSource:   in.RateSource, LocalRateURL: url, LocalRateField: in.LocalRateField})
 			if updateErr != nil {
 				return updateErr
 			}

@@ -142,14 +142,14 @@ func TestAttachedBindingsServeTheRealGraph(t *testing.T) {
 
 	got := set.Settings.Get()
 	if !got.OK || got.Data != (api.SettingsDTO{Locale: "ar", ShopName: "", Direction: "rtl", DebtCurrency: "USD",
-		LocalCurrency: "SYP", CashNote: "500", RateSource: "standard"}) {
+		LocalCurrency: "SYP", CashNote: "500", MoneyDisplay: "legacy", RateSource: "standard"}) {
 		t.Fatalf("Settings.Get = %+v", got)
 	}
 
 	en := "en"
 	updated := set.Settings.Update(api.SettingsInput{Locale: &en})
 	if !updated.OK || updated.Data != (api.SettingsDTO{Locale: "en", ShopName: "", Direction: "ltr", DebtCurrency: "USD",
-		LocalCurrency: "SYP", CashNote: "500", RateSource: "standard"}) {
+		LocalCurrency: "SYP", CashNote: "500", MoneyDisplay: "legacy", RateSource: "standard"}) {
 		t.Fatalf("Settings.Update = %+v", updated)
 	}
 
@@ -211,7 +211,7 @@ func TestTheWireShapeIsWhatTheFrontendUnwraps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl","debtCurrency":"USD","localCurrency":"SYP","cashNote":"500","rateSource":"standard","localRateUrl":"","localRateField":""}}`
+	want := `{"ok":true,"data":{"locale":"ar","shopName":"","direction":"rtl","debtCurrency":"USD","localCurrency":"SYP","cashNote":"500","moneyDisplay":"legacy","rateSource":"standard","localRateUrl":"","localRateField":""}}`
 	if string(wire) != want {
 		t.Fatalf("wire = %s\nwant %s", wire, want)
 	}

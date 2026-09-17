@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 )
 
 // CodeInvalidLocale is returned when a locale is not one Lite ships.
@@ -71,6 +72,13 @@ func ParseRateSource(raw string) (string, error) {
 // KeyLocalCurrency is the stored key for the currency the exchange rate prices (L3 §3.2). Not editable in v1: nothing
 // writes it, and a stored value must name a currency code.
 const KeyLocalCurrency = "currency.local"
+
+// KeyMoneyDisplay is how the shop reads its own currency after the redenomination: the old pound, the new one, or both
+// (L10, 2026-09-17). It changes what is shown and what a typed figure means — never what the books hold.
+const KeyMoneyDisplay = "currency.display"
+
+// CodeInvalidMoneyDisplay is a display that is not one of the three.
+const CodeInvalidMoneyDisplay = "lite.settings.invalid_money_display"
 
 // CodeInvalidRateMode is returned when a rate mode is not one Lite has.
 const CodeInvalidRateMode = "lite.settings.invalid_rate_mode"
@@ -221,6 +229,8 @@ type Settings struct {
 	// RateAdjustPercentMicro is the margin put on a fetched rate, at 10⁻⁶ of a percentage point, signed. Zero leaves the
 	// internet's figure as it came; it applies only in automatic mode, and never to a rate typed by hand.
 	RateAdjustPercentMicro int64
+	// MoneyDisplay is how the shop reads its local currency: "legacy", "new" or "dual" (L10).
+	MoneyDisplay string
 	// RateSource is where a fetched rate comes from: the published providers, or the shop's own local-market endpoint
 	// with the published ones behind it (2026-09-17).
 	RateSource string
@@ -234,7 +244,7 @@ type Settings struct {
 func Defaults() Settings {
 	return Settings{Locale: Arabic, RateMode: RateManual, LocalCurrency: DefaultLocalCurrency, CashNote: DefaultCashNote,
 		DebtCurrency: DefaultDebtCurrency, Receipt: DefaultReceipt(), BackupEvery: DefaultBackupEvery,
-		RateSource: RateSourceStandard}
+		RateSource: RateSourceStandard, MoneyDisplay: string(moneyfmt.Default)}
 }
 
 // ProblemKind says what was wrong with a stored row.
@@ -306,6 +316,12 @@ func FromStored(rows map[string]string) (Settings, []Problem) {
 				continue
 			}
 			out.DebtCurrency = value
+		case KeyMoneyDisplay:
+			if !moneyfmt.Valid(value) {
+				problems = append(problems, Problem{Key: key, Value: value, Kind: InvalidValue})
+				continue
+			}
+			out.MoneyDisplay = string(moneyfmt.Parse(value))
 		case KeyRateSource:
 			source, err := ParseRateSource(value)
 			if err != nil {
@@ -357,6 +373,8 @@ type Update struct {
 	RateMode *string
 	// RateAdjustPercent is the margin on the internet's rate, as typed ("5", "-2٫5"); "" leaves it as it is.
 	RateAdjustPercent *string
+	// MoneyDisplay is how the shop reads its currency (L10).
+	MoneyDisplay *string
 	// RateSource, LocalRateURL and LocalRateField are where fetched rates come from (2026-09-17).
 	RateSource     *string
 	LocalRateURL   *string
@@ -398,6 +416,16 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 		if mode != s.RateMode {
 			next.RateMode = mode
 			changes = append(changes, Change{Key: KeyRateMode, Value: string(mode)})
+		}
+	}
+	if u.MoneyDisplay != nil {
+		if !moneyfmt.Valid(*u.MoneyDisplay) {
+			return s, nil, errs.Validation(CodeInvalidMoneyDisplay, "a money display is legacy, new or dual").
+				WithField("moneyDisplay", CodeInvalidMoneyDisplay, "unknown").WithParam("value", *u.MoneyDisplay)
+		}
+		if chosen := string(moneyfmt.Parse(*u.MoneyDisplay)); chosen != s.MoneyDisplay {
+			next.MoneyDisplay = chosen
+			changes = append(changes, Change{Key: KeyMoneyDisplay, Value: chosen})
 		}
 	}
 	if u.RateSource != nil {

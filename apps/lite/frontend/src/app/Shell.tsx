@@ -144,12 +144,26 @@ export function Shell() {
 /** A day and a bit: a daily backup missed once is worth saying. */
 const LAST_BACKUP_TOO_OLD_SECONDS = 36 * 3600;
 
-/** What, if anything, the shop must be told about its backups on every screen. */
-export function needsAttention(st: BackupStatus | null): "backups.warning_none" | "backups.warning_old" | "backups.outside_failed" | "backups.warning_outside_old" | null {
+/**
+ * What, if anything, the shop must be told about its backups on every screen.
+ *
+ * # Why the outside folder is no longer among them (the owner's request, 2026-09-20)
+ *
+ * The banner used to say "the last copy in the outside folder is more than two days old — is the USB drive plugged
+ * in?" on every screen, the till included. A shop that unplugs its USB drive during the day — which is most days —
+ * got a red banner across the counter while serving customers, about something the cashier cannot act on and the
+ * owner already knows. A warning that appears when nothing is wrong teaches people to ignore warnings, and the two
+ * below are ones they should not ignore.
+ *
+ * What is left is about the shop's OWN backups: there is no backup at all, or the last one is a day and a half old.
+ * Those say the shop's data is unprotected right now, which is not the same as a drive being out of its socket.
+ *
+ * The outside folder is still copied to, still checked, and still reported in full — with its staleness and any
+ * failure — on the Backups screen and in About. It simply no longer interrupts the counter.
+ */
+export function needsAttention(st: BackupStatus | null): "backups.warning_none" | "backups.warning_old" | null {
   if (!st) return null;
   if (!st.last) return "backups.warning_none";
   if (st.last.ageSeconds > LAST_BACKUP_TOO_OLD_SECONDS) return "backups.warning_old";
-  if (st.folder && st.outsideFailed) return "backups.outside_failed";
-  if (st.folder && st.outsideStale) return "backups.warning_outside_old";
   return null;
 }

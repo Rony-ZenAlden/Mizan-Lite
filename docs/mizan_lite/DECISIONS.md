@@ -536,3 +536,11 @@ for review) · **proposed** (awaiting approval) · **superseded** (replaced; the
 | D-097.13 | **Expiry is not in this release.** A pantry shop holds stock from several deliveries at once, so one date on the product describes whichever was typed last and calls the older stock fresh. Expiry needs a batch, and a batch changes how every sale draws stock | approved — the owner chose this over a per-product date | migration 0010's preamble |
 | D-097.14 | Price tags encode **Code 128**, not EAN-13: a shop's barcodes are whatever the supplier printed, any length, letters included. Set C is used for even digit runs so a numeric tag fits a 40 mm label | approved | `documents/barcode.go` |
 | D-097.15 | Migration 0010 rebuilds three tables, and **order matters**: a parent cannot be dropped while a child holds rows pointing at it. The first cut passed on an empty database and failed the upgrade matrix on a seeded one | approved — the gate caught it | migration 0010 §1–§4 |
+
+## 0.9.8 — the counter stops being interrupted (approved 2026-09-20)
+
+| ID | Decision | Status | Where |
+|---|---|---|---|
+| D-098.1 | **The outside-folder warnings leave the every-screen banner.** "The last copy in the outside folder is more than two days old — is the USB drive plugged in?" appeared across the till while customers were being served, about a drive the cashier cannot plug in and the owner already knows about. A warning that fires when nothing is wrong teaches people to ignore warnings | approved — the owner's request | `Shell.needsAttention` |
+| D-098.2 | **Two warnings stay**: no backup at all, and the last backup more than a day and a half old. Those say the shop's data is unprotected right now, which is not the same as a drive being out of its socket | approved, narrower than "remove the backup banner" | `Shell.needsAttention` |
+| D-098.3 | The outside folder is still **copied to, still checked and still reported in full** — staleness and failure both — on the Backups screen and in About. Only the interruption is gone, not the fact | approved | `BackupStatusPanel`, `AboutScreen` |

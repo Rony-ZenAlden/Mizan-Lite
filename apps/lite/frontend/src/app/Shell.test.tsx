@@ -142,23 +142,36 @@ describe("Shell — the exchange rate in the header", () => {
 });
 
 describe("Shell — backups on every screen (L8 A-L8.3)", () => {
-  it("warns on every screen when the backups need attention, and not otherwise", async () => {
+  it("warns on every screen when the SHOP'S OWN backups need attention, and not otherwise", async () => {
     const { aBackup, aBackupStatus } = await import("@/api/testing");
     const { needsAttention } = await import("./Shell");
     expect(needsAttention(aBackupStatus())).toBeNull();
     expect(needsAttention(aBackupStatus({ last: undefined }))).toBe("backups.warning_none");
     expect(needsAttention(aBackupStatus({ last: aBackup({ ageSeconds: 40 * 3600 }) }))).toBe("backups.warning_old");
-    expect(needsAttention(aBackupStatus({ outsideFailed: "lite.backups.folder_missing" }))).toBe("backups.outside_failed");
-    expect(needsAttention(aBackupStatus({ outsideStale: true }))).toBe("backups.warning_outside_old");
-    expect(needsAttention(aBackupStatus({ folder: "", outsideStale: true }))).toBeNull();
 
     const health = vi.fn(async () => ({ version: "0.9.0", schemaVersion: 8, platform: "darwin", dataDir: "/d" }));
-    const status = async () => aBackupStatus({ outsideStale: true });
+    const status = async () => aBackupStatus({ last: undefined });
     renderWithProviders(<Shell />, { client: fakeClient({ app: { health }, backups: { status }, settings: { get: async () => (aSettings({ locale: "en", shopName: "x", direction: "ltr" })) } }), locale: "en" });
     const warning = await screen.findByTestId("backup-warning");
-    expect(warning).toHaveTextContent("The last copy in the outside folder is more than two days old");
+    expect(warning).toHaveTextContent("There is no backup yet");
     expect(screen.getByRole("link", { name: "Open Backups" })).toHaveAttribute("href", "/backups");
     expect(health).toHaveBeenCalledTimes(1);
     await settled("en");
+  });
+
+  // The owner's request of 2026-09-20: the USB banner appeared across the counter, every screen, about a drive the
+  // cashier cannot plug in while serving. A warning that fires when nothing is wrong teaches people to ignore
+  // warnings — including the two above, which say the shop's data is unprotected right now.
+  it("never interrupts the counter about the outside folder, however stale or broken it is", async () => {
+    const { aBackupStatus } = await import("@/api/testing");
+    const { needsAttention } = await import("./Shell");
+    expect(needsAttention(aBackupStatus({ outsideStale: true }))).toBeNull();
+    expect(needsAttention(aBackupStatus({ outsideFailed: "lite.backups.folder_missing" }))).toBeNull();
+    expect(needsAttention(aBackupStatus({ outsideStale: true, outsideFailed: "lite.backups.folder_missing" }))).toBeNull();
+
+    const status = async () => aBackupStatus({ outsideStale: true, outsideFailed: "lite.backups.folder_missing" });
+    renderWithProviders(<Shell />, { client: fakeClient({ backups: { status }, settings: { get: async () => (aSettings({ locale: "en", shopName: "x", direction: "ltr" })) } }), locale: "en" });
+    await settled("en");
+    expect(screen.queryByTestId("backup-warning")).not.toBeInTheDocument();
   });
 });

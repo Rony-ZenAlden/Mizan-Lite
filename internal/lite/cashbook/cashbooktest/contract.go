@@ -50,13 +50,17 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 		sub := newSubject(t)
 		rate := sub.NewRate(t)
 		expense := put(t, sub.Store, domain.Entry{BusinessDate: "2026-09-13", Kind: domain.KindExpense, Currency: "SYP", AmountMinor: 250_000,
-			Category: "electricity", FromDrawer: true, RateID: rate, RateNano: 15_000_000_000_000, Note: "فاتورة"})
+			Category: "electricity", FromDrawer: true, Recurrence: domain.Once, RateID: rate, RateNano: 15_000_000_000_000, Note: "فاتورة"})
+		// Rent recurs: the column, the trigger and both stores have to carry it back unchanged (2026-09-20).
+		rent := put(t, sub.Store, domain.Entry{BusinessDate: "2026-09-13", Kind: domain.KindExpense, Currency: "SYP", AmountMinor: 1_000_000,
+			Category: "rent", FromDrawer: true, Recurrence: domain.Monthly, RateID: rate, RateNano: 15_000_000_000_000, Note: "إيجار"})
 		deposit := put(t, sub.Store, domain.Entry{BusinessDate: "2026-09-14", Kind: domain.KindDeposit, Currency: "USD", AmountMinor: 5_000,
-			RateID: rate, RateNano: 15_000_000_000_000})
-		count := put(t, sub.Store, domain.Entry{BusinessDate: "2026-09-14", Kind: domain.KindCount, Currency: "SYP", AmountMinor: 0, ExpectedMinor: 1_000})
+			Recurrence: domain.Once, RateID: rate, RateNano: 15_000_000_000_000})
+		count := put(t, sub.Store, domain.Entry{BusinessDate: "2026-09-14", Kind: domain.KindCount, Currency: "SYP", AmountMinor: 0,
+			ExpectedMinor: 1_000, Recurrence: domain.Once})
 		reversal := put(t, sub.Store, domain.Entry{BusinessDate: "2026-09-15", Kind: domain.KindReversal, Currency: "SYP", AmountMinor: 0,
-			ReversesID: count.ID, Note: "عدّ خطأ"})
-		for _, want := range []domain.Entry{expense, deposit, count, reversal} {
+			Recurrence: domain.Once, ReversesID: count.ID, Note: "عدّ خطأ"})
+		for _, want := range []domain.Entry{expense, rent, deposit, count, reversal} {
 			got, err := sub.Store.Entry(ctx, want.ID)
 			if err != nil || !got.OccurredAt.Equal(want.OccurredAt) {
 				t.Fatalf("Entry = %+v, %v", got, err)
@@ -66,7 +70,7 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 				t.Fatalf("read back\n%+v\nwant\n%+v", got, want)
 			}
 		}
-		if n, _ := sub.Store.NextSeq(ctx); n != 5 {
+		if n, _ := sub.Store.NextSeq(ctx); n != 6 {
 			t.Fatalf("NextSeq = %d", n)
 		}
 		if r, _ := sub.Store.Between(ctx, "2026-09-14", "2026-09-15"); len(r) != 3 || r[0].ID != deposit.ID || r[2].ID != reversal.ID {

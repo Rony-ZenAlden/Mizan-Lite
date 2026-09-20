@@ -66,6 +66,10 @@ describe("ReportsScreen", () => {
       "Spoiled or expired0.40 USD6,000 SYP",
       "Debts written off0.00 USD0 SYP",
       "Expenses1.00 USD15,000 SYP",
+      // The day's small change told apart from rent and the bills (2026-09-20): a day the rent is paid is not a bad
+      // day for the shop, and one figure for both makes the first of the month look like a disaster.
+      "Day-to-day1.00 USD15,000 SYP",
+      "Rent, bills and wages0.00 USD0 SYP",
       "Electricity1.00 USD15,000 SYP",
       "Net profit1.10 USD16,500 SYP",
     ]);
@@ -301,5 +305,56 @@ describe("ReportsScreen — any period (owner's request, 2026-09-17)", () => {
     await settle();
     expect(screen.getByTestId("stock-retail")).toHaveTextContent("Stock at its selling price");
     expect(screen.getByTestId("stock-retail")).toHaveTextContent("26.00");
+  });
+});
+
+describe("ReportsScreen — returns and the end of day (owner's request, 2026-09-20)", () => {
+  it("shows the profit a return gave up, which is the margin and not the refund", async () => {
+    const withReturn = aDayReport({
+      returns: { count: 1, refund: anAmount("3.25", "48750"), cost: anAmount("2.00", "30000"), profit: anAmount("1.25", "18750"), unknown: 0 },
+    });
+    const day = guarded(async () => withReturn);
+    renderWithProviders(<ReportsScreen />, { client: fakeClient({ reports: { day }, owner: { elevate: async () => elevated } }), locale: "en" });
+    await settle();
+    await enterPin();
+    // The shop handed back 48,750 and put 30,000 of stock on the shelf: it is out the 18,750 between them.
+    expect(screen.getByTestId("returns")).toHaveTextContent("18,750");
+    expect(screen.getByTestId("returns")).toHaveTextContent("Returns");
+  });
+
+  it("shows no returns line on a day nothing came back, rather than a row of zeroes", async () => {
+    const day = guarded(async () => aDayReport());
+    renderWithProviders(<ReportsScreen />, { client: fakeClient({ reports: { day }, owner: { elevate: async () => elevated } }), locale: "en" });
+    await settle();
+    await enterPin();
+    expect(screen.queryByTestId("returns")).not.toBeInTheDocument();
+  });
+
+  it("says the statement is on screen only when no printer is set up", async () => {
+    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    const day = guarded(async () => aDayReport());
+    renderWithProviders(<ReportsScreen />, {
+      client: fakeClient({ reports: { day }, owner: { elevate: async () => elevated }, printers: { settings: none } }),
+      locale: "en",
+    });
+    await settle();
+    await enterPin();
+    expect(screen.getByTestId("zreport-screen-only")).toBeInTheDocument();
+    expect(screen.queryByTestId("zreport-print")).not.toBeInTheDocument();
+  });
+
+  it("offers the 80 mm print when a printer is set up", async () => {
+    const zReport = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }));
+    const set = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    const day = guarded(async () => aDayReport());
+    renderWithProviders(<ReportsScreen />, {
+      client: fakeClient({ reports: { day }, owner: { elevate: async () => elevated }, printers: { settings: set }, print: { zReport } }),
+      locale: "en",
+    });
+    await settle();
+    await enterPin();
+    await userEvent.click(screen.getByRole("button", { name: "Print the end of day" }));
+    await settle();
+    expect(zReport).toHaveBeenCalledWith("2026-09-14");
   });
 });

@@ -48,6 +48,45 @@ const maxMinor = int64(10_000_000_000_000)
 // Kind is what a cash book entry is.
 type Kind string
 
+// Recurrence tells the day's small change apart from the money a shop pays on a cycle (the owner's request,
+// 2026-09-20).
+//
+// # Why nothing is posted automatically
+//
+// A recurring expense could have been a definition the scheduler posts on the first of each month. It is not, and
+// deliberately: the drawer has to match the cash in it. An application that posted the rent on the first would show a
+// shopkeeper money leaving a drawer they had not opened, on a day they may not have paid, and the count at the end of
+// that day would disagree with a movement nobody made.
+//
+// So the shop records the rent when it pays the rent, exactly as before. Marking it monthly tells the REPORTS how to
+// read it — the day's statement shows it apart from the نثريات, and a month's statement sums both — and changes nothing
+// else. The figure is still a thing that happened on the day it is dated.
+type Recurrence string
+
+// The recurrences.
+const (
+	// Once is the day's small change: نثريات. It is what every expense recorded before 2026-09-20 was.
+	Once Recurrence = "once"
+	// Monthly is rent, the electricity bill, the wages — money the shop pays on a cycle.
+	Monthly Recurrence = "monthly"
+)
+
+// CodeUnknownRecurrence is a recurrence that is neither.
+const CodeUnknownRecurrence = "lite.cashbook.unknown_recurrence"
+
+// ParseRecurrence reads a recurrence, defaulting to the one-off an empty value has always meant.
+func ParseRecurrence(raw string) (Recurrence, error) {
+	switch Recurrence(strings.TrimSpace(raw)) {
+	case "", Once:
+		return Once, nil
+	case Monthly:
+		return Monthly, nil
+	default:
+		return "", errs.Validation(CodeUnknownRecurrence, "an expense recurs once or monthly").
+			WithField("recurrence", CodeUnknownRecurrence, "unknown").WithParam("value", raw)
+	}
+}
+
 // The kinds (L6 §7.3).
 const (
 	KindExpense    Kind = "expense"
@@ -81,6 +120,9 @@ type Entry struct {
 	Category      string
 	// FromDrawer is, for an expense, whether it was paid from the drawer.
 	FromDrawer bool
+	// Recurrence is, for an expense, whether it is the day's small change or money paid on a cycle (2026-09-20).
+	// Every other kind is Once: a deposit or a count is an event, not a cycle.
+	Recurrence Recurrence
 	ReversesID id.ID
 	RateID     id.ID
 	RateNano   int64
@@ -94,6 +136,8 @@ type Draft struct {
 	Amount     string
 	Category   string
 	FromDrawer bool
+	// Recurrence is empty for the one-off an expense has always been.
+	Recurrence string
 	Note       string
 }
 
@@ -113,13 +157,21 @@ func NewMoney(d Draft) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	e := Entry{Kind: d.Kind, Currency: d.Currency.Code, AmountMinor: amount, Note: note}
+	e := Entry{Kind: d.Kind, Currency: d.Currency.Code, AmountMinor: amount, Note: note, Recurrence: Once}
 	if d.Kind == KindExpense {
 		if !knownCategory(d.Category) {
 			return Entry{}, errs.Validation(CodeUnknownCategory, "choose a category").WithField(FieldCategory, CodeUnknownCategory, "unknown").
 				WithParam("value", d.Category)
 		}
-		e.Category, e.FromDrawer = d.Category, d.FromDrawer
+		recurrence, err := ParseRecurrence(d.Recurrence)
+		if err != nil {
+			return Entry{}, err
+		}
+		e.Category, e.FromDrawer, e.Recurrence = d.Category, d.FromDrawer, recurrence
+	} else if r, _ := ParseRecurrence(d.Recurrence); r != Once {
+		// Only an expense recurs, as the schema's trigger also holds: a deposit or a withdrawal is an event.
+		return Entry{}, errs.Validation(CodeUnknownRecurrence, "only an expense recurs").
+			WithField("recurrence", CodeUnknownRecurrence, "not an expense").WithParam("kind", string(d.Kind))
 	}
 	return e, nil
 }
@@ -134,7 +186,7 @@ func NewCount(currency Currency, counted string, expectedMinor int64, rawNote st
 	if err != nil {
 		return Entry{}, err
 	}
-	return Entry{Kind: KindCount, Currency: currency.Code, AmountMinor: amount, ExpectedMinor: expectedMinor, Note: n}, nil
+	return Entry{Kind: KindCount, Currency: currency.Code, AmountMinor: amount, ExpectedMinor: expectedMinor, Recurrence: Once, Note: n}, nil
 }
 
 // Reverse undoes an entry once, with a reason. A reversal is never reversed.
@@ -149,7 +201,8 @@ func Reverse(original Entry, reason string) (Entry, error) {
 	if r == "" {
 		return Entry{}, errs.Validation(CodeReasonRequired, "a reason is required").WithField(FieldReason, CodeReasonRequired, "required")
 	}
-	return Entry{Kind: KindReversal, Currency: original.Currency, AmountMinor: original.AmountMinor, ReversesID: original.ID, Note: r}, nil
+	return Entry{Kind: KindReversal, Currency: original.Currency, AmountMinor: original.AmountMinor, ReversesID: original.ID,
+		Recurrence: Once, Note: r}, nil
 }
 
 // Difference is a count's counted less expected: below zero is a shortage.

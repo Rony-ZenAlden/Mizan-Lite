@@ -28,6 +28,19 @@ type AmountDTO struct {
 	Unconverted int    `json:"unconverted"`
 }
 
+// ReturnsDTO is what came back over the counter: the refund handed out, the cost put back on the shelf, and the profit
+// that actually cost the shop — the margin, not the refund (2026-09-20).
+type ReturnsDTO struct {
+	Count  int       `json:"count"`
+	Refund AmountDTO `json:"refund"`
+	Cost   AmountDTO `json:"cost"`
+	// Profit is what the day's profit lost: the refund less the cost put back.
+	Profit AmountDTO `json:"profit"`
+	// Unknown counts returned lines whose cost was never recorded, so a screen says so rather than implying the shop
+	// knows what the return cost it.
+	Unknown int `json:"unknown"`
+}
+
 // ProfitDTO is revenue, cost and gross profit in dollars and in pounds at each sale's rate; lines of unknown cost apart.
 type ProfitDTO struct {
 	Sales         int    `json:"sales"`
@@ -81,17 +94,23 @@ type TakingsDTO struct {
 
 // DayReportDTO is a day's statement, or a range's totals.
 type DayReportDTO struct {
-	Date          string        `json:"date"`
-	LocalCurrency string        `json:"localCurrency"`
-	Profit        ProfitDTO     `json:"profit"`
-	Losses        LossesDTO     `json:"losses"`
-	BadDebts      AmountDTO     `json:"badDebts"`
-	Expenses      AmountDTO     `json:"expenses"`
-	Categories    []CategoryDTO `json:"categories"`
-	NetUSD        string        `json:"netUsd"`
-	NetLocal      string        `json:"netLocal"`
-	Unconverted   int           `json:"unconverted"`
-	Takings       []TakingsDTO  `json:"takings"`
+	Date          string    `json:"date"`
+	LocalCurrency string    `json:"localCurrency"`
+	Profit        ProfitDTO `json:"profit"`
+	Losses        LossesDTO `json:"losses"`
+	BadDebts      AmountDTO `json:"badDebts"`
+	// Returns is what came back over the counter this day (2026-09-20).
+	Returns ReturnsDTO `json:"returns"`
+	// Expenses is every expense of the day; DailyExpenses and PeriodicExpenses tell the day's small change apart from
+	// rent and the bills, so a day the rent was paid does not read as a disaster.
+	Expenses         AmountDTO     `json:"expenses"`
+	DailyExpenses    AmountDTO     `json:"dailyExpenses"`
+	PeriodicExpenses AmountDTO     `json:"periodicExpenses"`
+	Categories       []CategoryDTO `json:"categories"`
+	NetUSD           string        `json:"netUsd"`
+	NetLocal         string        `json:"netLocal"`
+	Unconverted      int           `json:"unconverted"`
+	Takings          []TakingsDTO  `json:"takings"`
 	// Rate is the rate of the day losses and bad debts were converted at; "" before any rate, and for a range.
 	Rate string `json:"rate"`
 }
@@ -262,7 +281,11 @@ func (v reportView) day(d domain.Day, withRate bool) DayReportDTO {
 		Date: d.Date, LocalCurrency: v.pair.Local.Code, Profit: v.profit(d.Profit),
 		Losses: LossesDTO{Spoiled: v.amount(d.Losses.Spoiled), OwnUse: v.amount(d.Losses.OwnUse), Other: v.amount(d.Losses.Other),
 			Shortfall: v.amount(d.Losses.Shortfall), Surplus: v.amount(d.Losses.Surplus), Out: v.amount(d.Losses.Out())},
-		BadDebts: v.amount(d.BadDebts), Expenses: v.amount(d.Expenses), Categories: make([]CategoryDTO, 0, len(d.Categories)),
+		BadDebts: v.amount(d.BadDebts),
+		Returns: ReturnsDTO{Count: d.Returns.Count, Refund: v.amount(d.Returns.Refund), Cost: v.amount(d.Returns.Cost),
+			Profit: v.amount(d.Returns.Profit()), Unknown: d.Returns.Unknown},
+		Expenses: v.amount(d.Expenses.Total), DailyExpenses: v.amount(d.Expenses.Daily),
+		PeriodicExpenses: v.amount(d.Expenses.Periodic), Categories: make([]CategoryDTO, 0, len(d.Categories)),
 		NetUSD: v.usd(d.NetUSD()), NetLocal: v.local(d.NetLocal()), Unconverted: d.Unconverted(), Takings: make([]TakingsDTO, 0, len(d.Takings)),
 	}
 	if withRate && d.RateFound {
@@ -495,6 +518,8 @@ type CashRecordInput struct {
 	Amount     string `json:"amount"`
 	Category   string `json:"category"`
 	FromDrawer bool   `json:"fromDrawer"`
+	// Recurrence is "" or "once" for the day's small change, "monthly" for rent and the bills (2026-09-20).
+	Recurrence string `json:"recurrence"`
 	Note       string `json:"note"`
 }
 
@@ -585,7 +610,7 @@ func (c *Cash) Record(in CashRecordInput) envelope.Result[CashEntryDTO] {
 		}
 		return app.Cashbook.Record(ctx, cashbook.RecordInput{Kind: cashbookdomain.Kind(in.Kind), Currency: in.Currency,
 			Amount:   shop.Base(in.Amount, in.Currency),
-			Category: in.Category, FromDrawer: in.FromDrawer, Note: in.Note})
+			Category: in.Category, FromDrawer: in.FromDrawer, Recurrence: in.Recurrence, Note: in.Note})
 	})
 }
 

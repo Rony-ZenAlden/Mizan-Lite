@@ -418,6 +418,43 @@ func (s *Service) RecordSale(ctx context.Context, in SaleInput) (Sold, error) {
 
 // RecordSaleVoid returns a voided sale line's stock, in the caller's transaction (L4 §5). The owner's guard is the
 // till's, on the void as a whole.
+// RecordSaleReturn puts part of a sold line back on the shelf, joining the caller's transaction (2026-09-20).
+//
+// How much has already come back is the sales module's business — it holds the running total against what was sold —
+// so this refuses only what the ORIGINAL line cannot support. Two calls for one line are two movements, which is what
+// a customer bringing tins back on two visits actually did.
+func (s *Service) RecordSaleReturn(ctx context.Context, saleLineID id.ID, quantityMicro int64) (domain.Movement, error) {
+	var out domain.Movement
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		sale, found, err := s.store.SaleMovement(ctx, saleLineID, domain.KindSale)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.ErrMovementNotFound()
+		}
+		// A voided sale gave everything back already; there is nothing left of this line to return.
+		_, voided, voidErr := s.store.SaleMovement(ctx, saleLineID, domain.KindSaleVoid)
+		if voidErr != nil {
+			return voidErr
+		}
+		if voided {
+			return errs.Conflict(domain.CodeNotReversible, "this sale line's stock was already returned by a void")
+		}
+		level, st, err := s.begin(ctx, sale.ProductID)
+		if err != nil {
+			return err
+		}
+		m, after, err := domain.SaleReturn(level, sale, quantityMicro, st)
+		if err != nil {
+			return err
+		}
+		out = m
+		return s.write(ctx, m, after)
+	})
+	return out, err
+}
+
 func (s *Service) RecordSaleVoid(ctx context.Context, saleLineID id.ID) (domain.Movement, error) {
 	var out domain.Movement
 	err := s.tx.Do(ctx, func(ctx context.Context) error {

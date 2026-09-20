@@ -91,6 +91,9 @@ const (
 	// KindSale and KindSaleVoid are the till's (L4): stock sold, and stock returned by voiding the sale.
 	KindSale     Kind = "sale"
 	KindSaleVoid Kind = "sale_void"
+	// KindSaleReturn is part of a sale coming back over the counter (2026-09-20). Unlike a void it is not a reversal:
+	// a line may be returned more than once, and each time is a movement of its own.
+	KindSaleReturn Kind = "sale_return"
 )
 
 // Kinds lists every kind, in the schema's order.
@@ -556,4 +559,39 @@ func mulPositive(a, b int64) (int64, bool) {
 		return 0, false
 	}
 	return a * b, true
+}
+
+// SaleReturn puts part of a sold line back on the shelf (2026-09-20).
+//
+// It is not a reversal. A void undoes a sale line whole and once; a return may take one tin back today and another
+// next week, so each return is a movement in its own right with no reverses_id, and how much has come back already is
+// the caller's business to hold against what was sold.
+//
+// The cost that comes back is the one the SALE snapshotted, not today's average: the shop is restoring the stock it
+// sold, at what that stock was worth when it left (the reasoning of D-L9.1).
+func SaleReturn(l Level, sale Movement, quantityMicro int64, st Stamp) (Movement, Level, error) {
+	if sale.Kind != KindSale || sale.ProductID != l.ProductID {
+		return Movement{}, l, errs.Conflict(CodeNotReversible, "only a sale movement can be returned")
+	}
+	if quantityMicro <= 0 || quantityMicro > -sale.QuantityMicro {
+		return Movement{}, l, errs.Conflict(CodeNotReversible, "more than that line sold")
+	}
+	onHandAfter, ok := add(l.OnHandMicro, quantityMicro)
+	if !ok {
+		return Movement{}, l, quantityTooLarge()
+	}
+	avg := l.AvgCostMicro
+	if sale.UnitCostMicro > 0 || !l.hasCost() {
+		var err error
+		if avg, err = money.WeightedAverageUnit(l.OnHandMicro, l.AvgCostMicro, quantityMicro, sale.UnitCostMicro, costRounding); err != nil {
+			return Movement{}, l, costTooLarge(err)
+		}
+	}
+	m := movement(l, st, KindSaleReturn)
+	m.QuantityMicro = quantityMicro
+	m.UnitCostMicro = sale.UnitCostMicro
+	m.OnHandAfterMicro = onHandAfter
+	m.AvgCostAfterMicro = avg
+	m.SaleID, m.SaleLineID = sale.SaleID, sale.SaleLineID
+	return m, m.after(l), nil
 }

@@ -14,6 +14,7 @@ import type {
   Customer,
   Product,
   Sale,
+  SaleReturn,
   Unit,
 } from "@/api/client";
 import { BindingError } from "@/api/envelope";
@@ -30,6 +31,9 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { CellInput, SelectField, TextField } from "@/ui/Field";
 import { addToCart, minusOne, plusOne, type CartEntry, type Pick } from "./cart";
+import { forgetCart, keepCart, recoverCart } from "./openCart";
+import { ReturnWizard } from "./ReturnWizard";
+import { QuickRepayment } from "./QuickRepayment";
 import { ratePair } from "@/i18n/figures";
 import { QuantityDialog } from "./QuantityDialog";
 
@@ -66,7 +70,10 @@ export function TillScreen() {
   const [notFound, setNotFound] = useState("");
   const [weigh, setWeigh] = useState<Pick | null>(null);
 
-  const [cart, setCart] = useState<CartEntry[]>([]);
+  // The cart a restart or a power cut interrupted comes back (2026-09-20). Only what was picked and how much of it:
+  // Go prices it again, because a restored total at yesterday's rate would be a lie about what the customer owes.
+  const [cart, setCart] = useState<CartEntry[]>(() => recoverCart() ?? []);
+  const [recovered, setRecovered] = useState(() => recoverCart() !== null);
   const [settlement, setSettlement] = useState("");
   const [saleDiscount, setSaleDiscount] = useState("");
   const [tenderCurrency, setTenderCurrency] = useState("");
@@ -88,8 +95,22 @@ export function TillScreen() {
   const [payError, setPayError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<Sale | null>(null);
+  // The sale just recorded, when no receipt panel opened: a line of confirmation above the scan field, which the next
+  // scan clears. A cashier needs to know the sale went through; they do not need to dismiss anything to sell again.
+  const [done, setDone] = useState<Sale | null>(null);
+  // F8 opens the return wizard (2026-09-20): the customer is at the counter with the paper in hand.
+  const [returning, setReturning] = useState(false);
+  // A customer settling what they owe, without leaving the till (2026-09-20).
+  const [repaying, setRepaying] = useState(false);
+  const [repaid, setRepaid] = useState(false);
+  const [returned, setReturned] = useState<SaleReturn | null>(null);
   const printer = usePrinterSettings();
   const [loadError, setLoadError] = useState<unknown>(null);
+
+  // Kept on every change, forgotten the moment the sale is recorded.
+  useEffect(() => {
+    keepCart(cart);
+  }, [cart]);
 
   const scanField = useRef<HTMLInputElement>(null);
   const focusScan = () => scanField.current?.focus();
@@ -211,6 +232,7 @@ export function TillScreen() {
   });
 
   const scan = async (event: FormEvent) => {
+    setDone(null);
     event.preventDefault();
     const typed = code.trim();
     if (typed === "") {
@@ -282,7 +304,17 @@ export function TillScreen() {
         const sale = await withOwner(() =>
           client.till.checkout({ cart: input, token: quote.token }),
         );
-        setReceipt(sale);
+        // A shop with no printer has nothing to do with a receipt panel: it would stand between the cashier and the
+        // next customer, waiting to be dismissed (the owner's report, 2026-09-20). The sale is recorded either way;
+        // where a printer is set up the panel still opens, because that is where the paper comes from.
+        if (printsItself(printer, sale.payment === "credit" ? "credit_sale" : "cash_sale") || (printer && printer.printer !== "")) {
+          setReceipt(sale);
+        } else {
+          setDone(sale);
+          setTimeout(focusScan, 0);
+        }
+        forgetCart();
+        setRecovered(false);
         resetPayment();
         setCart([]);
         setSaleDiscount("");
@@ -353,12 +385,15 @@ export function TillScreen() {
   // scan field change a counted last line by one, Escape clears search results. Not while a dialog is open — it has the keyboard.
   const keys = useRef<(event: KeyPress) => void>(() => {});
   keys.current = (event: KeyPress) => {
-    if (receipt || picking || weigh) return;
+    if (receipt || picking || weigh || returning || repaying) return;
     const last = cart[cart.length - 1];
     const inScan = document.activeElement === scanField.current;
     if (event.key === "F9") {
       event.preventDefault();
       requestPay();
+    } else if (event.key === "F8") {
+      event.preventDefault();
+      setReturning(true);
     } else if (event.key === "F4") {
       event.preventDefault();
       choosePayment(credit ? "cash" : "credit");
@@ -424,6 +459,23 @@ export function TillScreen() {
         </Alert>
       ) : null}
       {loadError ? <Alert tone="danger" title={errorText(loadError)} /> : null}
+      {recovered && cart.length > 0 ? (
+        <Alert tone="success" title={t("till.cart_recovered")} testId="cart-recovered" />
+      ) : null}
+      {returned ? (
+        <Alert
+          tone="success"
+          title={t("returns.recorded", { number: returned.returnNo, amount: returned.refund })}
+          testId="return-recorded"
+        />
+      ) : null}
+      {done ? (
+        <Alert tone="success" title={t("till.sale_done", { number: String(done.receiptNo), total: done.total })} testId="sale-done">
+          <button type="button" className="underline" onClick={() => setReceipt(done)}>
+            {t("till.sale_done_receipt")}
+          </button>
+        </Alert>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="space-y-4">
@@ -438,6 +490,15 @@ export function TillScreen() {
               autoFocus
             />
           </form>
+          <div className="flex gap-2">
+            <Button onClick={() => setReturning(true)} data-testid="till-return">
+              {t("returns.title")}
+            </Button>
+            <Button onClick={() => setRepaying(true)} data-testid="till-repay">
+              {t("till.repay")}
+            </Button>
+          </div>
+          {repaid ? <Alert tone="success" title={t("till.repaid")} testId="till-repaid" /> : null}
           <p className="text-xs text-text-muted" data-testid="till-keys">
             {t("till.keys")}
           </p>
@@ -876,6 +937,35 @@ export function TillScreen() {
             setStale(false);
           }}
           onClose={() => setPicking(false)}
+        />
+      ) : null}
+
+      {repaying ? (
+        <QuickRepayment
+          localCurrency={local}
+          onDone={() => {
+            setRepaying(false);
+            setRepaid(true);
+            setTimeout(focusScan, 0);
+          }}
+          onClose={() => {
+            setRepaying(false);
+            setTimeout(focusScan, 0);
+          }}
+        />
+      ) : null}
+
+      {returning ? (
+        <ReturnWizard
+          onClose={() => {
+            setReturning(false);
+            setTimeout(focusScan, 0);
+          }}
+          onDone={(r) => {
+            setReturning(false);
+            setReturned(r);
+            setTimeout(focusScan, 0);
+          }}
         />
       ) : null}
 

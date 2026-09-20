@@ -8,6 +8,7 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { SelectField, TextField } from "@/ui/Field";
 import { DayStatement } from "./DayStatement";
+import { ZReportPrint } from "./ZReportPrint";
 import { MonthTable } from "./MonthTable";
 import { ProductsTable } from "./ProductsTable";
 import { StockSection } from "./StockSection";
@@ -225,7 +226,12 @@ export function ReportsScreen() {
         </div>
       ) : null}
 
-      {!hidden && tab === "day" && day ? <DayStatement report={day} /> : null}
+      {!hidden && tab === "day" && day ? (
+        <>
+          <DayStatement report={day} />
+          <ZReportPrint date={day.date} />
+        </>
+      ) : null}
       {!hidden && tab === "month" && monthReport ? <MonthTable report={monthReport} onOpenDay={openDay} /> : null}
       {!hidden && tab === "period" && period ? <MonthTable report={period} onOpenDay={openDay} /> : null}
       {!hidden && tab === "products" && products ? <ProductsTable report={products} /> : null}

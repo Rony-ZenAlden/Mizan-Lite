@@ -30,6 +30,12 @@ func Raster(ts *typeset.Typesetter, doc Document, m Media) *image.Gray {
 						mask.Pix[mask.PixOffset(x, clamp(int(o.y)+t, height))] = 255
 					}
 				}
+			case opFill:
+				for x := int(o.x); x < int(o.x+o.x2); x++ {
+					for y := int(o.y); y < int(o.y+o.y2); y++ {
+						mask.Pix[mask.PixOffset(clamp(x, int(m.Width)), clamp(y, height))] = 255
+					}
+				}
 			case opRect:
 				x0, y0, x1, y1 := int(o.x), int(o.y), int(o.x+o.x2), int(o.y+o.y2)
 				for t := range max(1, int(o.width)) {

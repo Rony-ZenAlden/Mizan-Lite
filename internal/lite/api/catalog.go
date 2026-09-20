@@ -57,6 +57,9 @@ type ProductDTO struct {
 	CostPrice     string `json:"costPrice"`
 	MarginAmount  string `json:"marginAmount"`
 	MarginPercent string `json:"marginPercent"`
+	// ReorderLevel is the quantity at or below which the shop wants to be told to buy more, in the product's own unit,
+	// or "" where none was set — in which case the product is never called low (2026-09-20).
+	ReorderLevel string `json:"reorderLevel"`
 }
 
 // catalogueView is the reference data and package links a product is formatted against.
@@ -126,6 +129,10 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 		// A margin reads as a percentage with one decimal: "25" and "33.3" are what a shopkeeper recognises. A percentage
 		// is not money and is never redenominated — 25% of a price is 25% whichever way the shop reads it.
 		dto.MarginPercent = signedMicro(percent, 1)
+	}
+	// A reorder level is a QUANTITY, not money: it is never redenominated, and it is read in the product's own unit.
+	if p.HasReorder {
+		dto.ReorderLevel = domain.FormatMicro(p.ReorderMicro, v.ref.Units[p.UnitCode].InputDecimals)
 	}
 	return dto
 }
@@ -407,5 +414,26 @@ func (c *Catalog) ClearPackage(productID string) envelope.Result[ProductDTO] {
 			return domain.Product{}, err
 		}
 		return app.Catalog.Get(ctx, parsed)
+	})
+}
+
+// SetReorderInput is the level at or below which a product is low, in its own unit. "" clears it.
+type SetReorderInput struct {
+	ID         string `json:"id"`
+	RowVersion int64  `json:"rowVersion"`
+	Level      string `json:"level"`
+}
+
+// SetReorder records when a product should be called low (2026-09-20).
+//
+// Not owner-only: it changes no price, no quantity and no money, only when a badge appears. A shopkeeper who has
+// noticed the bread keeps running out should be able to say so without fetching the owner.
+func (c *Catalog) SetReorder(in SetReorderInput) envelope.Result[ProductDTO] {
+	return c.withProduct("Catalog.SetReorder", func(ctx context.Context, app *bootstrap.App) (domain.Product, error) {
+		parsed, err := parseProductID(in.ID)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		return app.Catalog.SetReorder(ctx, catalog.SetReorderInput{ID: parsed, RowVersion: in.RowVersion, Level: in.Level})
 	})
 }

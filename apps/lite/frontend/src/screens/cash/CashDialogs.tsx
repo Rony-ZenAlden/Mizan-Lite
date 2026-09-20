@@ -21,6 +21,9 @@ export function MoneyDialog({ kind, categories, onDone, onClose }: { kind: Money
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(categories[0] ?? "other");
   const [fromDrawer, setFromDrawer] = useState(true);
+  // An expense is the day's small change unless the shop says it recurs (2026-09-20). Nothing is posted automatically:
+  // marking it monthly tells the reports how to read it, and the shop still records it when it pays it.
+  const [recurrence, setRecurrence] = useState<"once" | "monthly">("once");
   const [note, setNote] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -33,7 +36,15 @@ export function MoneyDialog({ kind, categories, onDone, onClose }: { kind: Money
     try {
       onDone(
         await withOwner(() =>
-          client.cash.record({ kind, currency, amount, category: kind === "expense" ? category : "", fromDrawer: kind === "expense" && fromDrawer, note }),
+          client.cash.record({
+            kind,
+            currency,
+            amount,
+            category: kind === "expense" ? category : "",
+            fromDrawer: kind === "expense" && fromDrawer,
+            recurrence: kind === "expense" ? recurrence : "once",
+            note,
+          }),
         ),
       );
     } catch (e) {
@@ -59,6 +70,16 @@ export function MoneyDialog({ kind, categories, onDone, onClose }: { kind: Money
                   {tDynamic(`cash.category.${c}`)}
                 </option>
               ))}
+            </SelectField>
+            <SelectField
+              label={t("cash.recurrence")}
+              value={recurrence}
+              onChange={(e) => setRecurrence(e.target.value as "once" | "monthly")}
+              hint={t("cash.recurrence_hint")}
+              data-testid="cash-recurrence"
+            >
+              <option value="once">{t("cash.recurrence.once")}</option>
+              <option value="monthly">{t("cash.recurrence.monthly")}</option>
             </SelectField>
             <Checkbox label={t("cash.from_drawer")} checked={fromDrawer} onChange={(e) => setFromDrawer(e.target.checked)} />
           </>

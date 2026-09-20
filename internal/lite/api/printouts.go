@@ -167,3 +167,113 @@ func (w words) testDocument(printer string) documents.Document {
 func (w words) rate(rate, local string) string {
 	return w.t("doc.rate", "usd", w.money("1", "USD"), "local", w.money(rate, local))
 }
+
+// labelDocument is a shelf label or price tag: the product's name, its price, and a Code 128 symbol of its barcode
+// (the owner's request, 2026-09-20).
+//
+// It is built for the receipt printer the shop already owns, not for a dedicated label printer: a 40 mm or 80 mm roll
+// cut short is what a pantry shop has. The symbol is drawn from the barcode the CATALOGUE holds, so what the label
+// scans as is what the till looks up.
+func (w words) labelDocument(p ProductDTO, copies int) documents.Document {
+	var blocks []documents.Block
+	for i := range copies {
+		if i > 0 {
+			blocks = append(blocks, documents.Rule{Dashed: true})
+		}
+		blocks = append(blocks,
+			documents.Paragraph{Text: w.user(w.productName(p)), Center: true, Bold: true},
+			documents.Paragraph{Text: documents.Money(p.Price, w.t("currency.short."+p.PriceCurrency)), Center: true, Bold: true})
+		if p.ConvertedPrice != "" {
+			blocks = append(blocks, documents.Paragraph{
+				Text:  documents.Money(p.ConvertedPrice, w.t("currency.short."+p.ConvertedCurrency)),
+				Small: true, Center: true})
+		}
+		// A product with no barcode still gets a label: the price is the point of it. The symbol is simply absent
+		// rather than made up, because a made-up symbol scans as a product the shop does not have.
+		if symbol, ok := documents.BarcodeOf(p.Barcode, p.Barcode, 3.5); ok {
+			blocks = append(blocks, symbol)
+		}
+	}
+	return documents.Document{Direction: w.dir, Blocks: blocks}
+}
+
+// productName is the product's name in the reader's language, falling back to the Arabic every product has.
+func (w words) productName(p ProductDTO) string {
+	if w.loc == "en" && p.NameEN != "" {
+		return p.NameEN
+	}
+	return p.NameAR
+}
+
+// zReportDocument is the end-of-day statement on receipt paper (the owner's request, 2026-09-20).
+//
+// Built from the very DayReportDTO the Reports screen shows, so the paper and the screen cannot disagree (D-L7.6).
+// A shop with no printer reads it on the screen; a shop with one can put it in the till drawer at close.
+func (w words) zReportDocument(day DayReportDTO, shopName string) documents.Document {
+	blocks := w.header(shopName, 1, w.t("zreport.title"))
+	blocks = append(blocks, documents.Pairs{Rows: []documents.Pair{
+		{Label: w.t("doc.date"), Value: documents.T(w.fig(day.Date))},
+		{Label: w.t("zreport.printed"), Value: documents.T(w.now())},
+	}}, documents.Rule{})
+
+	local := func(a AmountDTO) documents.Cell { return documents.T(w.money(a.Local, day.LocalCurrency)) }
+
+	blocks = append(blocks,
+		documents.Heading{Text: w.t("zreport.sales")},
+		documents.Pairs{Rows: []documents.Pair{
+			{Label: w.t("reports.sales_count"), Value: documents.T(w.fig(strconv.Itoa(day.Profit.Sales)))},
+			{Label: w.t("reports.revenue"), Value: documents.T(w.money(day.Profit.RevenueLocal, day.LocalCurrency))},
+			{Label: w.t("reports.cost"), Value: documents.T(w.money(day.Profit.CostLocal, day.LocalCurrency))},
+			{Label: w.t("reports.profit"), Value: documents.T(w.money(day.Profit.ProfitLocal, day.LocalCurrency)), Bold: true},
+		}})
+
+	// Returns, where any came back — a line that is absent on a day nothing was returned rather than a printed zero.
+	if day.Returns.Count > 0 {
+		blocks = append(blocks, documents.Rule{Dashed: true},
+			documents.Heading{Text: w.t("zreport.returns")},
+			documents.Pairs{Rows: []documents.Pair{
+				{Label: w.t("zreport.returns_count"), Value: documents.T(w.fig(strconv.Itoa(day.Returns.Count)))},
+				{Label: w.t("zreport.returns_refund"), Value: local(day.Returns.Refund)},
+				{Label: w.t("zreport.returns_profit"), Value: local(day.Returns.Profit)},
+			}})
+	}
+
+	rows := []documents.Pair{}
+	if !isZeroFigure(day.DailyExpenses.Local) {
+		rows = append(rows, documents.Pair{Label: w.t("zreport.expenses_daily"), Value: local(day.DailyExpenses)})
+	}
+	if !isZeroFigure(day.PeriodicExpenses.Local) {
+		rows = append(rows, documents.Pair{Label: w.t("zreport.expenses_periodic"), Value: local(day.PeriodicExpenses)})
+	}
+	if len(rows) > 0 {
+		rows = append(rows, documents.Pair{Label: w.t("reports.expenses"), Value: local(day.Expenses), Bold: true})
+		blocks = append(blocks, documents.Rule{Dashed: true},
+			documents.Heading{Text: w.t("zreport.expenses")}, documents.Pairs{Rows: rows})
+	}
+
+	if !isZeroFigure(day.Losses.Out.Local) || !isZeroFigure(day.BadDebts.Local) {
+		blocks = append(blocks, documents.Rule{Dashed: true}, documents.Pairs{Rows: []documents.Pair{
+			{Label: w.t("reports.losses"), Value: local(day.Losses.Out)},
+			{Label: w.t("reports.bad_debts"), Value: local(day.BadDebts)},
+		}})
+	}
+
+	blocks = append(blocks, documents.Rule{}, documents.Pairs{Rows: []documents.Pair{
+		{Label: w.t("reports.net"), Value: documents.T(w.money(day.NetLocal, day.LocalCurrency)), Bold: true},
+	}})
+
+	// What is in the drawer, per currency, which is what the person closing up is actually counting against.
+	if len(day.Takings) > 0 {
+		takings := make([]documents.Pair, 0, len(day.Takings))
+		for _, t := range day.Takings {
+			takings = append(takings, documents.Pair{
+				Label: w.t("currency." + t.Currency), Value: documents.T(w.money(t.Charged, t.Currency))})
+		}
+		blocks = append(blocks, documents.Rule{Dashed: true},
+			documents.Heading{Text: w.t("zreport.takings")}, documents.Pairs{Rows: takings})
+	}
+	if day.Unconverted > 0 {
+		blocks = append(blocks, documents.Paragraph{Text: w.t("reports.unconverted"), Small: true})
+	}
+	return documents.Document{Direction: w.dir, Blocks: append(blocks, w.footer()...)}
+}

@@ -41,6 +41,7 @@ export type ProductQuery = Plain<api.ProductQueryDTO>;
 export type CreateProductInput = Plain<api.CreateProductInput>;
 export type UpdateProductInput = Plain<api.UpdateProductInput>;
 export type SetPriceInput = Plain<api.SetPriceInput>;
+export type SetReorderInput = Plain<api.SetReorderInput>;
 export type SetActiveInput = Plain<api.SetActiveInput>;
 export type SetQuickSlotInput = Plain<api.SetQuickSlotInput>;
 export type OwnerStatus = Plain<api.OwnerStatusDTO>;
@@ -77,6 +78,11 @@ export type SaleLine = Plain<api.SaleLineDTO>;
 export type Day = Plain<api.DayDTO>;
 export type DayTotals = Plain<api.DayTotalsDTO>;
 export type VoidInput = Plain<api.VoidInput>;
+export type ReturnInput = Plain<api.ReturnInput>;
+export type ReturnLineInput = Plain<api.ReturnLineInput>;
+export type Returnable = Plain<api.ReturnableDTO>;
+export type ReturnableLine = Plain<api.ReturnableLineDTO>;
+export type SaleReturn = Plain<api.ReturnDTO>;
 export type SaleFinding = Plain<api.SaleFindingDTO>;
 export type Customer = Plain<api.CustomerDTO>;
 export type Balance = Plain<api.BalanceDTO>;
@@ -150,6 +156,7 @@ export function createClient() {
       updateProduct: (input: UpdateProductInput) =>
         unwrap(() => Catalog.UpdateProduct(api.UpdateProductInput.createFrom(input))),
       setPrice: (input: SetPriceInput) => unwrap(() => Catalog.SetPrice(api.SetPriceInput.createFrom(input))),
+      setReorder: (input: SetReorderInput) => unwrap(() => Catalog.SetReorder(api.SetReorderInput.createFrom(input))),
       setActive: (input: SetActiveInput) => unwrap(() => Catalog.SetActive(api.SetActiveInput.createFrom(input))),
       setQuickSlot: (input: SetQuickSlotInput) =>
         unwrap(() => Catalog.SetQuickSlot(api.SetQuickSlotInput.createFrom(input))),
@@ -192,6 +199,9 @@ export function createClient() {
       list: (businessDate: string) => unwrap(() => Sales.List(businessDate)),
       receipt: (saleId: string) => unwrap(() => Sales.Receipt(saleId)),
       void: (input: VoidInput) => unwrap(() => Sales.Void(api.VoidInput.createFrom(input))),
+      returnable: (receiptNo: string) => unwrap(() => Sales.Returnable(receiptNo)),
+      quoteReturn: (input: ReturnInput) => unwrap(() => Sales.QuoteReturn(api.ReturnInput.createFrom(input))),
+      recordReturn: (input: ReturnInput) => unwrap(() => Sales.Return(api.ReturnInput.createFrom(input))),
       verify: () => unwrap(Sales.Verify),
     },
     customers: {
@@ -236,6 +246,9 @@ export function createClient() {
       sale: (saleId: string) => unwrap(() => Print.Sale(saleId)),
       entry: (entryId: string) => unwrap(() => Print.Entry(entryId)),
       preview: (kind: "sale" | "entry" | "test", id: string) => unwrap(() => Print.Preview(api.PreviewInput.createFrom({ kind, id }))),
+      // A label is "<product id>" or "<product id>*<copies>"; the Z-report takes a business date, "" for today.
+      label: (productId: string, copies = 1) => unwrap(() => Print.Label(copies > 1 ? `${productId}*${copies}` : productId)),
+      zReport: (date: string) => unwrap(() => Print.ZReport(date)),
     },
     printers: {
       list: () => unwrap(Printers.List),

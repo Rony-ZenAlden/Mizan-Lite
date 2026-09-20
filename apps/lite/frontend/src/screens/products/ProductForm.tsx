@@ -31,6 +31,8 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
   // The cost price, and the margin between it and the selling price (L9). `lastTyped` remembers which box the shopkeeper
   // touched last, because that is the one Go should work the other two out from — and only Go does that arithmetic.
   const [costPrice, setCostPrice] = useState(product?.costPrice ?? "");
+  // The level at or below which the shop wants to be told to buy more (2026-09-20). Empty means never tell me.
+  const [reorderLevel, setReorderLevel] = useState(product?.reorderLevel ?? "");
   const [marginPercent, setMarginPercent] = useState("");
   const [marginAmount, setMarginAmount] = useState("");
   const [lastTyped, setLastTyped] = useState<"price" | "percent" | "amount">("price");
@@ -101,6 +103,10 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
           }),
         );
       }
+      if (reorderLevel.trim() !== (product?.reorderLevel ?? "")) {
+        // Not an owner's act: it changes no price and no quantity, only when a badge appears.
+        current = await client.catalog.setReorder({ id: current.id, rowVersion: current.rowVersion, level: reorderLevel.trim() });
+      }
       onSaved(current);
     } catch (e) {
       if (!(e instanceof OwnerCancelled)) setError(e);
@@ -116,6 +122,16 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
         {duplicateInactive ? <p className="text-xs text-text-muted">{t("products.duplicate_inactive")}</p> : null}
         <TextField label={t("product.name_en")} value={nameEn} onChange={(e) => setNameEn(e.target.value)} error={fieldError("nameEn")} maxLength={200} dir="ltr" />
         <TextField label={t("product.barcode")} value={barcode} onChange={(e) => setBarcode(e.target.value)} error={fieldError("barcode")} maxLength={64} dir="ltr" autoComplete="off" />
+        <TextField
+          label={t("catalog.reorder")}
+          hint={t("catalog.reorder_hint")}
+          value={reorderLevel}
+          onChange={(e) => setReorderLevel(e.target.value)}
+          error={fieldError("reorderLevel")}
+          inputMode="decimal"
+          dir="ltr"
+          autoComplete="off"
+        />
         <SelectField
           label={t("product.unit")}
           value={unitCode}

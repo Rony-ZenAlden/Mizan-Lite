@@ -39,6 +39,8 @@ func PDF(ts *typeset.Typesetter, doc Document) []byte {
 					dash = "[2 2] 0 d"
 				}
 				fmt.Fprintf(&b, "%s %s w %s %s m %s %s l S\n", dash, num(o.width), num(o.x), num(A4.Height-o.y), num(o.x2), num(A4.Height-o.y2))
+			case opFill:
+				fmt.Fprintf(&b, "%s %s %s %s re f\n", num(o.x), num(A4.Height-o.y-o.y2), num(o.x2), num(o.y2))
 			case opRect:
 				fmt.Fprintf(&b, "[] 0 d %s w %s %s %s %s re S\n", num(o.width), num(o.x), num(A4.Height-o.y-o.y2), num(o.x2), num(o.y2))
 			}

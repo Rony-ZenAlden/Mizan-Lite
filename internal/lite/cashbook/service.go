@@ -99,6 +99,8 @@ type RecordInput struct {
 	Amount     string
 	Category   string
 	FromDrawer bool
+	// Recurrence is "" or "once" for the day's small change, "monthly" for rent and the bills (2026-09-20).
+	Recurrence string
 	Note       string
 }
 
@@ -110,7 +112,8 @@ func (s *Service) Record(ctx context.Context, in RecordInput) (domain.Entry, err
 		if err != nil {
 			return err
 		}
-		e, err := domain.NewMoney(domain.Draft{Kind: in.Kind, Currency: cur, Amount: in.Amount, Category: in.Category, FromDrawer: in.FromDrawer, Note: in.Note})
+		e, err := domain.NewMoney(domain.Draft{Kind: in.Kind, Currency: cur, Amount: in.Amount, Category: in.Category,
+			FromDrawer: in.FromDrawer, Recurrence: in.Recurrence, Note: in.Note})
 		if err != nil {
 			return err
 		}

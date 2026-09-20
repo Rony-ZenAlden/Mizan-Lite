@@ -24,7 +24,7 @@ type Store struct {
 func NewStore(db database.DB, clk clock.Clock) *Store { return &Store{db: db, clk: clk} }
 
 const productColumns = `id, name_ar, name_en, barcode, uom_code, price_currency, sell_price_micro,
-	cost_price_micro, quick_slot, is_active, row_version`
+	cost_price_micro, reorder_micro, quick_slot, is_active, row_version`
 
 func (s *Store) Units(ctx context.Context) ([]domain.Unit, error) {
 	rows, err := s.db.Reader(ctx).QueryContext(ctx,
@@ -71,15 +71,18 @@ func scanProduct(row scanner) (domain.Product, error) {
 		nameEN  sql.NullString
 		barcode sql.NullString
 		cost    sql.NullInt64
+		reorder sql.NullInt64
 		slot    sql.NullInt64
 		active  int
 	)
 	if err := row.Scan(&rawID, &p.NameAR, &nameEN, &barcode, &p.UnitCode, &p.PriceCurrency,
-		&p.PriceMicro, &cost, &slot, &active, &p.RowVersion); err != nil {
+		&p.PriceMicro, &cost, &reorder, &slot, &active, &p.RowVersion); err != nil {
 		return domain.Product{}, err
 	}
-	// NULL is "nobody has said what this costs", which is not the same as a cost of nothing (L9).
+	// NULL is "nobody has said what this costs", which is not the same as a cost of nothing (L9). The reorder level
+	// reads the same way: no level means the product is never called low (2026-09-20).
 	p.CostMicro, p.HasCost = cost.Int64, cost.Valid
+	p.ReorderMicro, p.HasReorder = reorder.Int64, reorder.Valid
 	parsed, err := id.Parse(rawID)
 	if err != nil {
 		return domain.Product{}, err
@@ -196,11 +199,11 @@ func (s *Store) Insert(ctx context.Context, p domain.Product) error {
 	now := clock.Format(s.clk.Now())
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `
 		INSERT INTO products (id, name_ar, name_en, name_key, search_text, barcode, uom_code,
-		                      price_currency, sell_price_micro, cost_price_micro, cost_currency,
+		                      price_currency, sell_price_micro, cost_price_micro, cost_currency, reorder_micro,
 		                      quick_slot, is_active, row_version, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID.String(), p.NameAR, nullable(p.NameEN), p.NameKey(), p.SearchText(), nullable(p.Barcode),
-		p.UnitCode, p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p),
+		p.UnitCode, p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p), nullableReorder(p),
 		nullableSlot(p.QuickSlot), boolInt(p.Active), p.RowVersion, now, now)
 	return s.db.Dialect().TranslateError(err)
 }
@@ -211,12 +214,12 @@ func (s *Store) Update(ctx context.Context, p domain.Product) (domain.Product, e
 	res, err := s.db.Writer(ctx).ExecContext(ctx, `
 		UPDATE products
 		   SET name_ar = ?, name_en = ?, name_key = ?, search_text = ?, barcode = ?,
-		       price_currency = ?, sell_price_micro = ?, cost_price_micro = ?, cost_currency = ?,
+		       price_currency = ?, sell_price_micro = ?, cost_price_micro = ?, cost_currency = ?, reorder_micro = ?,
 		       quick_slot = ?, is_active = ?,
 		       row_version = row_version + 1, updated_at = ?
 		 WHERE id = ? AND row_version = ?`,
 		p.NameAR, nullable(p.NameEN), p.NameKey(), p.SearchText(), nullable(p.Barcode),
-		p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p),
+		p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p), nullableReorder(p),
 		nullableSlot(p.QuickSlot), boolInt(p.Active),
 		clock.Format(s.clk.Now()), p.ID.String(), p.RowVersion)
 	if err != nil {
@@ -326,6 +329,15 @@ func nullableCost(p domain.Product) any {
 		return nil
 	}
 	return p.CostMicro
+}
+
+// nullableReorder writes NULL where no level was set: a product nobody has given one is never called low, which is
+// not the same as a level of zero.
+func nullableReorder(p domain.Product) any {
+	if !p.HasReorder {
+		return nil
+	}
+	return p.ReorderMicro
 }
 
 // nullableCostCurrency keeps the pair whole: the schema refuses an amount without its currency.

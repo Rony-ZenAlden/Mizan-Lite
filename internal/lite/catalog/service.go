@@ -497,3 +497,20 @@ func (s *Service) checkUnique(ctx context.Context, p domain.Product) error {
 	}
 	return nil
 }
+
+// SetReorderInput is the level at or below which a product is low, typed in its own unit. "" clears it.
+type SetReorderInput struct {
+	ID         id.ID
+	RowVersion int64
+	Level      string
+}
+
+// SetReorder records the reorder level (2026-09-20).
+//
+// Unguarded. It changes no price, no quantity and no money — it changes when a badge appears. Putting it behind the
+// owner's PIN would mean a shopkeeper who noticed they keep running out of bread has to fetch the owner to say so.
+func (s *Service) SetReorder(ctx context.Context, in SetReorderInput) (domain.Product, error) {
+	return s.change(ctx, in.ID, in.RowVersion, func(_ context.Context, current domain.Product, ref domain.Reference) (domain.Product, error) {
+		return current.SetReorder(in.Level, ref)
+	})
+}

@@ -11,9 +11,9 @@ const TONES: Record<Tone, string> = {
  * A message block. A danger alert is announced immediately (role="alert"); anything else politely
  * (role="status"), so a screen reader does not interrupt a cashier for good news.
  */
-export function Alert({ tone, title, children }: { tone: Tone; title: string; children?: ReactNode }) {
+export function Alert({ tone, title, children, testId }: { tone: Tone; title: string; children?: ReactNode; testId?: string }) {
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={`rounded-md border p-4 ${TONES[tone]}`}>
+    <div role={tone === "danger" ? "alert" : "status"} data-testid={testId} className={`rounded-md border p-4 ${TONES[tone]}`}>
       <p className="font-semibold">{title}</p>
       {children ? <div className="mt-1 text-sm">{children}</div> : null}
     </div>

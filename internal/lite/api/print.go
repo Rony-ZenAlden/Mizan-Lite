@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"strconv"
+	"strings"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
@@ -123,6 +124,43 @@ func build(ctx context.Context, app *bootstrap.App, w words, kind, rawID string)
 			cash: k == printing.KindPayment, title: w.t("doc.voucher_payment")}, nil
 	case "test":
 		return printable{doc: w.testDocument(w.settings.Receipt.Printer), kind: printing.KindTest, copyNo: 1, title: w.t("doc.test_title")}, nil
+	case "label":
+		// "<product id>" or "<product id>×<copies>": a shelf needs one tag, a new delivery needs a dozen.
+		rawProduct, copies := rawID, 1
+		if at := strings.LastIndex(rawID, "*"); at > 0 {
+			rawProduct = rawID[:at]
+			n, convErr := strconv.Atoi(rawID[at+1:])
+			if convErr != nil || n < 1 || n > MaxLabelCopies {
+				return printable{}, errs.Validation(CodeNotPrintable, "between one and forty labels").
+					WithParam("max", strconv.Itoa(MaxLabelCopies))
+			}
+			copies = n
+		}
+		productID, err := id.Parse(rawProduct)
+		if err != nil {
+			return printable{}, errs.NotFound(CodeNotPrintable, "no such product")
+		}
+		p, err := app.Catalog.Get(ctx, productID)
+		if err != nil {
+			return printable{}, err
+		}
+		view, err := loadCatalogueView(ctx, app)
+		if err != nil {
+			return printable{}, err
+		}
+		return printable{doc: w.labelDocument(toProductDTO(p, view), copies), kind: printing.KindLabel,
+			subject: productID, copyNo: 1, title: w.t("label.title")}, nil
+	case "zreport":
+		day, err := app.Reports.Day(ctx, rawID)
+		if err != nil {
+			return printable{}, err
+		}
+		v, err := newReportView(ctx, app)
+		if err != nil {
+			return printable{}, err
+		}
+		return printable{doc: w.zReportDocument(v.day(day, true), w.settings.ShopName), kind: printing.KindZReport,
+			copyNo: 1, title: w.t("zreport.title")}, nil
 	}
 	return printable{}, errs.Validation(CodeNotPrintable, "unknown document").WithParam("kind", kind)
 }
@@ -172,6 +210,19 @@ func (p *Print) print(method, kind, rawID string) envelope.Result[PrintResultDTO
 		}
 		return p.core.send(ctx, app, w, doc)
 	})
+}
+
+// MaxLabelCopies bounds one print: a roll is not infinite, and a typo in a copies box should not empty it.
+const MaxLabelCopies = 40
+
+// Label prints a product's shelf label with its barcode. id is the product, optionally "<id>*<copies>" (2026-09-20).
+func (p *Print) Label(productAndCopies string) envelope.Result[PrintResultDTO] {
+	return p.print("Print.Label", "label", productAndCopies)
+}
+
+// ZReport prints the end-of-day statement on receipt paper. date is "" for today.
+func (p *Print) ZReport(date string) envelope.Result[PrintResultDTO] {
+	return p.print("Print.ZReport", "zreport", date)
 }
 
 // Sale prints a sale's receipt; a reprint is stamped as a copy. Anyone at the counter may.

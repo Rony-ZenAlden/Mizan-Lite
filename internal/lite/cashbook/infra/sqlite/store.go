@@ -26,7 +26,7 @@ type Store struct {
 func NewStore(db database.DB, clk clock.Clock) *Store { return &Store{db: db, clk: clk} }
 
 const columns = `id, seq, business_date, occurred_at, kind, currency, amount_minor, expected_minor, category, from_drawer,
-	reverses_id, fx_rate_id, local_per_usd_nano, note`
+	recurrence, reverses_id, fx_rate_id, local_per_usd_nano, note`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -34,11 +34,12 @@ func scan(row scanner) (domain.Entry, error) {
 	var (
 		e                              domain.Entry
 		rawID, occurred, kind          string
+		recurrence                     string
 		expected, fromDrawer, nano     sql.NullInt64
 		category, reverses, rate, note sql.NullString
 	)
 	if err := row.Scan(&rawID, &e.Seq, &e.BusinessDate, &occurred, &kind, &e.Currency, &e.AmountMinor, &expected, &category, &fromDrawer,
-		&reverses, &rate, &nano, &note); err != nil {
+		&recurrence, &reverses, &rate, &nano, &note); err != nil {
 		return domain.Entry{}, err
 	}
 	var err error
@@ -62,6 +63,7 @@ func scan(row scanner) (domain.Entry, error) {
 	e.Kind = domain.Kind(kind)
 	e.ExpectedMinor, e.FromDrawer, e.RateNano = expected.Int64, fromDrawer.Int64 == 1, nano.Int64
 	e.Category, e.Note = category.String, note.String
+	e.Recurrence = domain.Recurrence(recurrence)
 	return e, nil
 }
 
@@ -97,9 +99,9 @@ func (s *Store) Insert(ctx context.Context, e domain.Entry) error {
 		reverses = e.ReversesID.String()
 	}
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `INSERT INTO cash_entries (`+columns+`, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID.String(), e.Seq, e.BusinessDate, clock.Format(e.OccurredAt), string(e.Kind), e.Currency, e.AmountMinor, expected, category,
-		fromDrawer, reverses, rate, nano, nullable(e.Note), clock.Format(s.clk.Now()))
+		fromDrawer, recurrenceOf(e), reverses, rate, nano, nullable(e.Note), clock.Format(s.clk.Now()))
 	return s.db.Dialect().TranslateError(err)
 }
 
@@ -160,4 +162,13 @@ func (s *Store) translate(err error) error {
 
 func corrupt(err error) error {
 	return errs.Wrap(err, errs.CategoryInternal, CodeCorrupt, "a cash book row does not read back")
+}
+
+// recurrenceOf writes the one-off every entry was before 2026-09-20 where nothing was chosen, so a row is never NULL
+// in a NOT NULL column and an old entry keeps reading as what it was.
+func recurrenceOf(e domain.Entry) string {
+	if e.Recurrence == "" {
+		return string(domain.Once)
+	}
+	return string(e.Recurrence)
 }

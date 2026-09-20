@@ -80,7 +80,7 @@ describe("CashScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await settle();
     expect(record).toHaveBeenCalledTimes(2);
-    expect(record).toHaveBeenLastCalledWith({ kind: "expense", currency: "SYP", amount: "250000", category: "electricity", fromDrawer: false, note: "" });
+    expect(record).toHaveBeenLastCalledWith({ kind: "expense", currency: "SYP", amount: "250000", category: "electricity", fromDrawer: false, recurrence: "once", note: "" });
     expect(screen.queryByRole("dialog", { name: "Record an expense" })).not.toBeInTheDocument();
   });
 
@@ -96,7 +96,7 @@ describe("CashScreen", () => {
     await userEvent.type(within(dialog).getByLabelText("Amount"), "1.5");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await settle();
-    expect(record).toHaveBeenCalledWith({ kind: "withdrawal", currency: "SYP", amount: "1.5", category: "", fromDrawer: false, note: "" });
+    expect(record).toHaveBeenCalledWith({ kind: "withdrawal", currency: "SYP", amount: "1.5", category: "", fromDrawer: false, recurrence: "once", note: "" });
     expect(within(dialog).getByRole("alert")).toHaveTextContent("A SYP amount takes at most 0 decimal places.");
   });
 
@@ -212,5 +212,31 @@ describe("CountDialog — what counting is for (owner's testing, 2026-09-16)", (
       expect(dialog).toHaveTextContent(explanation);
       unmount();
     }
+  });
+});
+
+describe("CashScreen — an expense that recurs (owner's request, 2026-09-20)", () => {
+  it("records rent as monthly, and leaves the day's small change a one-off", async () => {
+    const record = vi.fn(async () => aCashEntry({ kind: "expense", category: "rent", amount: "250000" }));
+    renderWithProviders(<CashScreen />, { client: fakeClient({ cash: { record } }), locale: "en" });
+    await settle();
+
+    await userEvent.click(screen.getByRole("button", { name: "Expense" }));
+    await userEvent.type(screen.getByLabelText("Amount"), "250000");
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "rent");
+    // The control says plainly that nothing is posted by itself — the shop still records it when it pays it.
+    expect(screen.getByTestId("cash-recurrence")).toHaveTextContent("Monthly");
+    await userEvent.selectOptions(screen.getByLabelText("How often"), "monthly");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await settle();
+
+    expect(record).toHaveBeenLastCalledWith(expect.objectContaining({ category: "rent", recurrence: "monthly" }));
+  });
+
+  it("offers no recurrence on a withdrawal, which is an event and not a cycle", async () => {
+    renderWithProviders(<CashScreen />, { client: fakeClient(), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Take money out" }));
+    expect(screen.queryByTestId("cash-recurrence")).not.toBeInTheDocument();
   });
 });

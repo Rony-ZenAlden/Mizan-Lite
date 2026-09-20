@@ -18,6 +18,11 @@ const (
 	KindWriteOff Kind = "write_off"
 	KindRefund   Kind = "refund"
 	KindReversal Kind = "reversal"
+	// KindSaleReturn takes goods handed back off what a customer owes (2026-09-20).
+	//
+	// It is not a write-off: a write-off is the shop forgiving a debt it does not expect to collect, and the reports
+	// count one as a BAD DEBT. A customer returning goods has not failed to pay anybody.
+	KindSaleReturn Kind = "sale_return"
 )
 
 // Currency is a currency's code and decimals.
@@ -99,6 +104,13 @@ func (p Place) Append(e Entry) (Entry, error) {
 		if e.AmountMinor < 0 || after > 0 {
 			return Entry{}, errs.Validation(CodeRefundTooLarge, "a refund pays back at most what is owed").
 				WithField(FieldAmount, CodeRefundTooLarge, "too large")
+		}
+	case KindSaleReturn:
+		// Goods coming back reduce the balance, and MAY take it below zero: a customer who owes 2,000 and returns
+		// 5,000 of goods is owed 3,000, which is what a refund then pays back. Refusing it would leave the shop
+		// unable to record what plainly happened.
+		if e.AmountMinor > 0 {
+			return Entry{}, errs.Validation(CodeAmountRequired, "a return reduces a balance")
 		}
 	case KindReversal:
 	default:

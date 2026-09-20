@@ -10,6 +10,7 @@ import { Checkbox } from "@/ui/Checkbox";
 import { TextField } from "@/ui/Field";
 import { ImportDialog } from "./ImportDialog";
 import { ProductForm } from "./ProductForm";
+import { LabelDialog } from "./LabelDialog";
 
 /** How long typing pauses before a search is sent. */
 export const SEARCH_DEBOUNCE_MS = 200;
@@ -25,6 +26,7 @@ export function ProductsScreen() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [labelling, setLabelling] = useState<Product | null>(null);
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<ImportResult | null>(null);
@@ -135,6 +137,7 @@ export function ProductsScreen() {
                   <td className="p-2">
                     <div className="flex gap-2">
                       <Button onClick={() => setEditing(p)}>{t("products.edit")}</Button>
+                      <Button onClick={() => setLabelling(p)}>{t("label.print")}</Button>
                       {p.active ? (
                         <Button onClick={() => void act(() => withOwner(() => client.catalog.setActive({ id: p.id, rowVersion: p.rowVersion, active: false })))}>
                           {t("products.deactivate")}
@@ -164,6 +167,8 @@ export function ProductsScreen() {
           }}
         />
       ) : null}
+      {labelling ? <LabelDialog product={labelling} onClose={() => setLabelling(null)} /> : null}
+
       {editing ? (
         <ProductForm
           product={editing === "new" ? undefined : editing}

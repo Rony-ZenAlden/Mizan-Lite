@@ -89,6 +89,11 @@ type Product struct {
 	CostMicro int64
 	// HasCost separates "costs nothing" from "nobody has said" — a shop that has never typed a cost is not claiming zero.
 	HasCost bool
+	// ReorderMicro is the quantity at or below which the shop wants to be told to buy more, in the product's own unit
+	// at 10⁻⁶ (2026-09-20). Meaningful only when HasReorder.
+	ReorderMicro int64
+	// HasReorder separates "tell me at zero" from "nobody has said" — a product with no level is never called low.
+	HasReorder bool
 	// QuickSlot is the till button, 1–QuickSlots, or 0 for none.
 	QuickSlot  int
 	Active     bool

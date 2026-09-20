@@ -93,6 +93,19 @@ type Stamp struct{ Text string }
 // Signature is a labelled line to sign on.
 type Signature struct{ Label string }
 
+// Barcode is a Code 128 symbol with its digits printed under it — a shelf label's whole point (2026-09-20).
+//
+// The renderer draws Bars, not Text: encoding happens once, in barcode.go, so the PDF and the thermal bitmap cannot
+// encode the same code two different ways. Text is what is printed underneath for a person to read.
+type Barcode struct {
+	// Bars are alternating bar and space widths in modules, starting with a bar.
+	Bars []int
+	// Text is the human-readable line under the symbol; "" prints none.
+	Text string
+	// HeightLines is how tall the symbol is, in body lines.
+	HeightLines float32
+}
+
 func (Title) block()     {}
 func (Heading) block()   {}
 func (Pairs) block()     {}
@@ -102,6 +115,7 @@ func (Rule) block()      {}
 func (Space) block()     {}
 func (Stamp) block()     {}
 func (Signature) block() {}
+func (Barcode) block()   {}
 
 // Document is what is rendered.
 type Document struct {
@@ -212,6 +226,10 @@ func Unisolated(doc Document) []string {
 			check(b.Text, false)
 		case Signature:
 			check(b.Label, false)
+		case Barcode:
+			// The digits under a symbol ARE a figure: they are drawn left to right by the layout, whatever the
+			// paragraph direction, because a barcode reads one way in every language.
+			check(b.Text, true)
 		case Pairs:
 			for _, p := range b.Rows {
 				check(p.Label, false)

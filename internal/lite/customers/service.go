@@ -908,3 +908,38 @@ func (s *Service) VerifyUnguarded(ctx context.Context) ([]domain.Finding, error)
 func money(minor int64, c domain.Currency) string {
 	return numinput.FormatFixed(minor, c.Decimals, c.Decimals) + " " + c.Code
 }
+
+// ─── the till's return port ──────────────────────────────────────────────────
+
+// ReturnInput is goods handed back, taken off what a customer owes (2026-09-20).
+type ReturnInput struct {
+	CustomerID   id.ID
+	Currency     string
+	AmountMinor  int64
+	Reason       string
+	BusinessDate string
+	At           time.Time
+}
+
+// RecordSaleReturn writes a return against a customer's balance in the CALLER's transaction, and returns the entry's
+// id so the return document can name it.
+//
+// Unguarded, like Charge: the sales module has already asked the owner for the return as a whole, and asking twice for
+// one act would mean two rows in the owner's history for one thing that happened.
+func (s *Service) RecordSaleReturn(ctx context.Context, in ReturnInput) (domain.Entry, error) {
+	cc, c, err := s.cashContext(ctx, in.CustomerID, in.Currency)
+	if err != nil {
+		return domain.Entry{}, err
+	}
+	if _, err = currencyOf(cc, in.Currency); err != nil {
+		return domain.Entry{}, err
+	}
+	reason, err := domain.Reason(in.Reason)
+	if err != nil {
+		return domain.Entry{}, err
+	}
+	return s.appendAt(ctx, domain.Entry{
+		CustomerID: c.ID, Currency: in.Currency, Kind: domain.KindSaleReturn,
+		AmountMinor: -in.AmountMinor, CustomerName: c.Name, Note: reason,
+	}, cc.Place, in.At, in.BusinessDate)
+}

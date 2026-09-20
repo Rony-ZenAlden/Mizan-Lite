@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, Sale, Statement, StockReport, SettingsState } from "./client";
+import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -53,6 +53,7 @@ export function aProduct(overrides: Partial<Product> = {}): Product {
     costPrice: "",
     marginAmount: "",
     marginPercent: "",
+    reorderLevel: "",
     ...overrides,
   };
 }
@@ -316,6 +317,72 @@ export function aProfit(overrides: Partial<Profit> = {}): Profit {
   };
 }
 
+/** A sale the counter has found by its receipt number, ready to return part of. */
+export function aReturnable(overrides: Partial<Returnable> = {}): Returnable {
+  return {
+    saleId: "sale-1",
+    receiptNo: "1042",
+    businessDate: "2026-09-14",
+    soldAt: "2026-09-14T08:00:00.000Z",
+    payment: "cash",
+    settlementCurrency: "SYP",
+    total: "73000",
+    voided: false,
+    customerId: "",
+    customerName: "",
+    lines: [
+      {
+        saleLineId: "line-1",
+        lineNo: 1,
+        productId: "p-1",
+        nameAr: "زيت زيتون",
+        nameEn: "Olive oil",
+        unitCode: "l",
+        sold: "2.000",
+        returned: "0.000",
+        left: "2.000",
+        netLocal: "73000",
+        netUsd: "4.87",
+        returnable: true,
+      },
+    ],
+    returns: [],
+    ...overrides,
+  };
+}
+
+/** A priced or recorded return. */
+export function aSaleReturn(overrides: Partial<SaleReturn> = {}): SaleReturn {
+  return {
+    id: "return-1",
+    returnNo: "1",
+    saleId: "sale-1",
+    saleReceiptNo: "1042",
+    businessDate: "2026-09-14",
+    returnedAt: "2026-09-14T09:00:00.000Z",
+    settlement: "cash",
+    currency: "SYP",
+    refund: "36500",
+    costKnown: true,
+    reason: "الزبون رجّع علبة",
+    lines: [
+      {
+        saleLineId: "line-1",
+        lineNo: 1,
+        productId: "p-1",
+        nameAr: "زيت زيتون",
+        nameEn: "Olive oil",
+        unitCode: "l",
+        quantity: "1.000",
+        refundLocal: "36500",
+        refundUsd: "2.43",
+        restocked: true,
+      },
+    ],
+    ...overrides,
+  };
+}
+
 /** A day's statement as Go sends it — the sale above, a spoiled jar and the electricity bill — with any field replaceable. */
 export function aDayReport(overrides: Partial<DayReport> = {}): DayReport {
   return {
@@ -331,7 +398,10 @@ export function aDayReport(overrides: Partial<DayReport> = {}): DayReport {
       out: anAmount("0.40", "6000"),
     },
     badDebts: anAmount(),
+    returns: { count: 0, refund: anAmount(), cost: anAmount(), profit: anAmount(), unknown: 0 },
     expenses: anAmount("1.00", "15000"),
+    dailyExpenses: anAmount("1.00", "15000"),
+    periodicExpenses: anAmount(),
     categories: [{ category: "electricity", amount: anAmount("1.00", "15000") }],
     netUsd: "1.10",
     netLocal: "16500",
@@ -526,6 +596,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
       createProduct: async (input) => aProduct({ ...input, id: "new", rowVersion: 1 }),
       updateProduct: async (input) => aProduct({ ...input, rowVersion: input.rowVersion + 1 }),
       setPrice: async (input) => aProduct({ id: input.id, priceCurrency: input.priceCurrency, price: input.price, rowVersion: input.rowVersion + 1 }),
+      setReorder: async (input) => aProduct({ id: input.id, reorderLevel: input.level, rowVersion: input.rowVersion + 1 }),
       setActive: async (input) => aProduct({ id: input.id, active: input.active, rowVersion: input.rowVersion + 1 }),
       setQuickSlot: async (input) => aProduct({ id: input.id, quickSlot: input.slot }),
       setPackage: async (input) =>
@@ -585,6 +656,9 @@ export function fakeClient(overrides: Overrides = {}): Client {
       }),
       receipt: async () => aSale(),
       void: async (input) => aSale({ status: "voided", voidReason: input.reason, voidedAt: "2026-09-14T09:00:00.000Z", voidBusinessDate: "2026-09-14" }),
+      returnable: async (receiptNo) => aReturnable({ receiptNo }),
+      quoteReturn: async (input) => aSaleReturn({ id: "", saleId: input.saleId, reason: input.reason, settlement: input.settlement }),
+      recordReturn: async (input) => aSaleReturn({ saleId: input.saleId, reason: input.reason, settlement: input.settlement }),
       verify: async () => [],
     },
     customers: {
@@ -686,6 +760,8 @@ export function fakeClient(overrides: Overrides = {}): Client {
       sale: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
       entry: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
       preview: async () => ({ png: "iVBORw0KGgo=", width: 576, height: 600, copyNo: 1 }),
+      label: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
+      zReport: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
     },
     printers: {
       list: async () => [{ name: "Xprinter XP-80", default: true }, { name: "Office Laser", default: false }],

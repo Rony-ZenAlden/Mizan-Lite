@@ -173,8 +173,10 @@ type CashEntry struct {
 	ExpectedMinor int64
 	Category      string
 	FromDrawer    bool
-	RateNano      int64
-	Note          string
+	// Recurrence is "once" for the day's small change, "monthly" for rent and the bills (2026-09-20).
+	Recurrence string
+	RateNano   int64
+	Note       string
 	// Reversed is true when a later entry undoes this one.
 	Reversed bool
 	Reverses *CashEntry

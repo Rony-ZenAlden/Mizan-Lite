@@ -8,6 +8,8 @@ import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
 import { SelectField, TextField } from "@/ui/Field";
 import { Spinner } from "@/ui/Spinner";
+import { usePrinterSettings } from "@/printing/PrintPanel";
+import { Link } from "react-router-dom";
 
 /** Where a fetched rate comes from, as the screen offers it. "manual" is the rate mode, not a fetch source. */
 type Source = "standard" | "local" | "manual";
@@ -36,6 +38,11 @@ export function SettingsScreen() {
   const [shopName, setShopName] = useState("");
   const [moneyDisplay, setMoneyDisplay] = useState<"legacy" | "new" | "dual">("legacy");
   const [pinRequired, setPinRequired] = useState(false);
+  // Printing lives on its own screen (the printer, the paper, the header); what belongs HERE is the one decision a
+  // shop makes about it — whether a finished sale prints itself (2026-09-20).
+  const printer = usePrinterSettings();
+  const [autoPrint, setAutoPrint] = useState<"none" | "credit" | "all">("none");
+  const [autoPrintLoaded, setAutoPrintLoaded] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -61,6 +68,13 @@ export function SettingsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (printer && !autoPrintLoaded) {
+      setAutoPrint((printer.autoPrint || "none") as "none" | "credit" | "all");
+      setAutoPrintLoaded(true);
+    }
+  }, [printer, autoPrintLoaded]);
 
   const save = async () => {
     setBusy(true);
@@ -89,6 +103,9 @@ export function SettingsScreen() {
       // stands rather than the one being written.
       if (pinRequired !== settings?.pinRequired) {
         await withOwner(() => client.settings.update({ pinRequired }));
+      }
+      if (printer && autoPrint !== printer.autoPrint) {
+        await withOwner(() => client.printers.save({ ...printer, paperMm: String(printer.paperMm), autoPrint }));
       }
       await load();
       setSaved(true);
@@ -192,6 +209,30 @@ export function SettingsScreen() {
           </div>
         ) : null}
         <p className="text-xs text-text-muted">{t("settings.rate_on_rates_screen")}</p>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-border bg-surface-raised p-5" data-testid="settings-printing">
+        <h3 className="font-semibold">{t("settings.printing")}</h3>
+        <p className="text-sm text-text-muted" data-testid="settings-printer-state">
+          {printer && printer.printer !== "" ? t("settings.printer_on", { name: printer.printer }) : t("settings.printer_none")}
+        </p>
+        <SelectField
+          label={t("settings.silent")}
+          value={autoPrint}
+          onChange={(e) => setAutoPrint(e.target.value as "none" | "credit" | "all")}
+          hint={t("settings.silent_hint")}
+          disabled={!printer || printer.printer === ""}
+          data-testid="silent-printing"
+        >
+          <option value="none">{t("settings.silent.none")}</option>
+          <option value="credit">{t("settings.silent.credit")}</option>
+          <option value="all">{t("settings.silent.all")}</option>
+        </SelectField>
+        <p className="text-xs text-text-muted">
+          <Link to="/printer" className="underline">
+            {t("settings.printer_screen")}
+          </Link>
+        </p>
       </div>
 
       <div className="space-y-2 rounded-lg border border-border bg-surface-raised p-5" data-testid="settings-security">

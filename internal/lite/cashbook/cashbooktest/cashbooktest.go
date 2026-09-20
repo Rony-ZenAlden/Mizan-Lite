@@ -31,6 +31,15 @@ func (f *Fake) NextSeq(context.Context) (int64, error) {
 func (f *Fake) Insert(_ context.Context, e domain.Entry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// The column is NOT NULL DEFAULT 'once' (migration 0010): an entry that names no recurrence is the one-off every
+	// entry was before the column existed. The fake must land in the same place the database does.
+	if e.Recurrence == "" {
+		e.Recurrence = domain.Once
+	}
+	// Only an expense recurs, as the schema's trigger holds.
+	if e.Recurrence != domain.Once && e.Kind != domain.KindExpense {
+		return errs.Validation("database.constraint_violation", "only an expense recurs")
+	}
 	for _, o := range f.entries {
 		if o.ID == e.ID || o.Seq == e.Seq || (e.ReversesID != "" && o.ReversesID == e.ReversesID) {
 			return errs.Conflict("database.duplicate", "unique constraint")

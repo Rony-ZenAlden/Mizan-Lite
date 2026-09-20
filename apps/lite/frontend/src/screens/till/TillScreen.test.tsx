@@ -443,11 +443,30 @@ describe("TillScreen — printing the receipt (Q-L7.2)", () => {
     expect(sale).toHaveBeenCalledTimes(1);
 
     first.unmount!();
-    sale.mockClear();
+  });
+
+  // The owner's report of 2026-09-20: a shop with no thermal printer was still shown a receipt panel after every sale,
+  // standing between the cashier and the next customer with nothing to offer. The sale is recorded either way.
+  it("with no printer the sale finishes without a receipt panel to dismiss", async () => {
+    const sale = vi.fn(async () => ({ printer: "", copyNo: 1, path: "driver" }));
     const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" });
-    await sell(fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale }, printers: { settings: none } }));
+    renderWithProviders(<TillScreen />, {
+      client: fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale }, printers: { settings: none } }),
+      locale: "en",
+    });
     await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Pay" }));
+    await settle();
+
+    expect(screen.queryByRole("dialog", { name: "Receipt No. 7" })).not.toBeInTheDocument();
     expect(sale).not.toHaveBeenCalled();
+    // The cashier is told the sale went through, and the cart is empty and ready for the next one.
+    expect(screen.getByTestId("sale-done")).toHaveTextContent("Sale 7 recorded");
+    expect(screen.queryByTestId("cart-line")).not.toBeInTheDocument();
+    // And the receipt is still one click away for the shop that wants to look at it.
+    expect(screen.getByRole("button", { name: "Show the receipt" })).toBeInTheDocument();
   });
 
   it("a failed automatic print leaves the sale on screen with Print again", async () => {

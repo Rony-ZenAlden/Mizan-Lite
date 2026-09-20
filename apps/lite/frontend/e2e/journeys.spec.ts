@@ -243,6 +243,48 @@ for (const locale of LOCALES) {
       expect(after.sales.length).toBe(sold.sales.length);
     });
 
+    test(`J11 a partial return: one of two jars comes back over the counter — ${locale}`, async ({ page }) => {
+      await reset(page, "seeded", locale);
+
+      // Sell two of something, so there is one to bring back.
+      await scan(page, locale, MOLASSES.barcode);
+      await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      await page.keyboard.press("+");
+      await page.keyboard.press("F9");
+      const receipt = receiptDialog(page);
+      await expect(receipt).toBeVisible();
+      await receipt.getByRole("button", { name: label(locale, "action.close") }).click();
+
+      const sold = await call<{ sales: { receiptNo: number }[] }>(page.request, "Sales", "List", "");
+      const receiptNo = String(sold.sales.at(-1)!.receiptNo);
+
+      // F8 at the counter: the paper is in the customer's hand, so the sale is found by its number.
+      await page.getByTestId("till-return").click();
+      const wizard = page.getByRole("dialog", { name: label(locale, "returns.title") });
+      await expect(wizard).toBeVisible();
+      await wizard.getByLabel(label(locale, "returns.find")).fill(receiptNo);
+      await wizard.getByRole("button", { name: label(locale, "returns.find_action") }).click();
+      await expect(wizard.getByTestId("return-sale")).toBeVisible();
+
+      const line = wizard.getByTestId("return-line").first();
+      await line.getByRole("textbox").first().fill("1");
+      await wizard.getByLabel(label(locale, "returns.reason")).fill("منتفخة");
+      await checkStructure(page, locale, "the return wizard");
+
+      // Priced first: the customer is told what they are owed before the goods change hands.
+      await wizard.getByRole("button", { name: label(locale, "returns.refund"), exact: true }).click();
+      await expect(wizard.getByTestId("return-quote")).toBeVisible();
+
+      await wizard.getByRole("button", { name: label(locale, "returns.confirm") }).click();
+      // Money leaves the drawer, so the owner's PIN is asked when the shop has turned that on; with the switch off
+      // it goes straight through and is recorded either way.
+      await expect(page.getByTestId("return-recorded")).toBeVisible();
+
+      // And the sale now says one litre is left to return.
+      const again = await call<{ lines: { left: string }[] }>(page.request, "Sales", "Returnable", receiptNo);
+      expect(again.lines[0]!.left).toMatch(/^1/);
+    });
+
     test(`J10 the rate by hand, and the language switched mid-session — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
       await go(page, locale, "nav.rates");

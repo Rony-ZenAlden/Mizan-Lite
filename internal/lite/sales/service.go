@@ -141,6 +141,12 @@ type Service struct {
 	clk       clock.Clock
 	loc       *time.Location
 	newID     func() (id.ID, error)
+
+	// Returns are wired after construction (UseReturns), so the module's existing fakes and its store contract suite
+	// keep compiling where returns are not in play.
+	returns     ReturnStore
+	returnStock ReturnStock
+	returnDebts ReturnDebts
 }
 
 // NewService builds the service.

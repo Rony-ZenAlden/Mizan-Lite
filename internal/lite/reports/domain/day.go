@@ -3,6 +3,8 @@ package domain
 import (
 	"math/big"
 	"sort"
+
+	"github.com/mizan-erp/mizan/internal/kernel/id"
 )
 
 // Converted is a figure in both readings. Unconverted counts the figures left out of the other reading because no
@@ -127,9 +129,30 @@ type Category struct {
 	Amount   Converted
 }
 
+// Expenses is a period's expenses told apart by how they recur (the owner's request, 2026-09-20).
+//
+// A day on which the rent was paid is not a bad day for the shop — it is an ordinary day plus a payment the shop makes
+// every month. Reading the two in one figure makes the first of the month look like a disaster and the other
+// twenty-nine look better than they were. Total is still the sum, because what left the drawer left the drawer.
+type Expenses struct {
+	// Daily is the day's small change: نثريات.
+	Daily Converted
+	// Periodic is rent, the bills, the wages — what the shop pays on a cycle.
+	Periodic Converted
+	// Total is both. It is what the net profit subtracts, unchanged from before this split existed.
+	Total Converted
+}
+
+// Add folds another period's expenses in.
+func (e *Expenses) Add(o Expenses) {
+	e.Daily.Add(o.Daily)
+	e.Periodic.Add(o.Periodic)
+	e.Total.Add(o.Total)
+}
+
 // ExpensesOn are a business day's expenses, each at the rate it snapshotted, less those reversed that day at theirs.
-func ExpensesOn(cash []CashEntry, date string, pair Pair) (Converted, []Category) {
-	var total Converted
+func ExpensesOn(cash []CashEntry, date string, pair Pair) (Expenses, []Category) {
+	var total Expenses
 	by := map[string]*Converted{}
 	for _, e := range cash {
 		if e.BusinessDate != date {
@@ -146,7 +169,12 @@ func ExpensesOn(cash []CashEntry, date string, pair Pair) (Converted, []Category
 		if sign < 0 {
 			v = v.neg()
 		}
-		total.Add(v)
+		total.Total.Add(v)
+		if original.Recurrence == RecurrenceMonthly {
+			total.Periodic.Add(v)
+		} else {
+			total.Daily.Add(v)
+		}
 		if by[original.Category] == nil {
 			by[original.Category] = &Converted{}
 		}
@@ -158,6 +186,70 @@ func ExpensesOn(cash []CashEntry, date string, pair Pair) (Converted, []Category
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Category < out[j].Category })
 	return total, out
+}
+
+// RecurrenceMonthly is the value cashbook writes for money the shop pays on a cycle.
+const RecurrenceMonthly = "monthly"
+
+// SettlementCash is the value sales writes for a return paid back in notes.
+const SettlementCash = "cash"
+
+// Returns is what came back over the counter on a business day (the owner's request, 2026-09-20).
+//
+// # Why a return is not a negative sale
+//
+// A return is dated to the day the goods came back, not the day they were sold. Monday's receipt is a thing that
+// happened and Monday's report keeps saying so; Thursday's report is where the tin coming back shows up. Folding the
+// return into the original sale would rewrite a day that has already been read, counted and possibly printed.
+//
+// # Why the profit lost is the margin, not the refund
+//
+// The shop handed 900 pounds back and put 750 pounds of stock on the shelf. It is 150 pounds worse off, not 900. The
+// refund is what left the drawer, which the takings already show; Profit() is what the day's profit lost.
+type Returns struct {
+	// Count is how many returns were recorded.
+	Count int
+	// Refund is what went back to customers, in both currencies.
+	Refund Converted
+	// Cost is what went back on the shelf at the cost the sale snapshotted.
+	Cost Converted
+	// Unknown counts the returned lines whose cost was never recorded, so a shop is told rather than shown a figure
+	// that quietly treats an unknown cost as nothing.
+	Unknown int
+}
+
+// Profit is what the day's profit loses to the returns: the refund less the cost put back.
+func (r Returns) Profit() Converted {
+	return Converted{
+		USD: r.Refund.USD - r.Cost.USD, Local: r.Refund.Local - r.Cost.Local,
+		Unconverted: r.Refund.Unconverted + r.Cost.Unconverted,
+	}
+}
+
+// Add folds another period's returns in.
+func (r *Returns) Add(o Returns) {
+	r.Count += o.Count
+	r.Refund.Add(o.Refund)
+	r.Cost.Add(o.Cost)
+	r.Unknown += o.Unknown
+}
+
+// ReturnsOn are the returns recorded on a business day. Each carries both currencies already, converted at the rate in
+// force when the goods came back, so nothing is re-converted here.
+func ReturnsOn(returns []Return, date string) Returns {
+	var out Returns
+	for _, r := range returns {
+		if r.BusinessDate != date {
+			continue
+		}
+		out.Count++
+		out.Refund.Add(Converted{USD: r.RefundUSDMinor, Local: r.RefundLocalMinor})
+		out.Cost.Add(Converted{USD: r.CostUSDMinor, Local: r.CostLocalMinor})
+		if !r.CostKnown {
+			out.Unknown++
+		}
+	}
+	return out
 }
 
 // Takings is what the till did in one currency (L6 §5): the currency sales were charged in, or a debt is kept in.
@@ -267,16 +359,39 @@ type Facts struct {
 	Movements []Movement
 	Debts     []DebtEntry
 	Cash      []CashEntry
+	Returns   []Return
+}
+
+// Return is one sales return as the reports read it: already converted into both currencies at the rate in force when
+// the goods came back, and dated to the day they came back, not the day of the sale (2026-09-20).
+type Return struct {
+	ID            id.ID
+	ReturnNo      int64
+	SaleID        id.ID
+	SaleReceiptNo int64
+	BusinessDate  string
+	Settlement    string
+	// SettlementCurrency and RefundMinor are what actually went back, in the currency the sale settled in — what the
+	// drawer loses for a cash return.
+	SettlementCurrency string
+	RefundMinor        int64
+	RefundLocalMinor   int64
+	RefundUSDMinor     int64
+	CostLocalMinor     int64
+	CostUSDMinor       int64
+	CostKnown          bool
 }
 
 // Day is a business day's statement, read top to bottom: gross profit, losses, bad debts, expenses, net profit; then
 // the takings (L6 §10.2).
 type Day struct {
-	Date       string
-	Profit     Profit
-	Losses     Losses
-	BadDebts   Converted
-	Expenses   Converted
+	Date     string
+	Profit   Profit
+	Losses   Losses
+	BadDebts Converted
+	// Returns is what came back over the counter this day, against sales of this day or any earlier one.
+	Returns    Returns
+	Expenses   Expenses
 	Categories []Category
 	Takings    []Takings
 	// Rate is the rate of the day, which losses and bad debts are converted at; RateFound is false before any rate.
@@ -284,24 +399,28 @@ type Day struct {
 	RateFound bool
 }
 
-// NetUSD is net profit in dollars (D-L6.5).
+// NetUSD is net profit in dollars (D-L6.5), less what a return took back out of it.
 func (d Day) NetUSD() int64 {
-	return d.Profit.ProfitUSD() - d.Losses.Out().USD + d.Losses.Surplus.USD - d.BadDebts.USD - d.Expenses.USD
+	return d.Profit.ProfitUSD() - d.Returns.Profit().USD -
+		d.Losses.Out().USD + d.Losses.Surplus.USD - d.BadDebts.USD - d.Expenses.Total.USD
 }
 
 // NetLocal is net profit in pounds.
 func (d Day) NetLocal() int64 {
-	return d.Profit.ProfitLocal() - d.Losses.Out().Local + d.Losses.Surplus.Local - d.BadDebts.Local - d.Expenses.Local
+	return d.Profit.ProfitLocal() - d.Returns.Profit().Local -
+		d.Losses.Out().Local + d.Losses.Surplus.Local - d.BadDebts.Local - d.Expenses.Total.Local
 }
 
 // Unconverted counts the figures of the day left out of a reading for want of a rate.
 func (d Day) Unconverted() int {
-	return d.Losses.Out().Unconverted + d.Losses.Surplus.Unconverted + d.BadDebts.Unconverted + d.Expenses.Unconverted
+	return d.Losses.Out().Unconverted + d.Losses.Surplus.Unconverted + d.BadDebts.Unconverted +
+		d.Expenses.Total.Unconverted + d.Returns.Refund.Unconverted
 }
 
 // Active is true when anything happened that day.
 func (d Day) Active() bool {
-	if d.Profit != (Profit{}) || d.Losses != (Losses{}) || d.BadDebts != (Converted{}) || d.Expenses != (Converted{}) {
+	if d.Profit != (Profit{}) || d.Losses != (Losses{}) || d.BadDebts != (Converted{}) ||
+		d.Expenses != (Expenses{}) || d.Returns != (Returns{}) {
 		return true
 	}
 	for _, t := range d.Takings {
@@ -319,6 +438,7 @@ func DayOf(f Facts, date string) Day {
 	d.Losses = LossesOn(f.Movements, date, d.Rate, d.RateFound, f.Pair)
 	d.BadDebts = BadDebtsOn(f.Debts, date, d.Rate, d.RateFound, f.Pair)
 	d.Expenses, d.Categories = ExpensesOn(f.Cash, date, f.Pair)
+	d.Returns = ReturnsOn(f.Returns, date)
 	d.Takings = TakingsOn(f.Sales, f.Debts, date, f.Pair)
 	return d
 }
@@ -334,6 +454,7 @@ func Total(from string, days []Day) Day {
 		out.Losses.Add(d.Losses)
 		out.BadDebts.Add(d.BadDebts)
 		out.Expenses.Add(d.Expenses)
+		out.Returns.Add(d.Returns)
 		for _, c := range d.Categories {
 			if cats[c.Category] == nil {
 				cats[c.Category] = &Converted{}

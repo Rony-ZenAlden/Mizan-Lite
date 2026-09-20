@@ -178,3 +178,28 @@ describe("SettingsScreen — the PIN switch (owner's request, 2026-09-17)", () =
     expect(screen.getByTestId("pin-required")).toBeChecked();
   });
 });
+
+describe("SettingsScreen — printing (owner's request, 2026-09-20)", () => {
+  it("offers silent printing only once a printer is set up, and says so when none is", async () => {
+    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    renderWithProviders(<SettingsScreen />, { client: fakeClient({ printers: { settings: none } }), locale: "en" });
+    await settle();
+    expect(screen.getByTestId("settings-printer-state")).toHaveTextContent("No printer is set up");
+    // The control is there but cannot be used: a shop without a printer is told why, not shown a dead option.
+    expect(screen.getByLabelText("Print receipts straight away")).toBeDisabled();
+  });
+
+  it("saves the choice against the printer's settings", async () => {
+    const save = vi.fn(async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" }));
+    const set = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    renderWithProviders(<SettingsScreen />, { client: fakeClient({ printers: { settings: set, save } }), locale: "en" });
+    await settle();
+
+    expect(screen.getByTestId("settings-printer-state")).toHaveTextContent("Xprinter XP-80");
+    await userEvent.selectOptions(screen.getByLabelText("Print receipts straight away"), "all");
+    await userEvent.click(screen.getByRole("button", { name: "Save the settings" }));
+    await settle();
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ autoPrint: "all", printer: "Xprinter XP-80" }));
+  });
+});

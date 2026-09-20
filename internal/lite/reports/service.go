@@ -23,6 +23,13 @@ type Sales interface {
 	Facts(ctx context.Context, from, to string) ([]domain.Sale, error)
 }
 
+// Returns is where the returns of a period come from (2026-09-20). Wired after construction (UseReturns) so the
+// module's fakes and its existing tests keep compiling where returns are not in play; nil reads as no returns, which
+// is what every shop before this release had.
+type Returns interface {
+	ReturnsBetween(ctx context.Context, from, to string) ([]domain.Return, error)
+}
+
 // Stock supplies ledger rows.
 type Stock interface {
 	// Between returns the rows of business dates from..to, by product and place.
@@ -66,6 +73,7 @@ type Service struct {
 	rates     Rates
 	catalogue Catalogue
 	cash      CashBook
+	returns   Returns
 	gate      OwnerGate
 	clk       clock.Clock
 	loc       *time.Location
@@ -128,9 +136,17 @@ func (s *Service) facts(ctx context.Context, from, to string) (domain.Facts, err
 	if f.Debts, err = s.debts.EntriesBetween(ctx, from, to); err != nil {
 		return f, err
 	}
-	f.Cash, err = s.cash.Between(ctx, from, to)
+	if f.Cash, err = s.cash.Between(ctx, from, to); err != nil {
+		return f, err
+	}
+	if s.returns != nil {
+		f.Returns, err = s.returns.ReturnsBetween(ctx, from, to)
+	}
 	return f, err
 }
+
+// UseReturns gives the reports the returns of a period. The composition root calls it once.
+func (s *Service) UseReturns(r Returns) { s.returns = r }
 
 // Day is a business day's statement — today when empty. Owner only (Q-L6.7).
 func (s *Service) Day(ctx context.Context, date string) (domain.Day, error) {
@@ -358,6 +374,13 @@ func (s *Service) drawer(ctx context.Context, date string) (domain.Drawer, error
 	}
 	if f.Cash, err = s.cash.Between(ctx, from, date); err != nil {
 		return domain.Drawer{}, err
+	}
+	// A cash return takes notes out of the drawer, and like a cash sale it writes no cash entry: the drawer derives
+	// it from the return itself, so it must be read here or the drawer is over by every refund.
+	if s.returns != nil {
+		if f.Returns, err = s.returns.ReturnsBetween(ctx, from, date); err != nil {
+			return domain.Drawer{}, err
+		}
 	}
 	return domain.DrawerOf(f, date), nil
 }

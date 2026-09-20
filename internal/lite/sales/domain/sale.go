@@ -97,10 +97,14 @@ type Product struct {
 	// CostMicro is the cost price the shop typed on the product, in PriceCurrency (L9). Since 2026-09-16 it is what a sale
 	// snapshots as its cost when it is set — the owner's decision that the typed cost is the profit basis. Where it is not
 	// set the weighted average of the deliveries stands, as it always did.
-	CostMicro  int64
-	HasCost    bool
-	Active     bool
-	RowVersion int64
+	CostMicro int64
+	HasCost   bool
+	// ReorderMicro is the level at or below which the shop wants to be told to buy more, and HasReorder whether one
+	// was ever set (2026-09-20). A product with no level is never called low.
+	ReorderMicro int64
+	HasReorder   bool
+	Active       bool
+	RowVersion   int64
 }
 
 // Stocked is what the till needs about a product's stock: supplied by the stock module through a port.

@@ -81,7 +81,7 @@ func TestTheSeederBuildsAMonthOfHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	month, err := app.Reports.Month(ctx, "2026-08")
-	if err != nil || len(month.Days) < 15 || month.Total.Losses.Spoiled.USD == 0 || month.Total.Expenses.USD == 0 {
+	if err != nil || len(month.Days) < 15 || month.Total.Losses.Spoiled.USD == 0 || month.Total.Expenses.Total.USD == 0 {
 		t.Fatalf("August = %+v, %v", month.Total, err)
 	}
 	september, err := app.Reports.Month(ctx, "2026-09")

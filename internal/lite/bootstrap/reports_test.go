@@ -427,7 +427,7 @@ func TestAMonthIsTheSumOfItsDays(t *testing.T) {
 		t.Fatalf("the month is not the sum of its days:\n%+v\n%+v", month.Total, sum)
 	}
 	if month.Total.Profit.Sales == 0 || month.Total.Profit.Unknown.Lines == 0 || month.Total.Losses == (reportsdomain.Losses{}) ||
-		month.Total.Expenses.Local == 0 || month.Total.BadDebts == (reportsdomain.Converted{}) {
+		month.Total.Expenses.Total.Local == 0 || month.Total.BadDebts == (reportsdomain.Converted{}) {
 		t.Fatalf("the month exercised too little: %+v", month.Total)
 	}
 	// And the products over the month add up to the month.

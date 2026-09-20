@@ -43,6 +43,8 @@ const (
 	opText opKind = iota
 	opLine
 	opRect
+	// opFill is a solid rectangle. A barcode is drawn as a row of them.
+	opFill
 )
 
 // op is a drawing instruction on a page, y measured down from the top.
@@ -205,6 +207,35 @@ func (l *layouter) block(b Block) {
 		l.cur().ops = append(l.cur().ops, op{kind: opRect, x: x - m.Padding*3, y: l.y, x2: ln.Width + m.Padding*6, y2: h, width: 2})
 		l.text(ln, x, l.y+m.Padding+ln.Ascent)
 		l.y += h + m.Padding
+	case Barcode:
+		// A module is one dot on the thermal head and one point on A4 — the narrowest bar the device can draw, which
+		// is what keeps the symbol scannable. The whole symbol is centred; if it is wider than the page it is scaled
+		// down to fit, because a symbol running off the edge scans as a shorter code, not as a failure.
+		height := m.Body * b.HeightLines
+		l.ensure(height + m.Body)
+		modules := 0
+		for _, w := range b.Bars {
+			modules += w
+		}
+		module := float32(1)
+		if width := float32(modules) * module; width > l.contentWidth() {
+			module = l.contentWidth() / float32(modules)
+		}
+		x := m.Margin + (l.contentWidth()-float32(modules)*module)/2
+		for i, w := range b.Bars {
+			if i%2 == 0 { // even indexes are bars, odd are spaces
+				l.cur().ops = append(l.cur().ops, op{kind: opFill, x: x, y: l.y, x2: float32(w) * module, y2: height})
+			}
+			x += float32(w) * module
+		}
+		l.y += height
+		if b.Text != "" {
+			st := l.style(m.Small, false)
+			ln := l.ts.Layout(b.Text, st, LTR) // a code is read left to right in every language
+			l.text(ln, m.Margin+(l.contentWidth()-ln.Width)/2, l.y+ln.Ascent)
+			l.y += lineHeight(ln)
+		}
+		l.y += m.Body * 0.3
 	case Signature:
 		l.y += m.Body * 2.5
 		l.ensure(m.Body * 2)

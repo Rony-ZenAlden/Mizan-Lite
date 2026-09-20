@@ -52,3 +52,13 @@ declare module "vitest" {
     toHaveReadableText(expected: string): T;
   }
 }
+
+// The till keeps its open cart in localStorage so a restart recovers it (2026-09-20). jsdom keeps that storage for the
+// whole file, so without this one test's half-finished cart turns up in the next one's till.
+beforeEach(() => {
+  try {
+    window.localStorage.clear();
+  } catch {
+    // A test environment without storage is fine: the code under test tolerates it too.
+  }
+});

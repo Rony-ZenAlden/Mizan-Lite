@@ -70,6 +70,9 @@ type Warning string
 const (
 	WarnBeyondStock Warning = "beyond_stock"
 	WarnNoCost      Warning = "no_cost"
+	// WarnLowStock is what the shop asked to be told: this sale takes the product to or below the level the shop set
+	// (2026-09-20). Unlike beyond_stock it is not a problem with the sale — it is a reminder to buy more.
+	WarnLowStock Warning = "low_stock"
 )
 
 // PricedLine is a cart line priced: a Line before it has ids, and its warnings.
@@ -278,6 +281,10 @@ func priceLine(lineNo int, li LineInput, c Context, cur currencies, demand map[i
 	demand[p.ID] += qtyMicro
 	if demand[p.ID] > stocked.OnHandMicro {
 		line.Warnings = append(line.Warnings, WarnBeyondStock)
+	} else if p.HasReorder && p.ReorderMicro > 0 && stocked.OnHandMicro-demand[p.ID] <= p.ReorderMicro {
+		// Only where the shelf still covers the sale: a line already flagged as beyond the stock does not also need
+		// telling that the stock is low. And only where the shop set a level — a product nobody gave one is never low.
+		line.Warnings = append(line.Warnings, WarnLowStock)
 	}
 	// What one unit costs. Since 2026-09-16 the cost price typed on the product is the profit basis where the shop has
 	// typed one (the owner's decision); the weighted average of the deliveries stands where it has not. Either way the

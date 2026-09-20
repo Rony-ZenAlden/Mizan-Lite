@@ -91,7 +91,24 @@ export function DayStatement({ report }: { report: DayReport }) {
             {amountRow("reports.losses.shortfall", report.losses.shortfall)}
             {amountRow("reports.losses.surplus", report.losses.surplus, false)}
             <Row label={t("reports.bad_debts")} usd={report.badDebts.usd} local={report.badDebts.local} localCurrency={cur} />
+            {/* What came back over the counter. The profit given up is the MARGIN, not the refund: the goods went
+                back on the shelf, so the shop is out the margin and not the price (2026-09-20). */}
+            {report.returns.count > 0 ? (
+              <>
+                <Row
+                  label={t("zreport.returns")}
+                  usd={report.returns.profit.usd}
+                  local={report.returns.profit.local}
+                  localCurrency={cur}
+                  testId="returns"
+                />
+                <Row label={t("zreport.returns_refund")} usd={report.returns.refund.usd} local={report.returns.refund.local} localCurrency={cur} sub />
+              </>
+            ) : null}
             <Row label={t("reports.expenses")} usd={report.expenses.usd} local={report.expenses.local} localCurrency={cur} testId="expenses" />
+            {/* The day's small change apart from rent and the bills: a day the rent was paid is not a bad day. */}
+            <Row label={t("zreport.expenses_daily")} usd={report.dailyExpenses.usd} local={report.dailyExpenses.local} localCurrency={cur} sub />
+            <Row label={t("zreport.expenses_periodic")} usd={report.periodicExpenses.usd} local={report.periodicExpenses.local} localCurrency={cur} sub testId="periodic-expenses" />
             {report.categories.map((c) => (
               <Row key={c.category} label={tDynamic(`cash.category.${c.category}`)} usd={c.amount.usd} local={c.amount.local} localCurrency={cur} sub />
             ))}

@@ -216,7 +216,7 @@ func TestBadDebtsAndExpensesInBothReadings(t *testing.T) {
 	if d5.BadDebts != (domain.Converted{USD: 1_500, Local: 225_000}) || d7.BadDebts != (domain.Converted{USD: -1_000, Local: -150_000}) {
 		t.Fatalf("bad debts %+v / %+v", d5.BadDebts, d7.BadDebts)
 	}
-	if d5.Expenses != (domain.Converted{USD: 10_200, Local: 1_430_000}) || d7.Expenses != (domain.Converted{USD: -10_000, Local: -1_400_000}) {
+	if d5.Expenses.Total != (domain.Converted{USD: 10_200, Local: 1_430_000}) || d7.Expenses.Total != (domain.Converted{USD: -10_000, Local: -1_400_000}) {
 		t.Fatalf("expenses at their own rates: %+v / %+v", d5.Expenses, d7.Expenses)
 	}
 	if len(d5.Categories) != 2 || d5.Categories[0].Category != "electricity" || d5.Categories[1].Amount.USD != 10_000 {
@@ -501,5 +501,68 @@ func TestACostCorrectionIsARevaluationNotProfit(t *testing.T) {
 	d := domain.DayOf(domain.Facts{Pair: pair, Movements: period, Rates: []domain.Rate{{Seq: 1, Nano: rate15k, BusinessDate: "2026-09-01"}}}, "2026-09-02")
 	if d.Losses.Out().USD != 250 || d.NetUSD() != -250 {
 		t.Fatalf("the day's net %d: only the write-off is a loss, the correction is not profit", d.NetUSD())
+	}
+}
+
+// TestAReturnReducesTheDayItCameBackOnNotTheDayOfTheSale is the whole reason a return is its own fact: Monday's report
+// has been read, counted and possibly printed. Thursday's tin coming back is Thursday's business.
+func TestAReturnReducesTheDayItCameBackOnNotTheDayOfTheSale(t *testing.T) {
+	// Sold Monday for 900 pounds of stock that cost 750: a margin of 150. Returned Thursday.
+	returns := []domain.Return{{
+		ReturnNo: 1, BusinessDate: "2026-09-17", Settlement: "cash", SettlementCurrency: "SYP",
+		RefundMinor: 900, RefundLocalMinor: 900, RefundUSDMinor: 6,
+		CostLocalMinor: 750, CostUSDMinor: 5, CostKnown: true,
+	}}
+	monday := domain.ReturnsOn(returns, "2026-09-14")
+	if monday != (domain.Returns{}) {
+		t.Fatalf("the day of the sale was changed by a later return: %+v", monday)
+	}
+	thursday := domain.ReturnsOn(returns, "2026-09-17")
+	if thursday.Count != 1 || thursday.Refund.Local != 900 || thursday.Cost.Local != 750 {
+		t.Fatalf("thursday = %+v", thursday)
+	}
+	// The shop is 150 pounds worse off, not 900: the goods went back on the shelf.
+	if p := thursday.Profit(); p.Local != 150 || p.USD != 1 {
+		t.Fatalf("profit lost = %+v, want the margin and not the refund", p)
+	}
+	// A returned line whose cost was never known is counted and reported, not guessed at zero.
+	unknown := domain.ReturnsOn([]domain.Return{{
+		BusinessDate: "2026-09-17", Settlement: "cash", RefundLocalMinor: 900, CostKnown: false,
+	}}, "2026-09-17")
+	if unknown.Unknown != 1 {
+		t.Fatalf("an unknown cost was not reported: %+v", unknown)
+	}
+}
+
+// TestAMonthlyExpenseIsToldApartFromTheDaysSmallChange: the day the rent is paid is not a bad day for the shop, and a
+// report that adds the two makes the first of the month look like a disaster.
+func TestAMonthlyExpenseIsToldApartFromTheDaysSmallChange(t *testing.T) {
+	const date = "2026-09-01"
+	cash := []domain.CashEntry{
+		{BusinessDate: date, Kind: domain.CashExpense, Currency: "SYP", AmountMinor: 12_000, Category: "supplies",
+			FromDrawer: true, Recurrence: "once", RateNano: 15_000_000_000_000},
+		{BusinessDate: date, Kind: domain.CashExpense, Currency: "SYP", AmountMinor: 250_000, Category: "rent",
+			FromDrawer: true, Recurrence: "monthly", RateNano: 15_000_000_000_000},
+	}
+	got, cats := domain.ExpensesOn(cash, date, pair)
+	if got.Daily.Local != 12_000 {
+		t.Fatalf("the day's small change = %d, want 12,000", got.Daily.Local)
+	}
+	if got.Periodic.Local != 250_000 {
+		t.Fatalf("the periodic expenses = %d, want 250,000", got.Periodic.Local)
+	}
+	// Total is unchanged by the split: what left the drawer left the drawer.
+	if got.Total.Local != 262_000 {
+		t.Fatalf("total = %d, want 262,000", got.Total.Local)
+	}
+	// The categories are untouched by recurrence — they answer a different question.
+	if len(cats) != 2 {
+		t.Fatalf("categories = %+v", cats)
+	}
+	// An expense recorded before recurrence existed reads as the one-off it was.
+	old := []domain.CashEntry{{BusinessDate: date, Kind: domain.CashExpense, Currency: "SYP", AmountMinor: 5_000,
+		Category: "other", FromDrawer: true, RateNano: 15_000_000_000_000}}
+	if was, _ := domain.ExpensesOn(old, date, pair); was.Daily.Local != 5_000 || was.Periodic.Local != 0 {
+		t.Fatalf("an expense from before the split = %+v", was)
 	}
 }

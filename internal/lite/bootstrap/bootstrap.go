@@ -241,9 +241,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Customers = customers.NewService(db, customersdb.NewStore(db, opts.Clock), customersRates{fx: app.FX}, customersSettings{settings: app.Settings},
 		customersCurrencies{catalog: app.Catalog}, customersGate{owner: app.Owner}, opts.Clock, opts.Location)
 	// The till is built last: its adapters hold the services above, so each must already exist.
-	app.Sales = sales.NewService(db, salesdb.NewStore(db, opts.Clock), salesCatalogue{catalog: app.Catalog}, salesStock{stock: app.Stock},
+	salesStore := salesdb.NewStore(db, opts.Clock)
+	app.Sales = sales.NewService(db, salesStore, salesCatalogue{catalog: app.Catalog}, salesStock{stock: app.Stock},
 		salesDebts{customers: app.Customers}, salesRates{fx: app.FX}, salesSettings{settings: app.Settings}, salesGate{owner: app.Owner},
 		opts.Clock, opts.Location)
+	// Partial returns (2026-09-20): the same store, plus putting stock back and taking a return off a debt.
+	app.Sales.UseReturns(salesStore, salesReturnStock{stock: app.Stock}, salesReturnDebts{customers: app.Customers})
 	// The cash book records a count against the reports' expected figure, and the reports read the cash book: the cash
 	// book reaches the reports through an adapter holding the app, filled in on the next line.
 	app.Cashbook = cashbook.NewService(db, cashbookdb.NewStore(db, opts.Clock), customersRates{fx: app.FX}, cashbookCurrencies{catalog: app.Catalog},
@@ -251,6 +254,7 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Reports = reports.NewService(reportsSales{sales: app.Sales}, reportsStock{stock: app.Stock}, reportsDebts{customers: app.Customers},
 		reportsRates{fx: app.FX}, reportsCatalogue{catalog: app.Catalog}, reportsCash{cashbook: app.Cashbook}, reportsGate{owner: app.Owner},
 		opts.Clock, opts.Location)
+	app.Reports.UseReturns(reportsReturns{sales: app.Sales})
 
 	app.Printing = printing.NewService(db, printingdb.NewStore(db), opts.Clock)
 	app.Customers.SetVouchers(app.Printing)
@@ -661,6 +665,7 @@ func (c salesCatalogue) product(ctx context.Context, p catalogdomain.Product) (s
 	return salesdomain.Product{
 		ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode, UnitDecimals: ref.Units[p.UnitCode].InputDecimals,
 		PriceCurrency: p.PriceCurrency, PriceMicro: p.PriceMicro, CostMicro: p.CostMicro, HasCost: p.HasCost,
+		ReorderMicro: p.ReorderMicro, HasReorder: p.HasReorder,
 		Active: p.Active, RowVersion: p.RowVersion,
 	}, nil
 }
@@ -742,6 +747,47 @@ func (s salesSettings) CashNote(ctx context.Context) (int64, error) {
 func (s salesSettings) SetCashNote(ctx context.Context, raw string) (int64, error) {
 	next, err := s.settings.Update(ctx, settingsdomain.Update{CashNote: &raw})
 	return next.CashNote, err
+}
+
+// salesReturnStock satisfies the till's return Stock port: part of a sold line back on the shelf.
+type salesReturnStock struct{ stock *stock.Service }
+
+func (s salesReturnStock) RecordSaleReturn(ctx context.Context, saleLineID id.ID, quantityMicro int64) error {
+	_, err := s.stock.RecordSaleReturn(ctx, saleLineID, quantityMicro)
+	return err
+}
+
+// salesReturnDebts satisfies the till's return Debts port: a return taken off what a customer owes.
+type salesReturnDebts struct{ customers *customers.Service }
+
+func (d salesReturnDebts) RecordSaleReturn(ctx context.Context, in sales.ReturnDebtInput) (id.ID, error) {
+	e, err := d.customers.RecordSaleReturn(ctx, customers.ReturnInput{
+		CustomerID: in.CustomerID, Currency: in.Currency, AmountMinor: in.AmountMinor,
+		Reason: in.Reason, BusinessDate: in.BusinessDate, At: in.At,
+	})
+	return e.ID, err
+}
+
+// reportsReturns satisfies the reports' Returns port, converting the till's returns into the facts the reports read.
+// Both currencies are already on the row, converted at the rate in force when the goods came back, so nothing is
+// re-converted here.
+type reportsReturns struct{ sales *sales.Service }
+
+func (r reportsReturns) ReturnsBetween(ctx context.Context, from, to string) ([]reportsdomain.Return, error) {
+	got, err := r.sales.ReturnsBetween(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.Return, 0, len(got))
+	for _, v := range got {
+		out = append(out, reportsdomain.Return{
+			ID: v.ID, ReturnNo: v.ReturnNo, SaleID: v.SaleID, SaleReceiptNo: v.SaleReceiptNo,
+			BusinessDate: v.BusinessDate, Settlement: string(v.Settlement), SettlementCurrency: v.SettlementCurrency,
+			RefundMinor: v.RefundMinor, RefundLocalMinor: v.RefundLocalMinor, RefundUSDMinor: v.RefundUSDMinor,
+			CostLocalMinor: v.CostLocalMinor, CostUSDMinor: v.CostUSDMinor, CostKnown: v.CostKnown,
+		})
+	}
+	return out, nil
 }
 
 // salesDebts satisfies the till's Debts port with the debt book (L5 §10.1).

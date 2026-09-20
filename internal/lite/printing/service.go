@@ -27,6 +27,9 @@ const (
 	KindPayment    Kind = "payment"
 	KindRefund     Kind = "refund"
 	KindTest       Kind = "test"
+	// KindLabel is a shelf label or price tag, of a product; KindZReport is the day's statement on 80 mm paper.
+	KindLabel   Kind = "label"
+	KindZReport Kind = "zreport"
 )
 
 // Job is one print job as recorded.
@@ -85,7 +88,7 @@ func (s *Service) NextCopy(ctx context.Context, subjectID id.ID) (int, error) {
 // Record writes a job the printers package sent, or failed to.
 func (s *Service) Record(ctx context.Context, j Job) (Job, error) {
 	switch j.Kind {
-	case KindSale, KindCreditSale, KindPayment, KindRefund, KindTest:
+	case KindSale, KindCreditSale, KindPayment, KindRefund, KindTest, KindLabel, KindZReport:
 	default:
 		return Job{}, errs.Validation(CodeUnknownKind, "unknown print job").WithParam("value", string(j.Kind))
 	}

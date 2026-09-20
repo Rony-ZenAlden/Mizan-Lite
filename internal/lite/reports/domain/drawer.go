@@ -9,13 +9,16 @@ type DrawerTerms struct {
 	// OpeningCount is the count Opening starts from, or nil when the drawer was never counted before this day.
 	OpeningCount *CashEntry
 
-	CashSalesIn   int64
-	CreditPaidIn  int64
-	RepaymentsIn  int64
-	DepositsIn    int64
-	ChangeOut     int64
-	RefundsOut    int64
-	VoidReturns   int64
+	CashSalesIn  int64
+	CreditPaidIn int64
+	RepaymentsIn int64
+	DepositsIn   int64
+	ChangeOut    int64
+	RefundsOut   int64
+	VoidReturns  int64
+	// ReturnsOut is cash handed back over the counter for goods returned (2026-09-20). A return settled against a
+	// customer's debt moves no cash and is not here.
+	ReturnsOut    int64
 	ExpensesOut   int64
 	WithdrawalOut int64
 
@@ -27,7 +30,7 @@ type DrawerTerms struct {
 // Moved is what the day's terms add to the opening.
 func (t DrawerTerms) Moved() int64 {
 	return t.CashSalesIn + t.CreditPaidIn + t.RepaymentsIn + t.DepositsIn -
-		t.ChangeOut - t.RefundsOut - t.VoidReturns - t.ExpensesOut - t.WithdrawalOut
+		t.ChangeOut - t.RefundsOut - t.VoidReturns - t.ReturnsOut - t.ExpensesOut - t.WithdrawalOut
 }
 
 // Difference is the day's count less what it was expected to hold when counted: below zero is a shortage.
@@ -40,10 +43,11 @@ func (t DrawerTerms) Difference() (int64, bool) {
 
 // DrawerFacts is what a drawer is computed from: the facts from the day after the oldest last count to the date.
 type DrawerFacts struct {
-	Pair  Pair
-	Sales []Sale
-	Debts []DebtEntry
-	Cash  []CashEntry
+	Pair    Pair
+	Sales   []Sale
+	Debts   []DebtEntry
+	Cash    []CashEntry
+	Returns []Return
 	// LastCounts is, per currency, the newest count not reversed on a day before the date.
 	LastCounts map[string]CashEntry
 }
@@ -70,6 +74,12 @@ func cashMoves(t *DrawerTerms, f DrawerFacts, from, to string) {
 		}
 		if s.Voided && within(s.VoidBusinessDate) {
 			t.VoidReturns += in(s.VoidReturnCurrency, c, s.VoidReturnMinor)
+		}
+	}
+	for _, r := range f.Returns {
+		// Only a cash return takes notes out of the drawer; one settled against a debt moves no cash.
+		if within(r.BusinessDate) && r.Settlement == SettlementCash {
+			t.ReturnsOut += in(r.SettlementCurrency, c, r.RefundMinor)
 		}
 	}
 	for _, e := range f.Debts {

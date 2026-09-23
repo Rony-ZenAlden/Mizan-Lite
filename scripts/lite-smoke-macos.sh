@@ -23,6 +23,15 @@ else
 fi
 LOG="$DATA/logs/mizan-lite.log"
 
+# The application holds a single-instance lock (apps/lite/options.go): a second launch hands itself to the copy already
+# running and exits before it has logged a line. A shop's own copy left open — the 0.9.9 release met one — would otherwise
+# read as "the package does not start".
+RUNNING="$(pgrep -f "Mizan Lite.app/Contents/MacOS/Mizan Lite" | tr '\n' ' ' || true)"
+if [ -n "$RUNNING" ]; then
+  echo "error: Mizan Lite is already running (pid ${RUNNING% }) and its single-instance lock would take this launch — quit it and run again" >&2
+  exit 1
+fi
+
 echo "▶ opening ${APP}"
 MIZAN_LITE_DATA_DIR="$DATA" "$BIN" >/dev/null 2>&1 &
 PID=$!

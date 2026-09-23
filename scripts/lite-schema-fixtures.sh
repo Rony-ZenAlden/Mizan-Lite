@@ -25,8 +25,9 @@ PHASES=(
   "7 2c86f17 -pin 481537 -days 7"
   "8 d356598 -pin 481537 -days 7"
   "9 f27a440 -pin 481537 -days 7"
-  # 10 is this phase’s own schema: the fixture is made by the build that introduces it.
   "10 3e4bb36 -pin 481537 -days 7"
+  # 11 is this phase’s own schema: the fixture is made by the build that introduces it.
+  "11 HEAD -pin 481537 -days 7"
 )
 
 for line in "${PHASES[@]}"; do

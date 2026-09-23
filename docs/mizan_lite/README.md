@@ -38,6 +38,7 @@ what is not verified — once built.
 | **L9** | Cost price and profit margin; the stocktake | [phases/L9_COST_AND_AUDIT.md](phases/L9_COST_AND_AUDIT.md) · [phases/L9_AUDIT_DRAFT.sql](phases/L9_AUDIT_DRAFT.sql) | 🔨 cost price shipped in 0.9.2; the stocktake designed, not built |
 | **L10** | Dropping the two noughts: one money pipeline, three readings of the pound | [DECISIONS.md](DECISIONS.md) — D-L10.1–5 | ✅ shipped, tagged `lite-v0.9.5` |
 | **L11** | Partial returns, recurring expenses, reorder levels, price tags, the thermal Z-report | [DECISIONS.md](DECISIONS.md) — D-097.1–15 | ✅ shipped, tagged `lite-v0.9.7` |
+| **L12** | Held sales, the open-priced item, optional re-pricing after a rate move, one notification engine (bell, toasts, centre, capital in dollars) | [DECISIONS.md](DECISIONS.md) — D-099.1–18 | ✅ shipped, tagged `lite-v0.9.9` |
 
 ## Conventions
 

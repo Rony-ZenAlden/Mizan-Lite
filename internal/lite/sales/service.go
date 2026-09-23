@@ -221,6 +221,10 @@ func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (domain.Sale, 
 			return err
 		}
 		for _, l := range sale.Lines {
+			// An open-priced line sells something the shop never counted, so it moves no stock (2026-09-23).
+			if l.OpenPrice {
+				continue
+			}
 			if err = s.stock.RecordSale(ctx, StockLine{ProductID: l.ProductID, QuantityMicro: l.QuantityMicro, SaleID: sale.ID, SaleLineID: l.ID}); err != nil {
 				return err
 			}
@@ -463,6 +467,10 @@ func (s *Service) Void(ctx context.Context, in VoidInput) (domain.Sale, error) {
 			return err
 		}
 		for _, l := range sale.Lines {
+			// Nothing was taken off a shelf for an open-priced line, so nothing goes back on one.
+			if l.OpenPrice {
+				continue
+			}
 			if err = s.stock.RecordSaleVoid(ctx, l.ID); err != nil {
 				return err
 			}

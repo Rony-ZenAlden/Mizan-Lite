@@ -11,6 +11,7 @@ const line = (over: Partial<CartEntry> = {}): CartEntry => ({
   unitDecimals: 3,
   quantity: "2",
   discountPercent: "",
+  price: "",
   ...over,
 });
 
@@ -25,11 +26,17 @@ describe("the open cart survives a restart (owner's request, 2026-09-20)", () =>
     expect(back?.[1]?.quantity).toBe("0.5");
   });
 
-  it("keeps no prices, so a recovered cart is priced again at today's rate", () => {
+  it("keeps no catalogue price, so a recovered cart is priced again at today's rate", () => {
     keepCart([line()]);
     const raw = window.localStorage.getItem("mizan.lite.till.cart") ?? "";
     // The rate moves daily in this shop: a restored total would be a quiet lie about what the customer owes.
-    expect(raw).not.toMatch(/price|total|refund|rate/i);
+    expect(raw).not.toMatch(/total|refund|rate|gross|net/i);
+    expect(recoverCart()?.[0]?.price).toBe("");
+  });
+
+  it("keeps an open item's typed price, which is the cashier's own input like the quantity", () => {
+    keepCart([line({ productId: "misc", openPrice: true, price: "500" })]);
+    expect(recoverCart()?.[0]?.price).toBe("500");
   });
 
   it("an empty cart is forgotten rather than stored", () => {

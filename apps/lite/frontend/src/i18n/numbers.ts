@@ -57,6 +57,18 @@ export function splitDual(value: string): [string, string] | null {
   return found ? [found[1]!, found[2]!] : null;
 }
 
+/**
+ * typeable is the figure a person can type back: the new pound of a dual reading, or the value as it is.
+ *
+ * A form that starts from a figure Go sent — a product's price, the rate in force — must not start from "150 (15000)":
+ * that is a reading, not a number, and the field refuses it. In dual mode a person types the NEW figure (moneyfmt.Base),
+ * so the new figure is what the field starts with, and Go takes it back to the books' pounds exactly (0.9.9).
+ */
+export function typeable(value: string): string {
+  const dual = splitDual(value);
+  return dual ? dual[0].trim() : value;
+}
+
 /** isDual reports whether a figure carries both readings. */
 export function isDual(value: string): boolean {
   return DUAL_PATTERN.test(value);

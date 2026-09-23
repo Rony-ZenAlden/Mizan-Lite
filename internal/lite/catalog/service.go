@@ -93,6 +93,33 @@ type Service struct {
 	store Store
 	gate  OwnerGate
 	newID func() (id.ID, error)
+	// rates is where the catalogue learns the rate in force when a price is set (2026-09-23). Wired after construction
+	// (UseRates), so the module's fakes keep compiling; nil records no rate, which reads as "nothing to measure".
+	rates PricingRate
+}
+
+// PricingRate is what the catalogue needs to know about money it does not own: the exchange rate in force, the local
+// currency, and the smallest note a local price should land on.
+type PricingRate interface {
+	// InForce is the rate in force at 10⁻⁹, and the local currency's code; found=false before any rate exists.
+	InForce(ctx context.Context) (nano int64, local string, found bool, err error)
+	// CashNote is the smallest local note, in local minor units, that a re-priced local price is rounded to.
+	CashNote(ctx context.Context) (int64, error)
+}
+
+// UseRates gives the catalogue the rate in force. The composition root calls it once.
+func (s *Service) UseRates(r PricingRate) { s.rates = r }
+
+// rateNow is the rate in force, or 0 where there is none or no rates were wired.
+func (s *Service) rateNow(ctx context.Context) (int64, error) {
+	if s.rates == nil {
+		return 0, nil
+	}
+	nano, _, found, err := s.rates.InForce(ctx)
+	if err != nil || !found {
+		return 0, err
+	}
+	return nano, nil
 }
 
 // NewService builds the service. Every dependency is required.
@@ -163,6 +190,13 @@ func (s *Service) Create(ctx context.Context, d domain.Draft) (domain.Product, e
 		p, err := domain.NewProduct(productID, d, ref)
 		if err != nil {
 			return err
+		}
+		// The rate a price was set at, so the price can later be found stale (2026-09-23). An open-priced product has no
+		// price to go stale.
+		if !p.OpenPrice {
+			if p.PricedRateNano, err = s.rateNow(ctx); err != nil {
+				return err
+			}
 		}
 		if err := s.checkUnique(ctx, p); err != nil {
 			return err
@@ -460,6 +494,13 @@ func (s *Service) change(
 		if next == current {
 			out = current
 			return nil
+		}
+		// Every route that moves a price — the form, a margin, a confirmed re-price — passes through here, so the rate
+		// the price was set at is taken here and nowhere else.
+		if !next.OpenPrice && (next.PriceMicro != current.PriceMicro || next.PriceCurrency != current.PriceCurrency) {
+			if next.PricedRateNano, err = s.rateNow(ctx); err != nil {
+				return err
+			}
 		}
 		out, err = s.store.Update(ctx, next)
 		return err

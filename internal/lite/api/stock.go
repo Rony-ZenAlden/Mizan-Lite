@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
@@ -236,18 +237,29 @@ func (s *Stock) Movements(q MovementsQueryDTO) envelope.Result[HistoryDTO] {
 	})
 }
 
-func (in ReceiveInput) toService() (stock.ReceiveInput, error) {
+// toService takes a delivery back into the books' pounds: the cost in its own currency, and the rate — local pounds per
+// dollar — always in the local currency.
+//
+// The rate matters most. The receipt form fills it from the rate on screen, which in the new pound reads 150; passed
+// straight through (as it was until 0.9.9) a delivery would be costed at 150 old pounds to the dollar, and the average
+// cost of everything bought in pounds would come out a hundred times too high.
+func (in ReceiveInput) toService(shop moneyfmt.Shop) (stock.ReceiveInput, error) {
 	productID, err := parseProductID(in.ProductID)
 	return stock.ReceiveInput{
 		ProductID: productID, Quantity: in.Quantity, Note: in.Note,
-		Cost: domain.CostInput{Mode: domain.CostMode(in.CostMode), Amount: in.Cost, Currency: in.Currency, Rate: in.Rate},
+		Cost: domain.CostInput{Mode: domain.CostMode(in.CostMode), Amount: shop.Base(in.Cost, in.Currency),
+			Currency: in.Currency, Rate: shop.Base(in.Rate, shop.Local)},
 	}, err
 }
 
 // Receive books a delivery in.
 func (s *Stock) Receive(in ReceiveInput) envelope.Result[StockLevelDTO] {
 	return s.act("Stock.Receive", func(ctx context.Context, app *bootstrap.App) (domain.Movement, error) {
-		svcIn, err := in.toService()
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Movement{}, err
+		}
+		svcIn, err := in.toService(shop)
 		if err != nil {
 			return domain.Movement{}, err
 		}
@@ -258,7 +270,11 @@ func (s *Stock) Receive(in ReceiveInput) envelope.Result[StockLevelDTO] {
 // Opening books the stock a shop had when it adopted Lite — a product's first movement only.
 func (s *Stock) Opening(in ReceiveInput) envelope.Result[StockLevelDTO] {
 	return s.act("Stock.Opening", func(ctx context.Context, app *bootstrap.App) (domain.Movement, error) {
-		svcIn, err := in.toService()
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Movement{}, err
+		}
+		svcIn, err := in.toService(shop)
 		if err != nil {
 			return domain.Movement{}, err
 		}

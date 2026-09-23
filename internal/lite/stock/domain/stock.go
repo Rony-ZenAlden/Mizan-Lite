@@ -24,8 +24,10 @@ import (
 
 // Stable error codes. They double as i18n keys.
 const (
-	CodeQuantityRequired  = "lite.stock.quantity_required"
-	CodeQuantityDecimals  = "lite.stock.quantity_decimals"
+	CodeQuantityRequired = "lite.stock.quantity_required"
+	CodeQuantityDecimals = "lite.stock.quantity_decimals"
+	// CodeOpenPriceNoStock refuses a stock movement for an open-priced product, which is never counted (2026-09-23).
+	CodeOpenPriceNoStock  = "lite.stock.open_price_no_stock"
 	CodeQuantityTooLarge  = "lite.stock.quantity_too_large"
 	CodeCostDecimals      = "lite.stock.cost_decimals"
 	CodeCostTooLarge      = "lite.stock.cost_too_large"
@@ -128,6 +130,9 @@ type Product struct {
 	// UnitDecimals is how many decimals a quantity of the product may have: 3 for kg and litres, 0 for jars.
 	UnitDecimals int
 	Active       bool
+	// OpenPrice marks a product sold at a price typed at the till and never counted (2026-09-23): no movement may name
+	// one, and the schema refuses it too.
+	OpenPrice bool
 }
 
 // Package is a package product's link to what it opens into.
@@ -594,4 +599,10 @@ func SaleReturn(l Level, sale Movement, quantityMicro int64, st Stamp) (Movement
 	m.AvgCostAfterMicro = avg
 	m.SaleID, m.SaleLineID = sale.SaleID, sale.SaleLineID
 	return m, m.after(l), nil
+}
+
+// ErrOpenPriceNoStock refuses any stock movement for an open-priced product: it is sold at a typed price and never
+// counted, so a delivery, a count or an adjustment of it would be a quantity describing nothing on any shelf.
+func ErrOpenPriceNoStock() error {
+	return errs.Validation(CodeOpenPriceNoStock, "an open-priced product is never counted in stock")
 }

@@ -199,7 +199,8 @@ func PriceReturn(sale Sale, already Returned, draft ReturnDraft, rate Rate, loca
 		rl := ReturnLine{
 			LineNo: len(out.Lines) + 1, SaleLineID: line.ID, ProductID: line.ProductID,
 			NameAR: line.NameAR, NameEN: line.NameEN, UnitCode: line.UnitCode, UnitDecimals: decimals,
-			QuantityMicro: quantity, Restocked: d.Restock,
+			// An open-priced line was never on a shelf, so it cannot go back on one — whatever was ticked.
+			QuantityMicro: quantity, Restocked: d.Restock && !line.OpenPrice,
 			UnitCostMicro: line.UnitCostMicro, CostKnown: line.CostKnown,
 			SoldMicro: line.QuantityMicro, AlreadyReturnedMicro: already[line.ID],
 		}

@@ -17,6 +17,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/id"
+	"github.com/mizan-erp/mizan/internal/lite/alerts"
+	alertsdomain "github.com/mizan-erp/mizan/internal/lite/alerts/domain"
+	alertsdb "github.com/mizan-erp/mizan/internal/lite/alerts/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/backups"
 	"github.com/mizan-erp/mizan/internal/lite/bizdate"
 	"github.com/mizan-erp/mizan/internal/lite/cashbook"
@@ -165,6 +168,8 @@ type App struct {
 	Printing  *printing.Service
 	// Safety is the backups module: the outside copy, the status, restores (L7). Backups is platform/backup beneath it.
 	Safety *backups.Service
+	// Alerts is the notification engine: toasts, the bell and the notification centre read one list (2026-09-23).
+	Alerts *alerts.Service
 	// Restored is the restore applied at this start, or nil.
 	Restored *backup.Intent
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
@@ -277,6 +282,15 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 	app.Safety = backups.NewService(app.Backups, backupSettings{settings: app.Settings}, backupsGate{owner: app.Owner},
 		backupActivity{app: app}, opts.Clock, backups.Config{LivePath: opts.Paths.DBFile, SchemaVersion: app.SchemaVersion,
 			IntegrityStatement: db.Dialect().IntegrityCheckStatement(), BackupDir: opts.Paths.Backups})
+	// The catalogue records the rate each price was set at, so a price the dollar has left behind can be found; and the
+	// notification engine reads every module through its own ports (2026-09-23).
+	app.Catalog.UseRates(catalogRates{fx: app.FX, settings: app.Settings})
+	app.Alerts = alerts.NewService(db, alertsdb.NewStore(db), alerts.Ports{
+		Catalogue: alertsCatalogue{catalog: app.Catalog}, Stock: alertsStock{stock: app.Stock},
+		Prices: alertsPrices{catalog: app.Catalog}, Money: alertsMoney{fx: app.FX, catalog: app.Catalog},
+		Drawer: alertsDrawer{reports: app.Reports}, Receivables: alertsReceivables{customers: app.Customers},
+		Backups: alertsBackups{safety: app.Safety}, Gate: alertsGate{owner: app.Owner},
+	}, opts.Clock, opts.Location)
 	if err = app.registerBackupJob(); err != nil {
 		_ = db.Close()
 		return nil, wrapKeepingParams(err, CodeStartupFailed, "declaring the backup job")
@@ -591,7 +605,7 @@ func (c stockCatalogue) Currencies(ctx context.Context) ([]stockdomain.Currency,
 }
 
 func stockProduct(p catalogdomain.Product, ref catalogdomain.Reference) stockdomain.Product {
-	return stockdomain.Product{ID: p.ID, UnitDecimals: ref.Units[p.UnitCode].InputDecimals, Active: p.Active}
+	return stockdomain.Product{ID: p.ID, UnitDecimals: ref.Units[p.UnitCode].InputDecimals, Active: p.Active, OpenPrice: p.OpenPrice}
 }
 
 // ownerPolicy satisfies the owner guard's Policy port with the settings service: the master PIN switch the shop sets
@@ -602,6 +616,174 @@ func (p ownerPolicy) PINRequired(ctx context.Context) (bool, error) {
 	current, err := p.settings.Get(ctx)
 	return current.PINRequired, err
 }
+
+// catalogRates satisfies the catalogue's PricingRate port: the rate in force and the shop's smallest note.
+type catalogRates struct {
+	fx       *fx.Service
+	settings *settings.Service
+}
+
+func (r catalogRates) InForce(ctx context.Context) (int64, string, bool, error) {
+	c, err := r.fx.Current(ctx)
+	if err != nil || !c.Found {
+		return 0, c.Local, false, err
+	}
+	return c.Rate.Nano, c.Local, true, nil
+}
+
+func (r catalogRates) CashNote(ctx context.Context) (int64, error) {
+	current, err := r.settings.Get(ctx)
+	return current.CashNote, err
+}
+
+// alertsCatalogue satisfies the engine's Catalogue port.
+type alertsCatalogue struct{ catalog *catalog.Service }
+
+func (a alertsCatalogue) Products(ctx context.Context) ([]alertsdomain.Product, error) {
+	products, err := a.catalog.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := a.catalog.Reference(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]alertsdomain.Product, 0, len(products))
+	for _, p := range products {
+		out = append(out, alertsdomain.Product{ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode,
+			UnitDecimals: ref.Units[p.UnitCode].InputDecimals, Active: p.Active, OpenPrice: p.OpenPrice,
+			ReorderMicro: p.ReorderMicro, HasReorder: p.HasReorder})
+	}
+	return out, nil
+}
+
+// alertsStock satisfies the engine's Stock port — with the UNGUARDED valuation: the engine records what the shop is
+// worth whether or not anyone is in owner mode, and decides what to show at its own boundary.
+type alertsStock struct{ stock *stock.Service }
+
+func (a alertsStock) OnHand(ctx context.Context) (map[id.ID]int64, error) {
+	levels, err := a.stock.Levels(ctx)
+	out := make(map[id.ID]int64, len(levels))
+	for _, l := range levels {
+		out[l.ProductID] = l.OnHandMicro
+	}
+	return out, err
+}
+
+func (a alertsStock) AvgCostUSD(ctx context.Context) (map[id.ID]int64, error) {
+	v, err := a.stock.ValuationUnguarded(ctx)
+	out := make(map[id.ID]int64, len(v.Lines))
+	for _, l := range v.Lines {
+		if l.AvgCostMicro > 0 {
+			out[l.ProductID] = l.AvgCostMicro
+		}
+	}
+	return out, err
+}
+
+func (a alertsStock) ValueUSD(ctx context.Context) (int64, error) {
+	v, err := a.stock.ValuationUnguarded(ctx)
+	return v.TotalMinor, err
+}
+
+// alertsPrices satisfies the engine's Prices port with the catalogue's re-price proposal, following the rate.
+type alertsPrices struct{ catalog *catalog.Service }
+
+func (a alertsPrices) Stale(ctx context.Context) ([]alertsdomain.Stale, error) {
+	proposals, err := a.catalog.RepriceProposal(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]alertsdomain.Stale, 0, len(proposals.Items))
+	for _, it := range proposals.Items {
+		out = append(out, alertsdomain.Stale{ProductID: it.Product.ID, NameAR: it.Product.NameAR, NameEN: it.Product.NameEN,
+			Currency: it.Product.PriceCurrency, PriceMicro: it.Product.PriceMicro, ShiftMicro: it.ShiftMicro,
+			ProposedMicro: it.ProposedMicro})
+	}
+	return out, nil
+}
+
+// alertsMoney satisfies the engine's Money port: the rate in force and the two currencies' decimals.
+type alertsMoney struct {
+	fx      *fx.Service
+	catalog *catalog.Service
+}
+
+func (a alertsMoney) InForce(ctx context.Context) (int64, string, bool, error) {
+	c, err := a.fx.Current(ctx)
+	if err != nil || !c.Found {
+		return 0, c.Local, false, err
+	}
+	return c.Rate.Nano, c.Local, true, nil
+}
+
+func (a alertsMoney) Decimals(ctx context.Context) (int, int, error) {
+	ref, err := a.catalog.Reference(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	c, err := a.fx.Current(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	return ref.Currencies[c.Local].Decimals, ref.Currencies[fxdomain.USD].Decimals, nil
+}
+
+// alertsDrawer satisfies the engine's Drawer port: what the drawer should hold at the end of a day, per currency.
+type alertsDrawer struct{ reports *reports.Service }
+
+func (a alertsDrawer) Expected(ctx context.Context, businessDate string) (int64, int64, error) {
+	d, err := a.reports.Drawer(ctx, businessDate)
+	if err != nil {
+		return 0, 0, err
+	}
+	var usd, local int64
+	for _, c := range d.Currencies {
+		if c.Currency == fxdomain.USD {
+			usd = c.Expected
+		} else {
+			local = c.Expected
+		}
+	}
+	return usd, local, nil
+}
+
+// alertsReceivables satisfies the engine's Receivables port: what customers owe, net, per currency.
+type alertsReceivables struct{ customers *customers.Service }
+
+func (a alertsReceivables) Owed(ctx context.Context) (int64, int64, error) {
+	o, err := a.customers.Outstanding(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	var usd, local int64
+	for _, c := range o.Customers {
+		for _, sum := range c.Summaries {
+			if sum.Currency == fxdomain.USD {
+				usd += sum.BalanceMinor
+			} else {
+				local += sum.BalanceMinor
+			}
+		}
+	}
+	return usd, local, nil
+}
+
+// alertsBackups satisfies the engine's Backups port: the newest of the shop's own backups.
+type alertsBackups struct{ safety *backups.Service }
+
+func (a alertsBackups) Newest(ctx context.Context) (time.Time, bool, error) {
+	st, err := a.safety.Status(ctx)
+	if err != nil || st.Last == nil {
+		return time.Time{}, false, err
+	}
+	return st.Last.TakenAt, true, nil
+}
+
+// alertsGate satisfies the engine's Gate port with the owner service.
+type alertsGate struct{ owner *owner.Service }
+
+func (g alertsGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
 
 // fxGate satisfies fx's OwnerGate port with the owner service.
 type fxGate struct{ owner *owner.Service }
@@ -665,7 +847,7 @@ func (c salesCatalogue) product(ctx context.Context, p catalogdomain.Product) (s
 	return salesdomain.Product{
 		ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode, UnitDecimals: ref.Units[p.UnitCode].InputDecimals,
 		PriceCurrency: p.PriceCurrency, PriceMicro: p.PriceMicro, CostMicro: p.CostMicro, HasCost: p.HasCost,
-		ReorderMicro: p.ReorderMicro, HasReorder: p.HasReorder,
+		ReorderMicro: p.ReorderMicro, HasReorder: p.HasReorder, OpenPrice: p.OpenPrice,
 		Active: p.Active, RowVersion: p.RowVersion,
 	}, nil
 }
@@ -931,7 +1113,8 @@ func (r reportsSales) Facts(ctx context.Context, from, to string) ([]reportsdoma
 		for _, l := range s.Lines {
 			f.Lines = append(f.Lines, reportsdomain.Line{ProductID: l.ProductID, NameAR: l.NameAR, NameEN: l.NameEN, UnitCode: l.UnitCode,
 				QuantityMicro: l.QuantityMicro, NetLocalMinor: l.NetLocalMinor(), NetUSDMinor: l.NetUSDMinor(), DiscountLocalMinor: l.DiscountLocalMinor,
-				DiscountUSDMinor: l.DiscountUSDMinor, CostKnown: l.CostKnown, CostUSDMinor: l.CostUSDMinor, CostLocalMinor: l.CostLocalMinor})
+				DiscountUSDMinor: l.DiscountUSDMinor, CostKnown: l.CostKnown, CostUSDMinor: l.CostUSDMinor, CostLocalMinor: l.CostLocalMinor,
+				OpenPrice: l.OpenPrice})
 		}
 		out = append(out, f)
 	}

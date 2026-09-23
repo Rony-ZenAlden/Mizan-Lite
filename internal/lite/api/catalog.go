@@ -60,6 +60,8 @@ type ProductDTO struct {
 	// ReorderLevel is the quantity at or below which the shop wants to be told to buy more, in the product's own unit,
 	// or "" where none was set — in which case the product is never called low (2026-09-20).
 	ReorderLevel string `json:"reorderLevel"`
+	// OpenPrice marks an item sold at a price typed at the till and never counted in stock (2026-09-23).
+	OpenPrice bool `json:"openPrice"`
 }
 
 // catalogueView is the reference data and package links a product is formatted against.
@@ -107,7 +109,7 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 	dto := ProductDTO{
 		ID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, Barcode: p.Barcode, UnitCode: p.UnitCode,
 		PriceCurrency: p.PriceCurrency, Price: v.shop.Display(p.PriceText(v.ref), p.PriceCurrency), QuickSlot: p.QuickSlot, Active: p.Active,
-		RowVersion: p.RowVersion,
+		RowVersion: p.RowVersion, OpenPrice: p.OpenPrice,
 	}
 	if v.hasRate {
 		if converted, ok, err := v.rate.PriceInOther(p.PriceCurrency, p.PriceMicro, v.local, v.usd); err == nil && ok {
@@ -242,6 +244,9 @@ type CreateProductInput struct {
 	CostPrice     string `json:"costPrice"`
 	MarginPercent string `json:"marginPercent"`
 	MarginAmount  string `json:"marginAmount"`
+	// OpenPrice creates an item sold at a price typed at the till, never counted in stock (2026-09-23). It then takes no
+	// price, cost or margin, and cannot be changed afterwards.
+	OpenPrice bool `json:"openPrice"`
 }
 
 // CreateProduct adds a product.
@@ -260,7 +265,8 @@ func (c *Catalog) CreateProduct(in CreateProductInput) envelope.Result[ProductDT
 			// A percentage is not money: 25% is 25% whichever way the shop reads its pounds.
 			MarginPercent: in.MarginPercent,
 			MarginAmount:  shop.Base(in.MarginAmount, in.PriceCurrency),
-		})
+
+			OpenPrice: in.OpenPrice})
 	})
 }
 
@@ -436,4 +442,110 @@ func (c *Catalog) SetReorder(in SetReorderInput) envelope.Result[ProductDTO] {
 		}
 		return app.Catalog.SetReorder(ctx, catalog.SetReorderInput{ID: parsed, RowVersion: in.RowVersion, Level: in.Level})
 	})
+}
+
+// RepriceItemDTO is one proposed price change: the product as it is, and what the proposal would make its price.
+type RepriceItemDTO struct {
+	ID         string `json:"id"`
+	RowVersion int64  `json:"rowVersion"`
+	NameAR     string `json:"nameAr"`
+	NameEN     string `json:"nameEn"`
+	Currency   string `json:"currency"`
+	Price      string `json:"price"`
+	Proposed   string `json:"proposed"`
+	// Shift is how far the exchange rate has moved since the product was priced, in percent with its sign.
+	Shift string `json:"shift"`
+}
+
+// RepriceProposalDTO is a re-price the owner has not agreed to: nothing has changed yet.
+type RepriceProposalDTO struct {
+	Rate  string           `json:"rate"`
+	Items []RepriceItemDTO `json:"items"`
+}
+
+// RepriceChangeInput is one price the owner confirmed, at the version they saw.
+type RepriceChangeInput struct {
+	ID         string `json:"id"`
+	RowVersion int64  `json:"rowVersion"`
+	Price      string `json:"price"`
+}
+
+// BulkRepriceInput is the prices the owner confirmed, all applied or none.
+type BulkRepriceInput struct {
+	Items []RepriceChangeInput `json:"items"`
+}
+
+// RepriceProposal lists the prices the exchange rate has left behind, with a proposed price for each (2026-09-23).
+// NOTHING changes: this is what the owner reads before deciding. percent is "" to follow the rate, or a signed
+// percentage to move every listed price by the same amount instead.
+func (c *Catalog) RepriceProposal(percent string) envelope.Result[RepriceProposalDTO] {
+	return call(c.core, "Catalog.RepriceProposal", func(ctx context.Context, app *bootstrap.App) (RepriceProposalDTO, error) {
+		p, err := app.Catalog.RepriceProposal(ctx, percent)
+		if err != nil {
+			return RepriceProposalDTO{}, err
+		}
+		v, err := newTillView(ctx, app)
+		if err != nil {
+			return RepriceProposalDTO{}, err
+		}
+		out := RepriceProposalDTO{Items: make([]RepriceItemDTO, 0, len(p.Items))}
+		if p.RateNano > 0 {
+			out.Rate = rateText(v.shop, p.RateNano)
+		}
+		for _, it := range p.Items {
+			d := v.ref.Currencies[it.Product.PriceCurrency].Decimals
+			out.Items = append(out.Items, RepriceItemDTO{ID: it.Product.ID.String(), RowVersion: it.Product.RowVersion,
+				NameAR: it.Product.NameAR, NameEN: it.Product.NameEN, Currency: it.Product.PriceCurrency,
+				Price:    v.shop.Display(domain.FormatMicro(it.Product.PriceMicro, d), it.Product.PriceCurrency),
+				Proposed: v.shop.Display(domain.FormatMicro(it.ProposedMicro, d), it.Product.PriceCurrency),
+				Shift:    signedPercent(it.ShiftMicro)})
+		}
+		return out, nil
+	})
+}
+
+// BulkReprice applies the prices the owner confirmed — all of them or none. Each is an owner's act recorded with its old
+// and new price, as a price changed one at a time would be; one PIN covers the batch.
+func (c *Catalog) BulkReprice(in BulkRepriceInput) envelope.Result[[]ProductDTO] {
+	return call(c.core, "Catalog.BulkReprice", func(ctx context.Context, app *bootstrap.App) ([]ProductDTO, error) {
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return nil, err
+		}
+		changes := make([]catalog.RepriceChange, 0, len(in.Items))
+		for _, it := range in.Items {
+			change, cerr := repriceChange(ctx, app, shop, it)
+			if cerr != nil {
+				return nil, cerr
+			}
+			changes = append(changes, change)
+		}
+		updated, err := app.Catalog.BulkReprice(ctx, changes)
+		if err != nil {
+			return nil, err
+		}
+		v, err := loadCatalogueView(ctx, app)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]ProductDTO, 0, len(updated))
+		for _, p := range updated {
+			out = append(out, toProductDTO(p, v))
+		}
+		return out, nil
+	})
+}
+
+// repriceChange is one confirmed price as the books hold it. The price the owner saw was in the shop's reading of the
+// product's currency; the books hold the base figure (L10).
+func repriceChange(ctx context.Context, app *bootstrap.App, shop moneyfmt.Shop, it RepriceChangeInput) (catalog.RepriceChange, error) {
+	productID, err := parseProductID(it.ID)
+	if err != nil {
+		return catalog.RepriceChange{}, err
+	}
+	current, err := app.Catalog.Get(ctx, productID)
+	if err != nil {
+		return catalog.RepriceChange{}, err
+	}
+	return catalog.RepriceChange{ID: productID, RowVersion: it.RowVersion, Price: shop.Base(it.Price, current.PriceCurrency)}, nil
 }

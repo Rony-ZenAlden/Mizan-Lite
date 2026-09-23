@@ -141,37 +141,64 @@ describe("Shell — the exchange rate in the header", () => {
   });
 });
 
-describe("Shell — backups on every screen (L8 A-L8.3)", () => {
-  it("warns on every screen when the SHOP'S OWN backups need attention, and not otherwise", async () => {
-    const { aBackup, aBackupStatus } = await import("@/api/testing");
-    const { needsAttention } = await import("./Shell");
-    expect(needsAttention(aBackupStatus())).toBeNull();
-    expect(needsAttention(aBackupStatus({ last: undefined }))).toBe("backups.warning_none");
-    expect(needsAttention(aBackupStatus({ last: aBackup({ ageSeconds: 40 * 3600 }) }))).toBe("backups.warning_old");
+describe("Shell — one notification engine (2026-09-23)", () => {
+  const noBackup = {
+    key: "backup_none",
+    fingerprint: "2026-09-23",
+    kind: "backup_none",
+    severity: "warning",
+    productId: "",
+    nameAr: "",
+    nameEn: "",
+    count: 0,
+  };
 
-    const health = vi.fn(async () => ({ version: "0.9.0", schemaVersion: 8, platform: "darwin", dataDir: "/d" }));
-    const status = async () => aBackupStatus({ last: undefined });
-    renderWithProviders(<Shell />, { client: fakeClient({ app: { health }, backups: { status }, settings: { get: async () => (aSettings({ locale: "en", shopName: "x", direction: "ltr" })) } }), locale: "en" });
-    const warning = await screen.findByTestId("backup-warning");
-    expect(warning).toHaveTextContent("There is no backup yet");
-    expect(screen.getByRole("link", { name: "Open Backups" })).toHaveAttribute("href", "/backups");
+  // L8 A-L8.3 put the backups' state on every screen as a red banner; the owner removed the USB part of it in 0.9.8 for
+  // standing across the counter. What is left now comes through the engine: the bell counts it, a toast says it once,
+  // and it waits in the notification centre — the counter itself is never covered.
+  it("tells the counter about a missing backup through the bell and a toast, never a banner", async () => {
+    const { anAlerts } = await import("@/api/testing");
+    const health = vi.fn(async () => ({ version: "0.9.9", schemaVersion: 11, platform: "darwin", dataDir: "/d" }));
+    const current = vi.fn(async () => anAlerts({ notifications: [noBackup], backup: "none" }));
+    renderWithProviders(<Shell />, {
+      client: fakeClient({ app: { health }, alerts: { current }, settings: { get: async () => aSettings({ locale: "en", shopName: "x", direction: "ltr" }) } }),
+      locale: "en",
+    });
+    expect(await screen.findByTestId("bell-count")).toHaveTextContent("1");
+    expect(screen.getByTestId("bell")).toHaveAccessibleName("Open notifications — 1 unread");
+    expect(await screen.findByTestId("toast")).toHaveTextContent("There is no backup yet");
+    expect(screen.queryByTestId("backup-warning")).not.toBeInTheDocument();
     expect(health).toHaveBeenCalledTimes(1);
     await settled("en");
   });
 
-  // The owner's request of 2026-09-20: the USB banner appeared across the counter, every screen, about a drive the
-  // cashier cannot plug in while serving. A warning that fires when nothing is wrong teaches people to ignore
-  // warnings — including the two above, which say the shop's data is unprotected right now.
-  it("never interrupts the counter about the outside folder, however stale or broken it is", async () => {
-    const { aBackupStatus } = await import("@/api/testing");
-    const { needsAttention } = await import("./Shell");
-    expect(needsAttention(aBackupStatus({ outsideStale: true }))).toBeNull();
-    expect(needsAttention(aBackupStatus({ outsideFailed: "lite.backups.folder_missing" }))).toBeNull();
-    expect(needsAttention(aBackupStatus({ outsideStale: true, outsideFailed: "lite.backups.folder_missing" }))).toBeNull();
-
-    const status = async () => aBackupStatus({ outsideStale: true, outsideFailed: "lite.backups.folder_missing" });
-    renderWithProviders(<Shell />, { client: fakeClient({ backups: { status }, settings: { get: async () => (aSettings({ locale: "en", shopName: "x", direction: "ltr" })) } }), locale: "en" });
+  it("opens the notification centre from the bell, which then has nothing unread", async () => {
+    const { anAlerts } = await import("@/api/testing");
+    const current = vi.fn(async () => anAlerts({ notifications: [noBackup], backup: "none" }));
+    renderWithProviders(<Shell />, {
+      client: fakeClient({ alerts: { current }, settings: { get: async () => aSettings({ locale: "en", shopName: "x", direction: "ltr" }) } }),
+      locale: "en",
+    });
     await settled("en");
-    expect(screen.queryByTestId("backup-warning")).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByTestId("bell"));
+    expect(await screen.findByTestId("alerts-backup")).toHaveTextContent("There is no backup yet");
+    await waitFor(() => expect(screen.queryByTestId("bell-count")).not.toBeInTheDocument());
+    expect(screen.getByTestId("alerts-new")).toBeInTheDocument();
+  });
+
+  it("asks the engine again on every change of screen", async () => {
+    const { anAlerts } = await import("@/api/testing");
+    const current = vi.fn(async () => anAlerts());
+    renderWithProviders(<Shell />, {
+      client: fakeClient({ alerts: { current }, settings: { get: async () => aSettings({ locale: "en", shopName: "x", direction: "ltr" }) } }),
+      locale: "en",
+    });
+    await settled("en");
+    const before = current.mock.calls.length;
+    await userEvent.click(screen.getByRole("link", { name: "Stock" }));
+    await waitFor(() => expect(current.mock.calls.length).toBeGreaterThan(before));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
   });
 });

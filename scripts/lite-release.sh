@@ -75,7 +75,7 @@ wails    $(cd apps/lite && wails version 2>/dev/null | head -1)
 
 Verified here
   the full local CI (Go with the race detector, archlint and its drills, lint, the frontend, the end-to-end journeys)
-  every past schema (1-8) upgrades to this release with every row intact
+  every past schema (1-$(ls internal/lite/bootstrap/testdata/schemas/schema-*.db | wc -l | tr -d ' ')) upgrades to this release with every row intact
   the macOS application INSIDE the disk image opened a seeded shop, reached Go and closed cleanly
 
 NOT verified here — needs the owner's machines (L8 §7, §12.4)

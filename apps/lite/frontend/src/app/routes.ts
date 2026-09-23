@@ -4,6 +4,7 @@ import { AboutScreen } from "@/screens/about/AboutScreen";
 import { BackupsScreen } from "@/screens/backups/BackupsScreen";
 import { CashScreen } from "@/screens/cash/CashScreen";
 import { CustomersScreen } from "@/screens/customers/CustomersScreen";
+import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { SettingsScreen } from "@/screens/settings/SettingsScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
 import { PrinterScreen } from "@/screens/printer/PrinterScreen";
@@ -35,6 +36,8 @@ export const ROUTES: readonly RouteDef[] = [
   { path: "/stock", labelKey: "nav.stock", Screen: StockScreen },
   { path: "/rates", labelKey: "nav.rates", Screen: RatesScreen },
   { path: "/reports", labelKey: "nav.reports", Screen: ReportsScreen },
+  // The bell in the header opens it too (2026-09-23).
+  { path: "/notifications", labelKey: "nav.notifications", Screen: NotificationsScreen },
   { path: "/printer", labelKey: "nav.printer", Screen: PrinterScreen },
   { path: "/backups", labelKey: "nav.backups", Screen: BackupsScreen },
   { path: "/settings", labelKey: "nav.settings", Screen: SettingsScreen },

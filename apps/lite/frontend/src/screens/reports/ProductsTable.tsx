@@ -79,10 +79,12 @@ export function ProductsTable({ report }: { report: ProductsReport }) {
                 <td className="p-2">
                   <Money value={r.profitLocal} currency={cur} />
                 </td>
-                <td className="p-2 text-danger">
-                  {r.unknownLines > 0
-                    ? t("reports.no_cost_lines", { count: formatInteger(r.unknownLines, locale), usd: formatDecimal(r.unknownUsd, locale) })
-                    : ""}
+                <td className={`p-2 ${r.openLines > 0 ? "text-text-muted" : "text-danger"}`}>
+                  {r.openLines > 0
+                    ? t("reports.open_item_lines", { count: formatInteger(r.openLines, locale), usd: formatDecimal(r.openUsd, locale) })
+                    : r.unknownLines > 0
+                      ? t("reports.no_cost_lines", { count: formatInteger(r.unknownLines, locale), usd: formatDecimal(r.unknownUsd, locale) })
+                      : ""}
                 </td>
               </tr>
             ))}

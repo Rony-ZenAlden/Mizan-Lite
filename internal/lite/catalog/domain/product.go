@@ -18,17 +18,19 @@ import (
 
 // Stable error codes. They double as i18n keys.
 const (
-	CodeNameRequired     = "lite.catalog.name_required"
-	CodeNameTooLong      = "lite.catalog.name_too_long"
-	CodeBarcodeInvalid   = "lite.catalog.barcode_invalid"
-	CodeUnknownUnit      = "lite.catalog.unknown_unit"
-	CodeUnknownCurrency  = "lite.catalog.unknown_currency"
-	CodePriceDecimals    = "lite.catalog.price_decimals"
-	CodeSlotInvalid      = "lite.catalog.slot_invalid"
-	CodeSlotNeedsActive  = "lite.catalog.slot_needs_active"
-	CodeDuplicateName    = "lite.catalog.duplicate_name"
-	CodeDuplicateBarcode = "lite.catalog.duplicate_barcode"
-	CodeNotFound         = "lite.catalog.not_found"
+	CodeNameRequired   = "lite.catalog.name_required"
+	CodeNameTooLong    = "lite.catalog.name_too_long"
+	CodeBarcodeInvalid = "lite.catalog.barcode_invalid"
+	CodeUnknownUnit    = "lite.catalog.unknown_unit"
+	// CodeOpenPriceHasNoPrice refuses a price, cost, margin or reorder level on an open-priced product (2026-09-23).
+	CodeOpenPriceHasNoPrice = "lite.catalog.open_price_has_no_price"
+	CodeUnknownCurrency     = "lite.catalog.unknown_currency"
+	CodePriceDecimals       = "lite.catalog.price_decimals"
+	CodeSlotInvalid         = "lite.catalog.slot_invalid"
+	CodeSlotNeedsActive     = "lite.catalog.slot_needs_active"
+	CodeDuplicateName       = "lite.catalog.duplicate_name"
+	CodeDuplicateBarcode    = "lite.catalog.duplicate_barcode"
+	CodeNotFound            = "lite.catalog.not_found"
 )
 
 // codeStale is platform/database's optimistic-concurrency code, reused so a stale edit reads the same
@@ -94,6 +96,12 @@ type Product struct {
 	ReorderMicro int64
 	// HasReorder separates "tell me at zero" from "nobody has said" — a product with no level is never called low.
 	HasReorder bool
+	// OpenPrice marks a product sold at a price typed at the till and never counted in stock — the carrier bag, the bunch
+	// of parsley (2026-09-23). Fixed when the product is created: the schema refuses to change it afterwards.
+	OpenPrice bool
+	// PricedRateNano is the exchange rate that was in force when the price was last set, or 0 where none was (or the
+	// product is open-priced). It is how a price the dollar has left behind is found (2026-09-23).
+	PricedRateNano int64
 	// QuickSlot is the till button, 1–QuickSlots, or 0 for none.
 	QuickSlot  int
 	Active     bool
@@ -127,6 +135,9 @@ type Draft struct {
 	// MarginPercent or MarginAmount works Price out of Cost instead of taking it as typed; at most one of the two.
 	MarginPercent string
 	MarginAmount  string
+	// OpenPrice makes a product whose price is typed at the till and which is never counted in stock. It then takes no
+	// price, cost or margin of its own.
+	OpenPrice bool
 }
 
 // NewProduct validates a draft into a product. It is active, on no till button, at version 1.
@@ -145,6 +156,20 @@ func NewProduct(productID id.ID, d Draft, ref Reference) (Product, error) {
 			WithField(FieldUnit, CodeUnknownUnit, "unknown unit").WithParam("value", d.UnitCode)
 	}
 	p.UnitCode = d.UnitCode
+	if d.OpenPrice {
+		// Its price is typed at the till, every time. A stored price, a cost or a margin would be figures the product
+		// never uses, and a shop reading them would take them for the truth.
+		if d.Price != "" && d.Price != "0" || d.Cost != "" || d.MarginPercent != "" || d.MarginAmount != "" {
+			return Product{}, errs.Validation(CodeOpenPriceHasNoPrice, "an open-priced product takes its price at the till").
+				WithField(FieldPrice, CodeOpenPriceHasNoPrice, "no price of its own")
+		}
+		if _, ok := ref.Currencies[d.PriceCurrency]; !ok {
+			return Product{}, errs.Validation(CodeUnknownCurrency, "unknown currency").
+				WithField(FieldCurrency, CodeUnknownCurrency, "unknown currency").WithParam("value", d.PriceCurrency)
+		}
+		p.PriceCurrency, p.PriceMicro, p.OpenPrice = d.PriceCurrency, 0, true
+		return p, nil
+	}
 	if p, err = p.Reprice(d.PriceCurrency, d.Price, ref); err != nil {
 		return Product{}, err
 	}
@@ -212,6 +237,10 @@ func (p Product) WithBarcode(raw string) (Product, error) {
 // Reprice sets the price and its currency. The price may be zero; it may not carry more decimals than the
 // currency has (D-L1.5).
 func (p Product) Reprice(currencyCode, raw string, ref Reference) (Product, error) {
+	if p.OpenPrice {
+		return p, errs.Validation(CodeOpenPriceHasNoPrice, "an open-priced product takes its price at the till").
+			WithField(FieldPrice, CodeOpenPriceHasNoPrice, "no price of its own")
+	}
 	currency, ok := ref.Currencies[currencyCode]
 	if !ok {
 		return p, errs.Validation(CodeUnknownCurrency, "unknown currency").

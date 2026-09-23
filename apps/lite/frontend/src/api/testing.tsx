@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState } from "./client";
+import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -54,6 +54,7 @@ export function aProduct(overrides: Partial<Product> = {}): Product {
     marginAmount: "",
     marginPercent: "",
     reorderLevel: "",
+    openPrice: false,
     ...overrides,
   };
 }
@@ -313,6 +314,49 @@ export function aProfit(overrides: Partial<Profit> = {}): Profit {
     unknownLines: 0,
     unknownUsd: "0.00",
     unknownLocal: "0",
+    openLines: 0,
+    openUsd: "0.00",
+    openLocal: "0",
+    ...overrides,
+  };
+}
+
+/** What the notification engine found: nothing, by default — a quiet shop with its backups in order. */
+export function anAlerts(overrides: Partial<AlertsState> = {}): AlertsState {
+  return {
+    notifications: [],
+    lowStock: [],
+    stale: [],
+    lossCount: 0,
+    capital: {
+      thenDate: "",
+      nowDate: "",
+      thenUsd: "",
+      nowUsd: "",
+      change: "",
+      thenRate: "",
+      nowRate: "",
+      rateShift: "",
+      depreciation: "",
+      rising: false,
+    },
+    hasCapital: false,
+    historyDays: 0,
+    historyNeeded: 7,
+    backup: "",
+    ownerHidden: false,
+    localCurrency: "SYP",
+    ...overrides,
+  };
+}
+
+/** A re-price proposal: one jar priced at 15,000 when the dollar was 15,000, proposed at 16,500. */
+export function aRepriceProposal(overrides: Partial<RepriceProposal> = {}): RepriceProposal {
+  return {
+    rate: "16500",
+    items: [
+      { id: "jar", rowVersion: 3, nameAr: "دبس رمان", nameEn: "Pomegranate molasses", currency: "SYP", price: "15000", proposed: "16500", shift: "+10.0" },
+    ],
     ...overrides,
   };
 }
@@ -597,6 +641,8 @@ export function fakeClient(overrides: Overrides = {}): Client {
       updateProduct: async (input) => aProduct({ ...input, rowVersion: input.rowVersion + 1 }),
       setPrice: async (input) => aProduct({ id: input.id, priceCurrency: input.priceCurrency, price: input.price, rowVersion: input.rowVersion + 1 }),
       setReorder: async (input) => aProduct({ id: input.id, reorderLevel: input.level, rowVersion: input.rowVersion + 1 }),
+      repriceProposal: async () => aRepriceProposal(),
+      bulkReprice: async (items) => items.map((i) => aProduct({ id: i.id, price: i.price, rowVersion: i.rowVersion + 1 })),
       setActive: async (input) => aProduct({ id: input.id, active: input.active, rowVersion: input.rowVersion + 1 }),
       setQuickSlot: async (input) => aProduct({ id: input.id, quickSlot: input.slot }),
       setPackage: async (input) =>
@@ -639,11 +685,14 @@ export function fakeClient(overrides: Overrides = {}): Client {
       fetchQuote: async () => ({ provider: "currency-api-jsdelivr", rate: "13007.5355" }),
     },
     till: {
-      scan: async () => ({ found: false, productId: "", nameAr: "", nameEn: "", unitCode: "", unitDecimals: 0, active: false, onHand: "" }),
+      scan: async () => ({ found: false, productId: "", nameAr: "", nameEn: "", unitCode: "", unitDecimals: 0, active: false, onHand: "", openPrice: false, priceCurrency: "" }),
       quote: async () => aQuote(),
       checkout: async () => aSale(),
       cashNote: async () => ({ currency: "SYP", note: "500" }),
       setCashNote: async (note) => ({ currency: "SYP", note }),
+      // Go makes the shop's open item in its own currency (catalog.OpenItem).
+      openItem: async () =>
+        aProduct({ id: "misc", nameAr: "متفرقات", nameEn: "Miscellaneous", unitCode: "piece", priceCurrency: "SYP", price: "0", openPrice: true }),
     },
     sales: {
       list: async (businessDate) => ({
@@ -734,6 +783,9 @@ export function fakeClient(overrides: Overrides = {}): Client {
             unknownQuantity: "0.000",
             unknownUsd: "0.00",
             unknownLocal: "0",
+            openLines: 0,
+            openUsd: "0.00",
+            openLocal: "0",
           },
         ],
         discountUsd: "0.00",
@@ -768,6 +820,9 @@ export function fakeClient(overrides: Overrides = {}): Client {
       settings: async () => printerSettings(),
       save: async (input) => printerSettings({ ...input, paperMm: Number(input.paperMm) }),
       test: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
+    },
+    alerts: {
+      current: async () => anAlerts(),
     },
     backups: {
       list: async () => [aBackup(), aBackup({ name: "on_close-20260913T190000Z.db", reason: "on_close", takenAt: "2026-09-13T19:00:00.000Z", outside: false })],
@@ -805,6 +860,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
     print: { ...base.print, ...overrides.print },
     printers: { ...base.printers, ...overrides.printers },
     backups: { ...base.backups, ...overrides.backups },
+    alerts: { ...base.alerts, ...overrides.alerts },
   };
 }
 

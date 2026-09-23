@@ -106,10 +106,19 @@ export function ProductsScreen() {
                   <td className="p-2">{name(p)}</td>
                   <td className="p-2">{tDynamic(`uom.${p.unitCode}`)}</td>
                   <td className="p-2">
-                    <bdi dir="ltr">{formatDecimal(p.price, locale)}</bdi> {tDynamic(`currency.${p.priceCurrency}`)}
+                    {p.openPrice ? (
+                      // Its price is typed at the till each time (2026-09-23); a nought here would read as "free".
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary" data-testid="product-open-price-badge">
+                        {t("products.open_price_badge")}
+                      </span>
+                    ) : (
+                      <>
+                        <bdi dir="ltr">{formatDecimal(p.price, locale)}</bdi> {tDynamic(`currency.${p.priceCurrency}`)}
+                      </>
+                    )}
                   </td>
                   <td className="p-2 text-text-muted">
-                    {p.convertedPrice ? (
+                    {p.convertedPrice && !p.openPrice ? (
                       <>
                         <bdi dir="ltr">≈ {formatDecimal(p.convertedPrice, locale)}</bdi> {tDynamic(`currency.${p.convertedCurrency}`)}
                       </>
@@ -137,7 +146,7 @@ export function ProductsScreen() {
                   <td className="p-2">
                     <div className="flex gap-2">
                       <Button onClick={() => setEditing(p)}>{t("products.edit")}</Button>
-                      <Button onClick={() => setLabelling(p)}>{t("label.print")}</Button>
+                      {p.openPrice ? null : <Button onClick={() => setLabelling(p)}>{t("label.print")}</Button>}
                       {p.active ? (
                         <Button onClick={() => void act(() => withOwner(() => client.catalog.setActive({ id: p.id, rowVersion: p.rowVersion, active: false })))}>
                           {t("products.deactivate")}

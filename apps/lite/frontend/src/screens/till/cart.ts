@@ -7,6 +7,10 @@ export interface Pick {
   nameEn: string;
   unitCode: string;
   unitDecimals: number;
+  /** An item whose price the cashier types, never counted in stock (2026-09-23). */
+  openPrice?: boolean;
+  /** The currency that typed price is in — the product's own, which is the one Go reads it in. */
+  priceCurrency?: string;
 }
 
 /** One cart line as the cashier has it: the quantity and discount exactly as typed. Go prices it. */
@@ -14,6 +18,8 @@ export interface CartEntry extends Pick {
   key: string;
   quantity: string;
   discountPercent: string;
+  /** The price typed for an open-priced item, as the shop reads its money; "" for every catalogue-priced line. */
+  price: string;
 }
 
 /**
@@ -40,8 +46,10 @@ let counter = 0;
  * Adds a product to the cart. A counted product already in the cart, with no discount typed on its line, goes up by one;
  * a weighed product always takes a new line with its quantity — two weighings are two lines, as on a scale's ticket.
  */
-export function addToCart(cart: CartEntry[], pick: Pick, quantity: string): CartEntry[] {
-  if (pick.unitDecimals === 0) {
+export function addToCart(cart: CartEntry[], pick: Pick, quantity: string, price = ""): CartEntry[] {
+  // An open-priced item is never merged: two carrier bags at different prices are two things sold, and merging them would
+  // charge the second at the first one's price.
+  if (pick.unitDecimals === 0 && !pick.openPrice) {
     const index = cart.findIndex((l) => l.productId === pick.productId && l.discountPercent === "");
     const next = index >= 0 ? plusOne(cart[index]!.quantity) : null;
     if (index >= 0 && next !== null) {
@@ -49,5 +57,5 @@ export function addToCart(cart: CartEntry[], pick: Pick, quantity: string): Cart
     }
   }
   counter += 1;
-  return [...cart, { ...pick, key: `line-${counter}`, quantity, discountPercent: "" }];
+  return [...cart, { ...pick, key: `line-${counter}`, quantity, discountPercent: "", price }];
 }

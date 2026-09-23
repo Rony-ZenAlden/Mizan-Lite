@@ -8,7 +8,7 @@ import { QUOTE_DEBOUNCE_MS, TillScreen } from "./TillScreen";
 
 const jam = aProduct({ id: "jam", nameAr: "مربى", nameEn: "Apricot jam", unitCode: "jar", quickSlot: 2, barcode: "6291" });
 const oil = aProduct({ quickSlot: 1 });
-const scanJam = async () => ({ found: true, productId: "jam", nameAr: "مربى", nameEn: "Apricot jam", unitCode: "jar", unitDecimals: 0, active: true, onHand: "4" });
+const scanJam = async () => ({ found: true, productId: "jam", nameAr: "مربى", nameEn: "Apricot jam", unitCode: "jar", unitDecimals: 0, active: true, onHand: "4", openPrice: false, priceCurrency: "SYP" });
 const products = async () => [oil, jam];
 
 async function settle() {
@@ -34,7 +34,7 @@ describe("TillScreen — adding", () => {
     await settle();
 
     expect(quote).toHaveBeenLastCalledWith({
-      lines: [{ productId: "jam", quantity: "1", discountPercent: "" }],
+      lines: [{ productId: "jam", quantity: "1", discountPercent: "", price: "" }],
       settlement: "",
       saleDiscount: "",
       tenderCurrency: "",
@@ -59,7 +59,7 @@ describe("TillScreen — adding", () => {
     await userEvent.type(scanField(), "6291{Enter}");
     await settle();
     expect(screen.getAllByTestId("cart-line")).toHaveLength(1);
-    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "jam", quantity: "2", discountPercent: "" }]);
+    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "jam", quantity: "2", discountPercent: "", price: "" }]);
   });
 
   it("a weighed product from a quick button asks how much first, in either digits", async () => {
@@ -79,7 +79,7 @@ describe("TillScreen — adding", () => {
     await settle();
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: oil.id, quantity: "1٫750", discountPercent: "" }]);
+    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: oil.id, quantity: "1٫750", discountPercent: "", price: "" }]);
     await waitFor(() => expect(scanField()).toHaveFocus());
   });
 
@@ -93,7 +93,7 @@ describe("TillScreen — adding", () => {
     expect(scanField()).toHaveFocus();
     await userEvent.click(button);
     await settle();
-    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "jam", quantity: "2", discountPercent: "" }]);
+    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "jam", quantity: "2", discountPercent: "", price: "" }]);
   });
 
   it("an unknown barcode searches by name and offers what matches, or says nothing matched", async () => {
@@ -206,7 +206,7 @@ describe("TillScreen — paying", () => {
 
     expect(checkout).toHaveBeenCalledTimes(1);
     expect(checkout.mock.calls[0]![0]).toEqual({
-      cart: { lines: [{ productId: "jam", quantity: "1", discountPercent: "" }], settlement: "", saleDiscount: "", tenderCurrency: "", tendered: "", changeCurrency: "", payment: "cash", customerId: "" },
+      cart: { lines: [{ productId: "jam", quantity: "1", discountPercent: "", price: "" }], settlement: "", saleDiscount: "", tenderCurrency: "", tendered: "", changeCurrency: "", payment: "cash", customerId: "" },
       token: "token-1",
     });
     const receipt = await screen.findByRole("dialog", { name: "Receipt No. 7" });
@@ -627,5 +627,82 @@ describe("TillScreen — every product on the grid (owner's testing, 2026-09-16)
     await settle();
     expect(screen.queryByTestId("till-products")).not.toBeInTheDocument();
     expect(screen.getByText("No products yet — add them on the Products screen.")).toBeInTheDocument();
+  });
+});
+
+describe("TillScreen — the open item and held sales (2026-09-23)", () => {
+  it("Misc asks what the item costs and sells it at the price typed, digits as the keyboard sent them", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { quote } }), locale: "en" });
+    await settle();
+    await userEvent.click(screen.getByRole("button", { name: "Misc" }));
+    const dialog = await screen.findByRole("dialog", { name: "Price of Miscellaneous" });
+    const add = within(dialog).getByRole("button", { name: "Add to the sale" });
+    expect(add).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText("Price (SYP)"), "0");
+    expect(add).toBeDisabled();
+    await userEvent.clear(within(dialog).getByLabelText("Price (SYP)"));
+    await userEvent.type(within(dialog).getByLabelText("Price (SYP)"), "٢٥٠٠");
+    await userEvent.click(add);
+    await settle();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Go reads the digits (numinput) and takes the figure back to the books' pounds (moneyfmt.Base).
+    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "misc", quantity: "1", discountPercent: "", price: "٢٥٠٠" }]);
+  });
+
+  it("two open items are two lines, each at its own price", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { quote } }), locale: "en" });
+    await settle();
+    for (const price of ["2500", "1000"]) {
+      await userEvent.click(screen.getByRole("button", { name: "Misc" }));
+      const dialog = await screen.findByRole("dialog", { name: "Price of Miscellaneous" });
+      await userEvent.type(within(dialog).getByLabelText("Price (SYP)"), `${price}{Enter}`);
+      await settle();
+    }
+    expect(quote.mock.lastCall![0].lines.map((l) => l.price)).toEqual(["2500", "1000"]);
+  });
+
+  it("an open-priced product set up in dollars asks for dollars — the currency Go reads its price in", async () => {
+    const delivery = aProduct({ id: "svc", nameAr: "توصيل", nameEn: "Delivery", unitCode: "piece", priceCurrency: "USD", price: "0", openPrice: true });
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products: async () => [delivery] } }), locale: "en" });
+    await settle();
+    await userEvent.click(within(screen.getByRole("group", { name: "All products" })).getByRole("button", { name: "Delivery" }));
+    const dialog = await screen.findByRole("dialog", { name: "Price of Delivery" });
+    expect(within(dialog).getByLabelText("Price (USD)")).toBeInTheDocument();
+  });
+
+  it("Hold puts a sale aside for the next customer; resuming brings it back, holding the open one in its place", async () => {
+    const quote = vi.fn<(input: CartInput) => Promise<CartQuote>>(async () => aQuote());
+    renderWithProviders(<TillScreen />, { client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote } }), locale: "en" });
+    await settle();
+    expect(screen.getByRole("button", { name: "Hold (F6)" })).toBeDisabled();
+
+    // The first customer: two jars. Held with F6, and the counter is empty for the next one.
+    await userEvent.type(scanField(), "6291{Enter}");
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.keyboard("{F6}");
+    await settle();
+    expect(screen.queryAllByTestId("cart-line")).toHaveLength(0);
+    expect(screen.getAllByTestId("held-cart")).toHaveLength(1);
+    expect(screen.getByTestId("held-cart")).toHaveTextContent("Held 1 · 1 items");
+
+    // The second customer: one jar — then the first comes back. Nothing the cashier was doing is thrown away.
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    await userEvent.click(within(screen.getByTestId("held-cart")).getByRole("button", { name: /Held 1/ }));
+    await settle();
+    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "jam", quantity: "2", discountPercent: "", price: "" }]);
+    expect(screen.getAllByTestId("held-cart")).toHaveLength(1);
+
+    // Resuming the second puts the first aside again, and the second is exactly as it was left.
+    await userEvent.click(within(screen.getByTestId("held-cart")).getByRole("button", { name: /Held 1/ }));
+    await settle();
+    expect(quote.mock.lastCall![0].lines).toEqual([{ productId: "jam", quantity: "1", discountPercent: "", price: "" }]);
+
+    // A held sale can be discarded.
+    await userEvent.click(screen.getByRole("button", { name: "Discard held sale 1" }));
+    expect(screen.queryByTestId("held-cart")).not.toBeInTheDocument();
   });
 });

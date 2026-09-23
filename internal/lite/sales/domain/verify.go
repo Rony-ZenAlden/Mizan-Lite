@@ -73,6 +73,13 @@ func Verify(sales []Sale, movements []StockMovement, charges []Charge, local, us
 			usd64 += l.NetUSDMinor()
 			sale, sold := byLine[l.ID]["sale"]
 			void, voided := byLine[l.ID]["sale_void"]
+			// An open-priced line takes nothing off a shelf: the stock record matches the sale when there is NONE.
+			if l.OpenPrice {
+				if sold || voided {
+					find(FindingStockMissing, s)
+				}
+				continue
+			}
 			if !sold || sale.ProductID != l.ProductID || sale.QuantityMicro != -l.QuantityMicro || sale.SaleID != s.ID ||
 				voided != (s.Status == StatusVoided) || (voided && (void.QuantityMicro != l.QuantityMicro || void.SaleID != s.ID)) {
 				find(FindingStockMissing, s)

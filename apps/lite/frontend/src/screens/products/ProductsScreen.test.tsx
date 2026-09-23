@@ -29,6 +29,19 @@ describe("ProductsScreen", () => {
     expect(products).toHaveBeenCalledWith({ text: "", includeInactive: false });
   });
 
+  // 2026-09-23: an open-priced item's price is typed at the till, so a price here would be a nought that reads as "free",
+  // and a price label for it would print one.
+  it("shows an open-priced item as such, with no price and no price label", async () => {
+    const misc = aProduct({ id: "misc", nameAr: "متفرقات", nameEn: "Miscellaneous", unitCode: "piece", priceCurrency: "SYP", price: "0", convertedPrice: "0", openPrice: true });
+    renderWithProviders(<ProductsScreen />, { client: fakeClient({ catalog: { products: async () => [misc, aProduct()] } }), locale: "en" });
+    await settle();
+    const row = screen.getByRole("row", { name: /Miscellaneous/ });
+    expect(within(row).getByTestId("product-open-price-badge")).toHaveTextContent("Open price");
+    expect(within(row).queryByText("0")).not.toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Print a price tag" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /Olive oil/ })).getByRole("button", { name: "Print a price tag" })).toBeInTheDocument();
+  });
+
   it("shows the English name in English when there is one", async () => {
     renderWithProviders(<ProductsScreen />, { locale: "en" });
     await settle();

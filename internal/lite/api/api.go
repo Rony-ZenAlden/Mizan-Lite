@@ -57,6 +57,7 @@ type Set struct {
 	Print     *Print
 	Printers  *Printers
 	Backups   *Backups
+	Alerts    *Alerts
 
 	core *core
 }
@@ -80,6 +81,7 @@ func New(version string, log *slog.Logger) *Set {
 		Print:     &Print{core: c},
 		Printers:  &Printers{core: c},
 		Backups:   &Backups{core: c},
+		Alerts:    &Alerts{core: c},
 		core:      c,
 	}
 }
@@ -89,7 +91,7 @@ func New(version string, log *slog.Logger) *Set {
 // generate no TypeScript and therefore slip past every gate that reads the generated files — fails
 // a Go test instead.
 func (s *Set) Bindings() []any {
-	return []any{s.App, s.Settings, s.Catalog, s.Owner, s.Stock, s.FX, s.Till, s.Sales, s.Customers, s.Reports, s.Cash, s.Export, s.Print, s.Printers, s.Backups}
+	return []any{s.App, s.Settings, s.Catalog, s.Owner, s.Stock, s.FX, s.Till, s.Sales, s.Customers, s.Reports, s.Cash, s.Export, s.Print, s.Printers, s.Backups, s.Alerts}
 }
 
 // SetContext installs the context the window's lifetime runs under. Every call derives from it, so

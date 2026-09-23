@@ -27,6 +27,8 @@ package moneyfmt
 
 import (
 	"strings"
+
+	"github.com/mizan-erp/mizan/internal/lite/numinput"
 )
 
 // Display is how a shop reads its own currency.
@@ -132,13 +134,26 @@ func SplitDual(text string) (fresh, legacy string, ok bool) {
 //
 // In dual mode a person types the NEW figure: the old one is shown for recognition, not for typing, and a shop asked to
 // type whichever it liked would have no way to say which it meant.
+//
+// The figure is read the way every typed number is read (numinput.Normalise) before its point is moved: Arabic-Indic
+// digits and the Arabic decimal separator are a figure like any other. Until 0.9.9 the point was moved in the text AS
+// TYPED, which knows only '.', so "١٫٥" new pounds became 1.5 old pounds instead of 150. Text Normalise refuses is
+// handed on untouched, for the parser it is going to to refuse with its reason — "no thousands separators", say.
 func (s Shop) Base(typed, currency string) string {
 	if !s.applies(currency) || typed == "" {
 		return typed
 	}
 	switch s.Mode {
 	case New, Dual:
-		return shift(typed, Noughts)
+		sign, body := "", strings.TrimSpace(typed)
+		if strings.HasPrefix(body, "-") {
+			sign, body = "-", body[1:]
+		}
+		figure, err := numinput.Normalise(body)
+		if err != nil {
+			return typed
+		}
+		return shift(sign+figure, Noughts)
 	default:
 		return typed
 	}

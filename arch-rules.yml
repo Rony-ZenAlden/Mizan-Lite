@@ -127,9 +127,11 @@ rules:
         # moneyfmt joined in L10: it is the one place a figure changes between what the books hold and what a person
         # reads, and every DTO and every typed amount passes through it. A clock, a database or a setting reaching into
         # it would make "what does this figure mean" depend on something other than the figure and the shop's choice.
+        # numinput is itself one of them, so one of them reading a typed number the way every parser does keeps them all
+        # pure (0.9.9): moneyfmt.Base moved the point in the text AS TYPED, and read "١٫٥" as 1.5 old pounds, not 150.
         applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**", "self/internal/lite/tender/**", "self/internal/lite/moneyfmt/**"]
-        allow_only: ["std", "self/internal/kernel/errs"]
-        message: "textkey, numinput, bizdate, tender and moneyfmt may import only the standard library and kernel/errs — domain packages and services depend on them"
+        allow_only: ["std", "self/internal/kernel/errs", "self/internal/lite/numinput"]
+        message: "textkey, numinput, bizdate, tender and moneyfmt may import only the standard library, kernel/errs and numinput — domain packages and services depend on them"
 
       - name: lite-cmd-entry
         description: Lite's commands wire internal/lite and hold nothing else.
@@ -346,6 +348,30 @@ rules:
           - "self/internal/lite/bootstrap/**"
           - "self/internal/lite/demoseed/**"
         message: "reports may not import another Lite module — declare a facts port (see reports.Sales)"
+
+      - name: lite-alerts-isolated
+        description: >
+          The notification engine imports no module. Every fact arrives through a port it declares, satisfied in the
+          composition root by the module that owns it — so the engine can read everything and write nothing but its own
+          snapshots (2026-09-23).
+        applies_to: ["self/internal/lite/alerts/**"]
+        forbid:
+          - "self/internal/lite/catalog/**"
+          - "self/internal/lite/stock/**"
+          - "self/internal/lite/fx/**"
+          - "self/internal/lite/owner/**"
+          - "self/internal/lite/settings/**"
+          - "self/internal/lite/setup/**"
+          - "self/internal/lite/sales/**"
+          - "self/internal/lite/customers/**"
+          - "self/internal/lite/cashbook/**"
+          - "self/internal/lite/reports/**"
+          - "self/internal/lite/printing/**"
+          - "self/internal/lite/backups/**"
+          - "self/internal/lite/api/**"
+          - "self/internal/lite/bootstrap/**"
+          - "self/internal/lite/demoseed/**"
+        message: "alerts may not import another Lite module — declare a port (see alerts.Ports)"
 
       - name: lite-printing-isolated
         description: The printing module (print jobs, voucher numbers) imports no other Lite module (L7 §8).

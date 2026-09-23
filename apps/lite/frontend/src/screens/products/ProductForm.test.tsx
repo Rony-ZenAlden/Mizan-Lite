@@ -28,7 +28,7 @@ describe("ProductForm — create", () => {
     await settle();
 
     expect(createProduct).toHaveBeenCalledWith({
-      costPrice: "", marginPercent: "", marginAmount: "",
+      costPrice: "", marginPercent: "", marginAmount: "", openPrice: false,
       nameAr: "دبس رمان", nameEn: "Pomegranate molasses", barcode: "٦٢٢٣", unitCode: "jar", priceCurrency: "SYP", price: "٤٥٠٠٠",
     });
     expect(onSaved).toHaveBeenCalledWith(aProduct({ id: "new" }));
@@ -279,5 +279,28 @@ describe("ProductForm — cost price and margin (owner's request, 2026-09-16)", 
     await settle();
     // "-" is the word for "take it off"; "" would mean "leave it alone".
     expect(setPrice).toHaveBeenCalledWith(expect.objectContaining({ costPrice: "-" }));
+  });
+});
+
+describe("ProductForm — an open-price item (owner's request, 2026-09-23)", () => {
+  it("takes no price, cost or reorder level, and says the choice cannot be undone", async () => {
+    const createProduct = vi.fn(async () => aProduct({ id: "bag", openPrice: true, price: "0" }));
+    const onSaved = vi.fn();
+    renderWithProviders(<ProductForm onSaved={onSaved} onClose={() => undefined} />, {
+      client: fakeClient({ catalog: { createProduct } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.type(screen.getByLabelText("Arabic name"), "كيس");
+    await userEvent.click(screen.getByLabelText("Open price — typed at the till, never counted in stock"));
+    expect(screen.getByTestId("product-open-price")).toHaveTextContent("cannot be changed later");
+    // The fields that would hold figures the item never uses are gone.
+    expect(screen.queryByLabelText("Price")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("product-cost")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tell me when stock reaches")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(createProduct).toHaveBeenCalledWith(expect.objectContaining({ nameAr: "كيس", openPrice: true, price: "", costPrice: "" }));
+    expect(onSaved).toHaveBeenCalled();
   });
 });

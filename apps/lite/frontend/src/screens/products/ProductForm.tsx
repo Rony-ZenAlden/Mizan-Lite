@@ -3,9 +3,10 @@ import { useClient } from "@/api/ClientContext";
 import type { Currency, Product, Unit } from "@/api/client";
 import { BindingError } from "@/api/envelope";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { normaliseNumber } from "@/i18n/numbers";
+import { normaliseNumber, typeable } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Button } from "@/ui/Button";
+import { Checkbox } from "@/ui/Checkbox";
 import { Dialog } from "@/ui/Dialog";
 import { SelectField, TextField } from "@/ui/Field";
 import { PackageSection } from "./PackageSection";
@@ -27,12 +28,16 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [unitCode, setUnitCode] = useState(product?.unitCode ?? "");
   const [priceCurrency, setPriceCurrency] = useState(product?.priceCurrency ?? "SYP");
-  const [price, setPrice] = useState(product?.price ?? "");
+  // In dual mode a price reads "150 (15000)"; the field starts from the figure a person types, the new one (0.9.9).
+  const [price, setPrice] = useState(typeable(product?.price ?? ""));
   // The cost price, and the margin between it and the selling price (L9). `lastTyped` remembers which box the shopkeeper
   // touched last, because that is the one Go should work the other two out from — and only Go does that arithmetic.
-  const [costPrice, setCostPrice] = useState(product?.costPrice ?? "");
+  const [costPrice, setCostPrice] = useState(typeable(product?.costPrice ?? ""));
   // The level at or below which the shop wants to be told to buy more (2026-09-20). Empty means never tell me.
   const [reorderLevel, setReorderLevel] = useState(product?.reorderLevel ?? "");
+  // An item whose price is typed at the till and which is never counted (2026-09-23). Chosen at creation only: the
+  // schema refuses to change it afterwards, because a stocked product turned open would strand its stock.
+  const [openPrice, setOpenPrice] = useState(product?.openPrice ?? false);
   const [marginPercent, setMarginPercent] = useState("");
   const [marginAmount, setMarginAmount] = useState("");
   const [lastTyped, setLastTyped] = useState<"price" | "percent" | "amount">("price");
@@ -68,18 +73,23 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!typedPrice.ok) return;
+    if (!openPrice && !typedPrice.ok) return;
     setBusy(true);
     setError(null);
     try {
       if (!product) {
         onSaved(
-          await client.catalog.createProduct({
-            nameAr, nameEn, barcode, unitCode, priceCurrency, price,
-            costPrice,
-            marginPercent: lastTyped === "percent" ? marginPercent : "",
-            marginAmount: lastTyped === "amount" ? marginAmount : "",
-          }),
+          await client.catalog.createProduct(
+            openPrice
+              ? { nameAr, nameEn, barcode, unitCode, priceCurrency, price: "", costPrice: "", marginPercent: "", marginAmount: "", openPrice: true }
+              : {
+                  nameAr, nameEn, barcode, unitCode, priceCurrency, price,
+                  costPrice,
+                  marginPercent: lastTyped === "percent" ? marginPercent : "",
+                  marginAmount: lastTyped === "amount" ? marginAmount : "",
+                  openPrice: false,
+                },
+          ),
         );
         return;
       }
@@ -90,9 +100,11 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
       }
       // The cost travels with the price: both live on the product, and one call keeps them consistent. "-" takes a cost
       // off; "" leaves whatever is stored alone.
-      const cost = costPrice === "" && current.costPrice !== "" ? "-" : costPrice;
+      const cost = costPrice === "" && current.costPrice !== "" ? "-" : costPrice === typeable(current.costPrice) ? "" : costPrice;
       const marginChanged = (lastTyped === "percent" && marginPercent !== "") || (lastTyped === "amount" && marginAmount !== "");
-      if (current.priceCurrency !== priceCurrency || current.price !== typedPrice.value || cost !== "" || marginChanged) {
+      // An open-priced item has no price, cost or reorder level of its own: only its name and barcode are edited here.
+      const typedValue = typedPrice.ok ? typedPrice.value : "";
+      if (!current.openPrice && (current.priceCurrency !== priceCurrency || typeable(current.price) !== typedValue || cost !== "" || marginChanged)) {
         const version = current.rowVersion;
         current = await withOwner(() =>
           client.catalog.setPrice({
@@ -103,7 +115,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
           }),
         );
       }
-      if (reorderLevel.trim() !== (product?.reorderLevel ?? "")) {
+      if (!current.openPrice && reorderLevel.trim() !== (product?.reorderLevel ?? "")) {
         // Not an owner's act: it changes no price and no quantity, only when a badge appears.
         current = await client.catalog.setReorder({ id: current.id, rowVersion: current.rowVersion, level: reorderLevel.trim() });
       }
@@ -122,7 +134,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
         {duplicateInactive ? <p className="text-xs text-text-muted">{t("products.duplicate_inactive")}</p> : null}
         <TextField label={t("product.name_en")} value={nameEn} onChange={(e) => setNameEn(e.target.value)} error={fieldError("nameEn")} maxLength={200} dir="ltr" />
         <TextField label={t("product.barcode")} value={barcode} onChange={(e) => setBarcode(e.target.value)} error={fieldError("barcode")} maxLength={64} dir="ltr" autoComplete="off" />
-        <TextField
+        {openPrice ? null : <TextField
           label={t("catalog.reorder")}
           hint={t("catalog.reorder_hint")}
           value={reorderLevel}
@@ -131,7 +143,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
           inputMode="decimal"
           dir="ltr"
           autoComplete="off"
-        />
+        />}
         <SelectField
           label={t("product.unit")}
           value={unitCode}
@@ -146,6 +158,16 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
             </option>
           ))}
         </SelectField>
+        {!product ? (
+          <div className="space-y-1" data-testid="product-open-price">
+            <Checkbox label={t("product.open_price")} checked={openPrice} onChange={(e) => setOpenPrice(e.target.checked)} />
+            <p className="text-xs text-text-muted">{t("product.open_price_hint")}</p>
+          </div>
+        ) : openPrice ? (
+          <p className="text-sm text-text-muted" data-testid="product-open-price-note">
+            {t("product.open_price_note")}
+          </p>
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <SelectField label={t("product.currency")} value={priceCurrency} onChange={(e) => setPriceCurrency(e.target.value)} error={fieldError("priceCurrency")}>
             {currencies.map((c) => (
@@ -154,7 +176,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
               </option>
             ))}
           </SelectField>
-          <TextField
+          {openPrice ? null : <TextField
             label={t("product.price")}
             value={price}
             onChange={(e) => {
@@ -166,11 +188,11 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
             inputMode="decimal"
             dir="ltr"
             required
-          />
+          />}
         </div>
 
         {/* The cost price and the margin (L9). Go does the arithmetic on save: the form never computes money. */}
-        <div className="space-y-3 rounded-md border border-border p-3" data-testid="product-cost">
+        {openPrice ? null : <div className="space-y-3 rounded-md border border-border p-3" data-testid="product-cost">
           <TextField
             label={t("products.cost_price")}
             value={costPrice}
@@ -217,8 +239,8 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
               {product.marginAmount.startsWith("-") ? <span className="ms-2 text-danger">{t("products.margin_loss")}</span> : null}
             </p>
           ) : null}
-        </div>
-        {product && units.find((u) => u.code === product.unitCode)?.kind === "count" ? (
+        </div>}
+        {product && !product.openPrice && units.find((u) => u.code === product.unitCode)?.kind === "count" ? (
           <PackageSection product={product} units={units} />
         ) : null}
         {formError ? (
@@ -228,7 +250,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
         ) : null}
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>{t("action.cancel")}</Button>
-          <Button variant="primary" type="submit" disabled={busy || !typedPrice.ok}>
+          <Button variant="primary" type="submit" disabled={busy || (!openPrice && !typedPrice.ok)}>
             {t("action.save")}
           </Button>
         </div>

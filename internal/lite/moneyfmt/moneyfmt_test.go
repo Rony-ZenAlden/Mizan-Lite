@@ -159,3 +159,37 @@ func TestAnEmptyFigureStaysEmpty(t *testing.T) {
 		}
 	}
 }
+
+// TestAFigureTypedInArabicDigitsIsTheSameFigure (0.9.9): the keyboard decides which digits arrive (numinput), and a
+// figure typed with Arabic-Indic digits and the Arabic decimal separator is the figure typed with Latin ones. Base once
+// moved the point in the text as typed, which knows only '.', and read ١٫٥ new pounds as 1.5 old pounds instead of 150 —
+// a till's tendered amount, a payment, a delivery's cost, all a hundredth of what was typed.
+func TestAFigureTypedInArabicDigitsIsTheSameFigure(t *testing.T) {
+	for _, mode := range []moneyfmt.Display{moneyfmt.New, moneyfmt.Dual} {
+		shop := syp(mode)
+		for _, c := range []struct{ typed, want string }{
+			{"١٫٥", "150"},
+			{"١٥٠", "15000"},
+			{"۱۵۰٫۲۵", "15025"},
+			{" 136٫75 ", "13675"}, // a mixed figure, with the space a keyboard leaves
+			{"٫٠٧", "7"},
+			{"-٢٠٠", "-20000"},
+		} {
+			if got := shop.Base(c.typed, "SYP"); got != c.want {
+				t.Errorf("%s: Base(%q) = %q, want %q", mode, c.typed, got, c.want)
+			}
+		}
+	}
+}
+
+// What cannot be read as a figure is handed on as it was typed, for the parser it is going to to refuse with its reason.
+// Moving a point in it would turn "1,500" into a different wrong figure, and the refusal would quote something the
+// person never typed.
+func TestWhatIsNotAFigureIsHandedOnAsTyped(t *testing.T) {
+	shop := syp(moneyfmt.New)
+	for _, typed := range []string{"1,500", "abc", "1.2.3", "٬٥٠٠"} {
+		if got := shop.Base(typed, "SYP"); got != typed {
+			t.Errorf("Base(%q) = %q, want it untouched", typed, got)
+		}
+	}
+}

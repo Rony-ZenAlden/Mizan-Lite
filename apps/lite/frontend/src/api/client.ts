@@ -6,6 +6,7 @@
 //
 // Types are not written by hand: each result type is inferred from the file Wails generated from the Go
 // struct, so a field renamed in Go is a compile error here.
+import * as Alerts from "../../wailsjs/go/api/Alerts";
 import * as App from "../../wailsjs/go/api/App";
 import * as Backups from "../../wailsjs/go/api/Backups";
 import * as Cash from "../../wailsjs/go/api/Cash";
@@ -37,6 +38,14 @@ export type FirstRunInput = Plain<api.FirstRunInput>;
 export type Unit = Plain<api.UnitDTO>;
 export type Currency = Plain<api.CurrencyDTO>;
 export type Product = Plain<api.ProductDTO>;
+export type AlertsState = Plain<api.AlertsDTO>;
+export type Notification = Plain<api.NotificationDTO>;
+export type LowStockItem = Plain<api.LowStockDTO>;
+export type StaleItem = Plain<api.StaleDTO>;
+export type Capital = Plain<api.CapitalDTO>;
+export type RepriceProposal = Plain<api.RepriceProposalDTO>;
+export type RepriceItem = Plain<api.RepriceItemDTO>;
+export type RepriceChange = Plain<api.RepriceChangeInput>;
 export type ProductQuery = Plain<api.ProductQueryDTO>;
 export type CreateProductInput = Plain<api.CreateProductInput>;
 export type UpdateProductInput = Plain<api.UpdateProductInput>;
@@ -157,6 +166,9 @@ export function createClient() {
         unwrap(() => Catalog.UpdateProduct(api.UpdateProductInput.createFrom(input))),
       setPrice: (input: SetPriceInput) => unwrap(() => Catalog.SetPrice(api.SetPriceInput.createFrom(input))),
       setReorder: (input: SetReorderInput) => unwrap(() => Catalog.SetReorder(api.SetReorderInput.createFrom(input))),
+      // A proposal changes nothing; only bulkReprice, after the owner confirms, does (2026-09-23).
+      repriceProposal: (percent: string) => unwrap(() => Catalog.RepriceProposal(percent)),
+      bulkReprice: (items: RepriceChange[]) => unwrap(() => Catalog.BulkReprice(api.BulkRepriceInput.createFrom({ items }))),
       setActive: (input: SetActiveInput) => unwrap(() => Catalog.SetActive(api.SetActiveInput.createFrom(input))),
       setQuickSlot: (input: SetQuickSlotInput) =>
         unwrap(() => Catalog.SetQuickSlot(api.SetQuickSlotInput.createFrom(input))),
@@ -194,6 +206,8 @@ export function createClient() {
       checkout: (input: CheckoutInput) => unwrap(() => Till.Checkout(api.CheckoutInput.createFrom(input))),
       cashNote: () => unwrap(Till.CashNote),
       setCashNote: (note: string) => unwrap(() => Till.SetCashNote(note)),
+      // The item the "Misc" button sells; created the first time it is asked for (2026-09-23).
+      openItem: () => unwrap(Till.OpenItem),
     },
     sales: {
       list: (businessDate: string) => unwrap(() => Sales.List(businessDate)),
@@ -255,6 +269,9 @@ export function createClient() {
       settings: () => unwrap(Printers.Settings),
       save: (input: PrinterSettingsInput) => unwrap(() => Printers.Save(api.PrinterSettingsInput.createFrom(input))),
       test: () => unwrap(Printers.Test),
+    },
+    alerts: {
+      current: () => unwrap(Alerts.Current),
     },
     backups: {
       list: () => unwrap(Backups.List),

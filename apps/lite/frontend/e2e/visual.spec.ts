@@ -18,6 +18,7 @@ const SCREENS: { nav: string; route: string; owner?: boolean }[] = [
   { nav: "nav.stock", route: "/stock" },
   { nav: "nav.rates", route: "/rates" },
   { nav: "nav.reports", route: "/reports", owner: true },
+  { nav: "nav.notifications", route: "/notifications" },
   { nav: "nav.printer", route: "/printer" },
   { nav: "nav.backups", route: "/backups" },
   { nav: "nav.owner", route: "/owner", owner: true },

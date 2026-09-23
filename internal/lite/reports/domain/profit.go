@@ -21,6 +21,12 @@ func (u *Unknown) add(o Unknown, sign int64) {
 	u.NetLocalMinor += sign * o.NetLocalMinor
 }
 
+// Open is what was sold as an open-priced item — the carrier bag, the bunch of parsley — at a price typed at the till
+// (2026-09-23). Like Unknown it is in neither revenue, cost nor margin, because it has no cost to set against it; unlike
+// Unknown it is not a gap for the shop to fill, so it is counted apart. Lumping the two together would make every misc
+// sale read as a product whose cost the owner forgot to enter.
+type Open = Unknown
+
 // Profit is revenue, cost and gross profit in dollars and in pounds at each sale's own rate (L6 §3.1).
 type Profit struct {
 	// Sales is the sales rung up less the sales voided.
@@ -35,6 +41,8 @@ type Profit struct {
 	// RoundingLocal is the cash rounding of pounds sales, already in RevenueLocal and never in dollars.
 	RoundingLocal int64
 	Unknown       Unknown
+	// Open is the open-priced items sold, apart from both revenue and Unknown.
+	Open Open
 }
 
 // ProfitUSD is revenue less cost in dollars.
@@ -54,6 +62,7 @@ func (p *Profit) Add(o Profit, sign int64) {
 	p.DiscountLocal += sign * o.DiscountLocal
 	p.RoundingLocal += sign * o.RoundingLocal
 	p.Unknown.add(o.Unknown, sign)
+	p.Open.add(o.Open, sign)
 }
 
 // SaleProfit is one sale's figures, read from what it stored and never re-priced (D-L6.1). A line of unknown cost is
@@ -64,6 +73,10 @@ func SaleProfit(s Sale, pair Pair) Profit {
 		p.RoundingLocal = s.RoundingMinor
 	}
 	for _, l := range s.Lines {
+		if l.OpenPrice {
+			p.Open.add(Open{Lines: 1, QuantityMicro: l.QuantityMicro, NetUSDMinor: l.NetUSDMinor, NetLocalMinor: l.NetLocalMinor}, 1)
+			continue
+		}
 		if !l.CostKnown {
 			p.Unknown.add(Unknown{Lines: 1, QuantityMicro: l.QuantityMicro, NetUSDMinor: l.NetUSDMinor, NetLocalMinor: l.NetLocalMinor}, 1)
 			continue
@@ -105,6 +118,8 @@ type ProductRow struct {
 	RevenueLocal  int64
 	CostLocal     int64
 	Unknown       Unknown
+	// Open is this product's sales when it is an open-priced item; such a product has nothing but Open.
+	Open Open
 }
 
 // ProfitUSD is the product's profit in dollars.
@@ -143,6 +158,10 @@ func ProductsOver(sales []Sale, from, to string, pair Pair, products map[id.ID]P
 					r.NameAR, r.NameEN, r.UnitCode, r.UnitDecimals = known.NameAR, known.NameEN, known.UnitCode, known.UnitDecimals
 				}
 				rows[l.ProductID] = r
+			}
+			if l.OpenPrice {
+				r.Open.add(Open{Lines: 1, QuantityMicro: l.QuantityMicro, NetUSDMinor: l.NetUSDMinor, NetLocalMinor: l.NetLocalMinor}, sign)
+				continue
 			}
 			if !l.CostKnown {
 				r.Unknown.add(Unknown{Lines: 1, QuantityMicro: l.QuantityMicro, NetUSDMinor: l.NetUSDMinor, NetLocalMinor: l.NetLocalMinor}, sign)

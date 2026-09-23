@@ -29,6 +29,10 @@ type LineInput struct {
 	Quantity  string
 	// DiscountPercent is a line discount in percent, "" for none (owner PIN, L4 §14).
 	DiscountPercent string
+	// Price is the unit price typed at the till for an open-priced product (2026-09-23), in the product's currency and in
+	// the pounds the books hold — the binding has already taken it back through the redenomination. Empty, and refused if
+	// given, for every other product: a catalogue price is the catalogue's, not the cashier's.
+	Price string
 }
 
 // CartInput is a cart as the till sends it: everything that decides what the customer is charged.
@@ -240,20 +244,24 @@ func priceLine(lineNo int, li LineInput, c Context, cur currencies, demand map[i
 	}
 	rate := money.RateFromNano(c.Rate.Nano)
 
+	unitPrice, err := lineUnitPrice(li, p, cur)
+	if err != nil {
+		return PricedLine{}, lineErr(err, lineNo, FieldPrice)
+	}
 	line := PricedLine{Line: Line{
 		LineNo: lineNo, ProductID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode, QuantityMicro: qtyMicro,
-		PriceCurrency: p.PriceCurrency, UnitPriceMicro: p.PriceMicro, DiscountPercentMicro: percent,
+		PriceCurrency: p.PriceCurrency, UnitPriceMicro: unitPrice, DiscountPercentMicro: percent, OpenPrice: p.OpenPrice,
 	}}
 	// Both currencies from ONE exact product, each rounded once (DESIGN §4.4, L4 §3.1).
 	var local, usd money.Money
 	switch p.PriceCurrency {
 	case c.Local.Code:
-		price := money.UnitFromMicro(cur.local, p.PriceMicro)
+		price := money.UnitFromMicro(cur.local, unitPrice)
 		if local, err = money.LineExtension(price, qty, rounding); err == nil {
 			usd, err = money.LineExtensionDivRate(price, qty, rate, cur.usd, rounding)
 		}
 	case c.USD.Code:
-		price := money.UnitFromMicro(cur.usd, p.PriceMicro)
+		price := money.UnitFromMicro(cur.usd, unitPrice)
 		if usd, err = money.LineExtension(price, qty, rounding); err == nil {
 			local, err = money.LineExtensionMulRate(price, qty, rate, cur.local, rounding)
 		}
@@ -276,6 +284,11 @@ func priceLine(lineNo int, li LineInput, c Context, cur currencies, demand map[i
 		line.DiscountLocalMinor, line.DiscountUSDMinor = dl.Minor(), du.Minor()
 	}
 
+	// An open-priced line sells something the shop never counted: no stock warning, and no cost — not an unknown cost
+	// waiting to be entered, but none by design. The reports keep it apart from both (2026-09-23).
+	if p.OpenPrice {
+		return line, nil
+	}
 	stocked := c.Stock[p.ID]
 	line.OnHandMicro = stocked.OnHandMicro
 	demand[p.ID] += qtyMicro
@@ -573,7 +586,39 @@ func token(c Context, q Quote) string {
 		q.Tender.Code, q.TenderedMinor, q.TenderGiven, q.Change.Code, q.Payment, q.Customer.ID)
 	for _, l := range q.Lines {
 		p := c.Products[l.ProductID]
-		_, _ = fmt.Fprintf(h, "%s:%d:%s:%d|%d|%d\n", p.ID, p.RowVersion, p.PriceCurrency, p.PriceMicro, l.QuantityMicro, l.DiscountPercentMicro)
+		// The line's own unit price, not only the product's: an open-priced line's price is typed at the till, and a
+		// quote must not survive the cashier retyping it.
+		_, _ = fmt.Fprintf(h, "%s:%d:%s:%d:%d|%d|%d\n", p.ID, p.RowVersion, p.PriceCurrency, p.PriceMicro, l.UnitPriceMicro,
+			l.QuantityMicro, l.DiscountPercentMicro)
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// lineUnitPrice is the price one unit of a line is charged at: the catalogue's, or for an open-priced product the price
+// typed at the till.
+func lineUnitPrice(li LineInput, p Product, cur currencies) (int64, error) {
+	if !p.OpenPrice {
+		if li.Price != "" {
+			return 0, errs.Validation(CodePriceNotOpen, "this product's price is set in the catalogue").
+				WithParam("name", p.NameAR)
+		}
+		return p.PriceMicro, nil
+	}
+	c := cur.local
+	if p.PriceCurrency == cur.usd.Code() {
+		c = cur.usd
+	}
+	normalised, err := numinput.Normalise(li.Price)
+	if err != nil {
+		return 0, errs.Validation(CodeOpenPriceRequired, "type the price").WithParam("name", p.NameAR)
+	}
+	if numinput.Decimals(normalised) > int(c.Decimals()) {
+		return 0, errs.Validation(CodePriceDecimals, "too many decimals for the currency").
+			WithParam("decimals", strconv.Itoa(int(c.Decimals())))
+	}
+	amount, err := money.ParseUnitAmount(c, normalised)
+	if err != nil || amount.Micro() <= 0 {
+		return 0, errs.Validation(CodeOpenPriceRequired, "a price above nothing").WithParam("name", p.NameAR)
+	}
+	return amount.Micro(), nil
 }

@@ -28,6 +28,8 @@ type CartLineInput struct {
 	ProductID       string `json:"productId"`
 	Quantity        string `json:"quantity"`
 	DiscountPercent string `json:"discountPercent"`
+	// Price is typed at the till for an open-priced item (2026-09-23), as the shop reads its money; "" otherwise.
+	Price string `json:"price"`
 }
 
 // CartInput is a cart as typed. Settlement is the currency the total is charged in ("" for the local currency);
@@ -123,6 +125,10 @@ type ScanDTO struct {
 	UnitDecimals int    `json:"unitDecimals"`
 	Active       bool   `json:"active"`
 	OnHand       string `json:"onHand"`
+	// OpenPrice is an item whose price the cashier types (2026-09-23): the till asks for it before adding the line, in
+	// PriceCurrency — the currency Go will read the typed price in.
+	OpenPrice     bool   `json:"openPrice"`
+	PriceCurrency string `json:"priceCurrency"`
 }
 
 // CashNoteDTO is the smallest note totals in the local currency round to.
@@ -131,10 +137,27 @@ type CashNoteDTO struct {
 	Note     string `json:"note"`
 }
 
-func (in CartInput) toDomain() (salesdomain.CartInput, error) {
+// toDomain takes a cart as the screen typed it back into the pounds the books hold.
+//
+// # Every typed amount goes through the pipeline
+//
+// Until 0.9.9 this passed the tender and the sale discount straight through (the owner's shop found nothing, being in
+// the old pound). In the new pound a cashier who typed 1,000 paid-now on a credit sale was recorded as having paid 1,000
+// OLD pounds, and the customer's debt came out a hundred times too large — silently, because it was a valid number.
+// Each amount is now taken back in its own currency, and that currency is resolved BEFORE the conversion: Base with
+// an empty currency changes nothing, which is exactly how the gap went unnoticed.
+func (in CartInput) toDomain(shop moneyfmt.Shop, priceCurrency func(id.ID) string) (salesdomain.CartInput, error) {
+	settle := in.Settlement
+	if settle == "" {
+		settle = shop.Local // the sales domain's default, resolved here so the conversion sees it
+	}
+	tender := in.TenderCurrency
+	if tender == "" {
+		tender = settle
+	}
 	out := salesdomain.CartInput{
-		Settlement: in.Settlement, SaleDiscount: in.SaleDiscount,
-		TenderCurrency: in.TenderCurrency, Tendered: in.Tendered, ChangeCurrency: in.ChangeCurrency,
+		Settlement: in.Settlement, SaleDiscount: shop.Base(in.SaleDiscount, settle),
+		TenderCurrency: in.TenderCurrency, Tendered: shop.Base(in.Tendered, tender), ChangeCurrency: in.ChangeCurrency,
 		Payment: salesdomain.Payment(in.Payment), Lines: make([]salesdomain.LineInput, 0, len(in.Lines)),
 	}
 	if in.CustomerID != "" {
@@ -150,7 +173,12 @@ func (in CartInput) toDomain() (salesdomain.CartInput, error) {
 		if err != nil {
 			return salesdomain.CartInput{}, errs.NotFound(salesdomain.CodeUnknownProduct, "no such product").WithParam("productId", l.ProductID)
 		}
-		out.Lines = append(out.Lines, salesdomain.LineInput{ProductID: productID, Quantity: l.Quantity, DiscountPercent: l.DiscountPercent})
+		price := l.Price
+		if price != "" {
+			price = shop.Base(price, priceCurrency(productID))
+		}
+		out.Lines = append(out.Lines, salesdomain.LineInput{ProductID: productID, Quantity: l.Quantity,
+			DiscountPercent: l.DiscountPercent, Price: price})
 	}
 	return out, nil
 }
@@ -264,6 +292,7 @@ func (t *Till) Scan(code string) envelope.Result[ScanDTO] {
 		return ScanDTO{
 			Found: true, ProductID: p.ID.String(), NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode,
 			UnitDecimals: p.UnitDecimals, Active: p.Active, OnHand: v.quantity(found.Stocked.OnHandMicro, p.UnitCode),
+			OpenPrice: p.OpenPrice, PriceCurrency: p.PriceCurrency,
 		}, err
 	})
 }
@@ -271,7 +300,7 @@ func (t *Till) Scan(code string) envelope.Result[ScanDTO] {
 // Quote prices a cart and writes nothing.
 func (t *Till) Quote(in CartInput) envelope.Result[CartQuoteDTO] {
 	return call(t.core, "Till.Quote", func(ctx context.Context, app *bootstrap.App) (CartQuoteDTO, error) {
-		cart, err := in.toDomain()
+		cart, err := cartIn(ctx, app, in)
 		if err != nil {
 			return CartQuoteDTO{}, err
 		}
@@ -295,7 +324,7 @@ func (t *Till) Quote(in CartInput) envelope.Result[CartQuoteDTO] {
 // outside owner mode returns lite.owner.required.
 func (t *Till) Checkout(in CheckoutInput) envelope.Result[SaleDTO] {
 	return call(t.core, "Till.Checkout", func(ctx context.Context, app *bootstrap.App) (SaleDTO, error) {
-		cart, err := in.Cart.toDomain()
+		cart, err := cartIn(ctx, app, in.Cart)
 		if err != nil {
 			return SaleDTO{}, err
 		}
@@ -342,4 +371,38 @@ func cashNote(ctx context.Context, app *bootstrap.App, note int64) (CashNoteDTO,
 	}
 	v, err := newTillView(ctx, app)
 	return CashNoteDTO{Currency: current.Local, Note: v.money(note, current.Local)}, err
+}
+
+// cartIn is a cart taken back through the redenomination, with each open-priced line's price read in its product's own
+// currency.
+func cartIn(ctx context.Context, app *bootstrap.App, in CartInput) (salesdomain.CartInput, error) {
+	shop, err := moneyShop(ctx, app)
+	if err != nil {
+		return salesdomain.CartInput{}, err
+	}
+	currencyOf := func(productID id.ID) string {
+		p, getErr := app.Catalog.Get(ctx, productID)
+		if getErr != nil {
+			return "" // an unknown product is refused by the quote itself, with a better message than this could give
+		}
+		return p.PriceCurrency
+	}
+	return in.toDomain(shop, currencyOf)
+}
+
+// OpenItem is the product the till's "Misc" button sells: the first active open-priced product, created the first time
+// it is asked for (2026-09-23).
+func (t *Till) OpenItem() envelope.Result[ProductDTO] {
+	return call(t.core, "Till.OpenItem", func(ctx context.Context, app *bootstrap.App) (ProductDTO, error) {
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return ProductDTO{}, err
+		}
+		p, err := app.Catalog.OpenItem(ctx, shop.Local)
+		if err != nil {
+			return ProductDTO{}, err
+		}
+		v, err := loadCatalogueView(ctx, app)
+		return toProductDTO(p, v), err
+	})
 }

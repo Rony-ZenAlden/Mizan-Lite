@@ -35,6 +35,11 @@ const FieldReorder = "reorderLevel"
 // An empty level clears it — a shop that set one by mistake, or that no longer wants to be told, must be able to take
 // it back, and clearing is not the same as setting it to zero.
 func (p Product) SetReorder(raw string, ref Reference) (Product, error) {
+	if raw != "" && p.OpenPrice {
+		// Never counted, so never low: a level would be a warning that can never fire.
+		return p, errs.Validation(CodeOpenPriceHasNoPrice, "an open-priced product is never counted, so it has no reorder level").
+			WithField(FieldReorder, CodeOpenPriceHasNoPrice, "not counted")
+	}
 	if raw == "" {
 		p.ReorderMicro = 0
 		p.HasReorder = false

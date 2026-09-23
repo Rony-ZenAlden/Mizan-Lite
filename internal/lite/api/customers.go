@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 	"sort"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
@@ -408,8 +409,19 @@ func outstandingDTO(ctx context.Context, app *bootstrap.App) (OutstandingDTO, er
 	return dto, nil
 }
 
-func (in PaymentInput) cash() domain.CashInput {
-	return domain.CashInput{Currency: in.Currency, TenderCurrency: in.TenderCurrency, Amount: in.Amount, All: in.All, ChangeCurrency: in.ChangeCurrency}
+// cash is the payment taken back into the pounds the books hold, in the currency actually handed over — the debt's own
+// when the screen named none, resolved before the conversion because Base with no currency changes nothing (0.9.9).
+func (in PaymentInput) cash(shop moneyfmt.Shop) domain.CashInput {
+	return domain.CashInput{Currency: in.Currency, TenderCurrency: in.TenderCurrency,
+		Amount: shop.Base(in.Amount, tenderOrDebt(in.TenderCurrency, in.Currency)), All: in.All, ChangeCurrency: in.ChangeCurrency}
+}
+
+// tenderOrDebt is the currency cash changed hands in: the one named, or the debt's own.
+func tenderOrDebt(tender, debt string) string {
+	if tender != "" {
+		return tender
+	}
+	return debt
 }
 
 // QuotePayment works out a repayment and writes nothing.
@@ -419,7 +431,11 @@ func (c *Customers) QuotePayment(in PaymentInput) envelope.Result[PaymentQuoteDT
 		if err != nil {
 			return PaymentQuoteDTO{}, err
 		}
-		q, err := app.Customers.QuotePayment(ctx, customerID, in.cash())
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return PaymentQuoteDTO{}, err
+		}
+		q, err := app.Customers.QuotePayment(ctx, customerID, in.cash(shop))
 		if err != nil {
 			return PaymentQuoteDTO{}, err
 		}
@@ -452,7 +468,11 @@ func (c *Customers) RecordPayment(in PaymentInput) envelope.Result[EntryDTO] {
 		if err != nil {
 			return domain.Entry{}, err
 		}
-		return app.Customers.RecordPayment(ctx, customers.PaymentInput{CustomerID: customerID, Cash: in.cash(), Note: in.Note, Token: in.Token})
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Entry{}, err
+		}
+		return app.Customers.RecordPayment(ctx, customers.PaymentInput{CustomerID: customerID, Cash: in.cash(shop), Note: in.Note, Token: in.Token})
 	})
 }
 
@@ -463,7 +483,12 @@ func (c *Customers) Opening(in DebtAmountInput) envelope.Result[EntryDTO] {
 		if err != nil {
 			return domain.Entry{}, err
 		}
-		return app.Customers.Opening(ctx, customers.AmountInput{CustomerID: customerID, Currency: in.Currency, Amount: in.Amount, Note: in.Note})
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Entry{}, err
+		}
+		return app.Customers.Opening(ctx, customers.AmountInput{CustomerID: customerID, Currency: in.Currency,
+			Amount: shop.Base(in.Amount, in.Currency), Note: in.Note})
 	})
 }
 
@@ -474,7 +499,12 @@ func (c *Customers) WriteOff(in DebtAmountInput) envelope.Result[EntryDTO] {
 		if err != nil {
 			return domain.Entry{}, err
 		}
-		return app.Customers.WriteOff(ctx, customers.AmountInput{CustomerID: customerID, Currency: in.Currency, Amount: in.Amount, All: in.All, Note: in.Note})
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Entry{}, err
+		}
+		return app.Customers.WriteOff(ctx, customers.AmountInput{CustomerID: customerID, Currency: in.Currency,
+			Amount: shop.Base(in.Amount, in.Currency), All: in.All, Note: in.Note})
 	})
 }
 
@@ -485,8 +515,13 @@ func (c *Customers) Refund(in RefundInput) envelope.Result[EntryDTO] {
 		if err != nil {
 			return domain.Entry{}, err
 		}
+		shop, err := moneyShop(ctx, app)
+		if err != nil {
+			return domain.Entry{}, err
+		}
 		return app.Customers.Refund(ctx, customers.RefundInput{CustomerID: customerID, Reason: in.Reason,
-			Cash: domain.CashInput{Currency: in.Currency, TenderCurrency: in.TenderCurrency, Amount: in.Amount, All: in.All}})
+			Cash: domain.CashInput{Currency: in.Currency, TenderCurrency: in.TenderCurrency,
+				Amount: shop.Base(in.Amount, tenderOrDebt(in.TenderCurrency, in.Currency)), All: in.All}})
 	})
 }
 

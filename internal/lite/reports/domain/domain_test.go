@@ -566,3 +566,29 @@ func TestAMonthlyExpenseIsToldApartFromTheDaysSmallChange(t *testing.T) {
 		t.Fatalf("an expense from before the split = %+v", was)
 	}
 }
+
+// TestAnOpenPricedSaleIsNeitherProfitNorAMissingCost: a carrier bag sold at a typed price has no cost to set against it.
+// Counted into revenue it would read as 100% margin; counted as Unknown it would read as a product whose cost the owner
+// forgot to enter, and nag them to fill a gap that does not exist (2026-09-23).
+func TestAnOpenPricedSaleIsNeitherProfitNorAMissingCost(t *testing.T) {
+	sale := domain.Sale{BusinessDate: "2026-09-23", SettlementCurrency: "SYP", Lines: []domain.Line{
+		{NetLocalMinor: 30_000, NetUSDMinor: 200, CostKnown: true, CostLocalMinor: 22_500, CostUSDMinor: 150}, // a jar
+		{NetLocalMinor: 500, NetUSDMinor: 3, OpenPrice: true, QuantityMicro: 1_000_000},                       // a bag
+		{NetLocalMinor: 9_000, NetUSDMinor: 60, CostKnown: false, QuantityMicro: 1_000_000},                   // no cost yet
+	}}
+	p := domain.SaleProfit(sale, pair)
+	if p.RevenueLocal != 30_000 || p.CostLocal != 22_500 {
+		t.Fatalf("revenue/cost = %d/%d — only the jar belongs in them", p.RevenueLocal, p.CostLocal)
+	}
+	if p.Open.Lines != 1 || p.Open.NetLocalMinor != 500 {
+		t.Fatalf("open = %+v, want the bag", p.Open)
+	}
+	if p.Unknown.Lines != 1 || p.Unknown.NetLocalMinor != 9_000 {
+		t.Fatalf("unknown = %+v — the bag must not be counted as a missing cost", p.Unknown)
+	}
+	// The products report keeps the same separation, so its rows still add up to the day.
+	rows := domain.ProductsOver([]domain.Sale{sale}, "2026-09-23", "2026-09-23", pair, nil)
+	if rows.Total.Open.NetLocalMinor != 500 || rows.Total.Unknown.NetLocalMinor != 9_000 {
+		t.Fatalf("products report total = %+v", rows.Total)
+	}
+}

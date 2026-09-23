@@ -1,3 +1,4 @@
+import type { Customer } from "@/api/client";
 import type { CartEntry } from "./cart";
 
 /**
@@ -51,10 +52,7 @@ export function recoverCart(): CartEntry[] | null {
       window.localStorage.removeItem(KEY);
       return null;
     }
-    const lines = saved.lines.filter(
-      (l): l is CartEntry =>
-        !!l && typeof l.productId === "string" && typeof l.quantity === "string" && typeof l.key === "string",
-    );
+    const lines = validLines(saved.lines);
     return lines.length > 0 ? lines : null;
   } catch {
     return null;
@@ -64,4 +62,94 @@ export function recoverCart(): CartEntry[] | null {
 /** Forgets the open cart — after a sale, or when the cashier clears it. */
 export function forgetCart(): void {
   keepCart([]);
+}
+
+/** A cart put aside for a moment — the customer went back for something — while the next one is served (2026-09-23). */
+export interface HeldCart {
+  id: string;
+  at: number;
+  lines: CartEntry[];
+  saleDiscount: string;
+  payment: "cash" | "credit";
+  /** The credit customer the cart was for, if any — kept whole, so putting the cart back puts back who it was for. */
+  customer: Customer | null;
+}
+
+const HELD_KEY = "mizan.lite.till.held";
+
+/** How many carts may wait at once. A counter with more than this waiting has stopped serving and started storing. */
+export const MAX_HELD = 9;
+
+/** How long a held cart is kept. The same day as a recovered cart: a cart held overnight belongs to nobody. */
+const HELD_MAX_AGE_MS = MAX_AGE_MS;
+
+/** The carts waiting, oldest first. Unreadable or stale ones are dropped. Never throws. */
+export function heldCarts(): HeldCart[] {
+  try {
+    const raw = window.localStorage.getItem(HELD_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const now = Date.now();
+    return parsed.filter(
+      (h): h is HeldCart =>
+        !!h &&
+        typeof h.id === "string" &&
+        typeof h.at === "number" &&
+        now - h.at <= HELD_MAX_AGE_MS &&
+        Array.isArray(h.lines) &&
+        validLines(h.lines).length === h.lines.length &&
+        h.lines.length > 0,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function saveHeld(list: HeldCart[]): void {
+  try {
+    if (list.length === 0) window.localStorage.removeItem(HELD_KEY);
+    else window.localStorage.setItem(HELD_KEY, JSON.stringify(list));
+  } catch {
+    // Held carts are a convenience at the counter, not a record: a till that cannot keep one still sells.
+  }
+}
+
+let heldCounter = 0;
+
+/** Puts a cart aside. Refused (returns null) when it is empty or MAX_HELD are already waiting. */
+export function holdCart(cart: Omit<HeldCart, "id" | "at">): HeldCart | null {
+  if (cart.lines.length === 0) return null;
+  const list = heldCarts();
+  if (list.length >= MAX_HELD) return null;
+  heldCounter += 1;
+  const held: HeldCart = { ...cart, id: `held-${Date.now()}-${heldCounter}`, at: Date.now() };
+  saveHeld([...list, held]);
+  return held;
+}
+
+/** Takes a held cart back out, removing it from the waiting list; null when it is no longer there. */
+export function takeHeld(id: string): HeldCart | null {
+  const list = heldCarts();
+  const found = list.find((h) => h.id === id) ?? null;
+  if (found) saveHeld(list.filter((h) => h.id !== id));
+  return found;
+}
+
+/** Throws a held cart away — the customer left and is not coming back for it. */
+export function dropHeld(id: string): void {
+  saveHeld(heldCarts().filter((h) => h.id !== id));
+}
+
+function validLines(lines: unknown[]): CartEntry[] {
+  return lines
+    .filter(
+      (l): l is CartEntry =>
+        !!l &&
+        typeof (l as CartEntry).productId === "string" &&
+        typeof (l as CartEntry).quantity === "string" &&
+        typeof (l as CartEntry).key === "string",
+    )
+    // A cart saved before open-priced items existed has no price on its lines; they were all catalogue-priced.
+    .map((l) => ({ ...l, price: typeof l.price === "string" ? l.price : "" }));
 }

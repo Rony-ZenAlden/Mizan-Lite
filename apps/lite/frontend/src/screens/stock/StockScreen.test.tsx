@@ -29,6 +29,14 @@ async function enterPin() {
 }
 
 describe("StockScreen — quantities", () => {
+  it("leaves out open-priced items, which are never counted (2026-09-23)", async () => {
+    const misc = aProduct({ id: "misc", nameAr: "متفرقات", nameEn: "Miscellaneous", unitCode: "piece", openPrice: true });
+    renderWithProviders(<StockScreen />, { client: fakeClient({ catalog: { products: async () => [aProduct(), misc] } }), locale: "en" });
+    await settle();
+    expect(oilRow()).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /Miscellaneous/ })).not.toBeInTheDocument();
+  });
+
   it("shows what is on hand, formatted by Go, with no cost column outside owner mode", async () => {
     renderWithProviders(<StockScreen />, { locale: "en" });
     await settle();

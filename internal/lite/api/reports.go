@@ -58,6 +58,11 @@ type ProfitDTO struct {
 	UnknownLines  int    `json:"unknownLines"`
 	UnknownUSD    string `json:"unknownUsd"`
 	UnknownLocal  string `json:"unknownLocal"`
+	// OpenLines, OpenUSD and OpenLocal are the open-priced items sold (2026-09-23): no cost by design, so like Unknown
+	// outside revenue and margin — and apart from it, because they are not a cost anyone forgot to enter.
+	OpenLines int    `json:"openLines"`
+	OpenUSD   string `json:"openUsd"`
+	OpenLocal string `json:"openLocal"`
 }
 
 // LossesDTO is stock that left without a sale, and what counts found, at cost.
@@ -150,6 +155,11 @@ type ProductRowDTO struct {
 	UnknownQuantity string `json:"unknownQuantity"`
 	UnknownUSD      string `json:"unknownUsd"`
 	UnknownLocal    string `json:"unknownLocal"`
+	// OpenLines, OpenUSD and OpenLocal are an open-priced item's sales (2026-09-23): no cost by design, so outside
+	// revenue and profit like Unknown, but said as what they are rather than as a cost the shop forgot to enter.
+	OpenLines int    `json:"openLines"`
+	OpenUSD   string `json:"openUsd"`
+	OpenLocal string `json:"openLocal"`
 }
 
 // ProductsReportDTO is per-product figures and the reconciling row that makes them the range's revenue.
@@ -273,6 +283,7 @@ func (v reportView) profit(p domain.Profit) ProfitDTO {
 		RevenueLocal: v.local(p.RevenueLocal), CostLocal: v.local(p.CostLocal), ProfitLocal: v.local(p.ProfitLocal()),
 		MarginLocal: margin(p.ProfitLocal(), p.RevenueLocal), DiscountUSD: v.usd(p.DiscountUSD), DiscountLocal: v.local(p.DiscountLocal),
 		RoundingLocal: v.local(p.RoundingLocal), UnknownLines: p.Unknown.Lines, UnknownUSD: v.usd(p.Unknown.NetUSDMinor), UnknownLocal: v.local(p.Unknown.NetLocalMinor),
+		OpenLines: p.Open.Lines, OpenUSD: v.usd(p.Open.NetUSDMinor), OpenLocal: v.local(p.Open.NetLocalMinor),
 	}
 }
 
@@ -392,6 +403,7 @@ func productsReportDTO(ctx context.Context, app *bootstrap.App, in RangeInput) (
 			CostLocal: v.local(row.CostLocal), ProfitLocal: v.local(row.ProfitLocal()), MarginLocal: margin(row.ProfitLocal(), row.RevenueLocal),
 			UnknownLines: row.Unknown.Lines, UnknownQuantity: v.quantity(row.Unknown.QuantityMicro, row.UnitCode),
 			UnknownUSD: v.usd(row.Unknown.NetUSDMinor), UnknownLocal: v.local(row.Unknown.NetLocalMinor),
+			OpenLines: row.Open.Lines, OpenUSD: v.usd(row.Open.NetUSDMinor), OpenLocal: v.local(row.Open.NetLocalMinor),
 		})
 	}
 	return dto, nil

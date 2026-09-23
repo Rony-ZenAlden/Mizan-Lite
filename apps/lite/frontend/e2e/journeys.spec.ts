@@ -285,6 +285,75 @@ for (const locale of LOCALES) {
       expect(again.lines[0]!.left).toMatch(/^1/);
     });
 
+    // 0.9.9 (2026-09-23): the three features the owner approved, and the notification engine that tells the shop.
+    test(`J12 a held sale, the Misc item, and a rate move the owner may re-price for — ${locale}`, async ({ page }) => {
+      await reset(page, "seeded", locale);
+
+      // The first customer: a jar of molasses — then they step away. F6 holds the sale and the counter is free.
+      await scan(page, locale, MOLASSES.barcode);
+      await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      await page.keyboard.press("F6");
+      await expect(page.getByTestId("cart-line")).toHaveCount(0);
+      await expect(page.getByTestId("held-cart")).toHaveCount(1);
+
+      // The next customer wants a carrier bag: no barcode, no fixed price. Misc asks what it costs.
+      await page.getByTestId("till-misc").click();
+      const price = label(locale, "till.open_item_price", { currency: label(locale, "currency.short.SYP") });
+      const open = page.getByRole("dialog").filter({ has: page.getByLabel(price) });
+      await open.getByLabel(price).fill("500");
+      await checkStructure(page, locale, "the open item");
+      await open.getByRole("button", { name: label(locale, "till.open_item_add") }).click();
+      await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      await page.keyboard.press("F9");
+      await receiptDialog(page).getByRole("button", { name: label(locale, "action.close") }).click();
+
+      // The first customer is back: the held sale returns, is priced again, and is paid.
+      await page.getByTestId("held-cart").getByRole("button").first().click();
+      await expect(page.getByTestId("held-cart")).toHaveCount(0);
+      await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      await checkStructure(page, locale, "a resumed sale");
+      await page.keyboard.press("F9");
+      await receiptDialog(page).getByRole("button", { name: label(locale, "action.close") }).click();
+
+      // What Go recorded: the bag at the price typed and in no stock, the molasses as it was held.
+      const day = await call<{ sales: { lines: { productId: string; nameAr: string; unitPrice: string; quantity: string }[] }[] }>(
+        page.request, "Sales", "List", "");
+      const [bag, jar] = day.sales.slice(-2).map((sale) => sale.lines[0]!);
+      expect(bag!.nameAr).toBe("متفرقات");
+      expect(bag!.unitPrice).toMatch(/^500(\.0+)?$/);
+      expect(jar!.nameAr).toBe(MOLASSES.ar);
+      const levels = await call<{ productId: string }[]>(page.request, "Stock", "Levels");
+      expect(levels.some((l) => l.productId === bag!.productId)).toBe(false);
+
+      // Overnight the pound falls about a tenth. The bell says the prices have been left behind.
+      await go(page, locale, "nav.rates");
+      await page.getByLabel(label(locale, "rates.rate_label", { currency: label(locale, "currency.SYP") })).fill("17000");
+      await page.getByRole("button", { name: label(locale, "rates.save") }).click();
+      await expect.poll(async () => (await call<{ rate: string }>(page.request, "FX", "Current")).rate).toMatch(/^17,?000/);
+      await expect(page.getByTestId("bell-count")).toBeVisible();
+      await page.getByTestId("bell").click();
+      await expect(page.getByTestId("alerts-stale")).toBeVisible();
+      await expect(page.getByTestId("bell-count")).toHaveCount(0); // looked at is read
+      await checkStructure(page, locale, "the notification centre");
+
+      // Re-pricing is a proposal: Go's figures, and nothing changed until the owner applies them.
+      const proposal = await call<{ items: { id: string; nameAr: string; proposed: string }[] }>(page.request, "Catalog", "RepriceProposal", "");
+      const molasses = proposal.items.find((i) => i.nameAr === MOLASSES.ar)!;
+      expect(molasses).toBeDefined();
+      await page.getByTestId("alerts-reprice").click();
+      const dialog = page.getByRole("dialog", { name: label(locale, "reprice.title") });
+      await expect(dialog.getByTestId("reprice-item").filter({ hasText: name(MOLASSES, locale) })).toBeVisible();
+      await checkStructure(page, locale, "the re-price proposal");
+      const products = () => call<{ id: string; price: string }[]>(page.request, "Catalog", "Products", { text: "", includeInactive: true });
+      expect((await products()).find((p) => p.id === molasses.id)!.price).not.toBe(molasses.proposed);
+
+      await dialog.getByRole("button", { name: label(locale, "reprice.apply", { count: String(proposal.items.length) }) }).click();
+      await expect(page.getByTestId("reprice-done")).toBeVisible();
+      expect((await products()).find((p) => p.id === molasses.id)!.price).toBe(molasses.proposed);
+      // Priced again at today's rate, nothing is behind it any more.
+      await expect(page.getByTestId("alerts-stale")).toHaveCount(0);
+    });
+
     test(`J10 the rate by hand, and the language switched mid-session — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
       await go(page, locale, "nav.rates");

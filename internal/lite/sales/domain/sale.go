@@ -14,10 +14,15 @@ import (
 
 // Stable error codes. They double as i18n keys.
 const (
-	CodeEmptyCart          = "lite.sales.empty_cart"
-	CodeTooManyLines       = "lite.sales.too_many_lines"
-	CodeQuantityRequired   = "lite.sales.quantity_required"
-	CodeQuantityDecimals   = "lite.sales.quantity_decimals"
+	CodeEmptyCart        = "lite.sales.empty_cart"
+	CodeTooManyLines     = "lite.sales.too_many_lines"
+	CodeQuantityRequired = "lite.sales.quantity_required"
+	CodeQuantityDecimals = "lite.sales.quantity_decimals"
+	// CodeOpenPriceRequired: an open-priced line needs a typed price above nothing; CodePriceNotOpen refuses a typed
+	// price on a product whose price is the catalogue's; CodePriceDecimals a price finer than the currency (2026-09-23).
+	CodeOpenPriceRequired  = "lite.sales.open_price_required"
+	CodePriceNotOpen       = "lite.sales.price_not_open"
+	CodePriceDecimals      = "lite.sales.price_decimals"
 	CodeQuantityTooLarge   = "lite.sales.quantity_too_large"
 	CodeInactiveProduct    = "lite.sales.inactive_product"
 	CodeUnknownProduct     = "lite.sales.unknown_product"
@@ -45,6 +50,7 @@ const (
 const (
 	FieldQuantity        = "quantity"
 	FieldDiscountPercent = "discountPercent"
+	FieldPrice           = "price"
 	FieldSaleDiscount    = "saleDiscount"
 	FieldTendered        = "tendered"
 	FieldChangeCurrency  = "changeCurrency"
@@ -103,8 +109,10 @@ type Product struct {
 	// was ever set (2026-09-20). A product with no level is never called low.
 	ReorderMicro int64
 	HasReorder   bool
-	Active       bool
-	RowVersion   int64
+	// OpenPrice marks a product sold at a price typed at the till, never counted in stock (2026-09-23).
+	OpenPrice  bool
+	Active     bool
+	RowVersion int64
 }
 
 // Stocked is what the till needs about a product's stock: supplied by the stock module through a port.
@@ -204,6 +212,9 @@ type Line struct {
 	CostKnown            bool
 	CostUSDMinor         int64
 	CostLocalMinor       int64
+	// OpenPrice is the line of an open-priced product: sold at a typed price, never taken off a shelf, and with no cost
+	// by design rather than one nobody has entered. Kept on the line as the name and unit are (2026-09-23).
+	OpenPrice bool
 }
 
 // NetLocalMinor is the line after its discount, in the local currency.

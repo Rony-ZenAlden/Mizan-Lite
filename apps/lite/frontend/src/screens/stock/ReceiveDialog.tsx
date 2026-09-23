@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { Currency, Product, StockLevel, Unit } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { typeable } from "@/i18n/numbers";
 import { formatDecimal } from "@/i18n/numbers";
 import { useRate } from "@/rates/RateProvider";
 import { Button } from "@/ui/Button";
@@ -101,7 +102,7 @@ export function ReceiveDialog({
               const next = e.target.value;
               setCurrency(next);
               // Pre-filled from the rate in force (Q-L2.1, D-L3.12), still editable: the rate the shop paid at is the one kept.
-              if (next !== COST_CURRENCY && rate === "" && inForce?.set && inForce.localCurrency === next) setRate(inForce.rate);
+              if (next !== COST_CURRENCY && rate === "" && inForce?.set && inForce.localCurrency === next) setRate(typeable(inForce.rate));
             }}
             error={errors.field("currency")}
           >

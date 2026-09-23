@@ -39,6 +39,10 @@ const (
 //
 // An empty amount clears the cost — a shop that typed one by mistake must be able to take it back.
 func (p Product) SetCost(raw string, ref Reference) (Product, error) {
+	if raw != "" && p.OpenPrice {
+		return p, errs.Validation(CodeOpenPriceHasNoPrice, "an open-priced product has no cost of its own").
+			WithField(FieldCost, CodeOpenPriceHasNoPrice, "no cost of its own")
+	}
 	if raw == "" {
 		p.CostMicro = 0
 		p.HasCost = false

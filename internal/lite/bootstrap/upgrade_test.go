@@ -21,7 +21,7 @@ import (
 // latestSchema is the schema this build migrates to. A new migration fails TestEveryPastSchemaUpgradesToThisRelease until its
 // phase's fixture is generated (scripts/lite-schema-fixtures.sh) — a new schema with no shop written by the phase before it is
 // an upgrade nobody tested.
-const latestSchema = 10
+const latestSchema = 11
 
 // fixtureShop copies a past schema's shop into a fresh data directory. snapshot reads every table's rows over the columns given
 // for it (all its columns when none are given), so a rebuilt table (L4's stock_ledger gained columns) is compared on the columns
@@ -209,5 +209,45 @@ func TestAnOlderBinaryRefusesANewerDatabase(t *testing.T) {
 		if after[table] != rows {
 			t.Errorf("%s written by a refused start", table)
 		}
+	}
+}
+
+// TestAnUpgradedShopKnowsTheRateEachPriceWasSetAt: migration 0011 backfills products.priced_rate_nano on a shop written
+// by 0.9.7, so the stale-price notification works the day a real shop upgrades — not only for prices set afterwards.
+func TestAnUpgradedShopKnowsTheRateEachPriceWasSetAt(t *testing.T) {
+	file, _ := fixtureShop(t, 10)
+	ctx := context.Background()
+	p := dataDir(t)
+	p.Data, p.DBFile, p.Backups = filepath.Dir(file), file, filepath.Join(filepath.Dir(file), "backups")
+	app, err := bootstrap.Start(ctx, bootstrap.Options{Paths: p, Logger: litetest.Logger(), PINHasher: ownertest.Hasher()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = app.Shutdown(ctx) }()
+
+	var priced, unpriced, open int
+	if err := app.DB.Reader(ctx).QueryRowContext(ctx, `SELECT
+		SUM(CASE WHEN open_price = 0 AND priced_rate_nano IS NOT NULL THEN 1 ELSE 0 END),
+		SUM(CASE WHEN open_price = 0 AND priced_rate_nano IS NULL THEN 1 ELSE 0 END),
+		SUM(open_price)
+		FROM products`).Scan(&priced, &unpriced, &open); err != nil {
+		t.Fatal(err)
+	}
+	if priced == 0 || unpriced != 0 {
+		t.Fatalf("%d products know their pricing rate and %d do not — every product of a shop with rates should", priced, unpriced)
+	}
+	// The upgrade creates nothing: the Miscellaneous item appears only when the till first asks for it.
+	if open != 0 {
+		t.Fatalf("the upgrade created %d open-priced products", open)
+	}
+	// And every backfilled rate is a rate the shop actually had.
+	var foreign int
+	if err := app.DB.Reader(ctx).QueryRowContext(ctx, `SELECT COUNT(*) FROM products
+		WHERE priced_rate_nano IS NOT NULL
+		  AND priced_rate_nano NOT IN (SELECT local_per_usd_nano FROM fx_rates)`).Scan(&foreign); err != nil {
+		t.Fatal(err)
+	}
+	if foreign != 0 {
+		t.Fatalf("%d products were given a rate the shop never had", foreign)
 	}
 }

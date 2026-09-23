@@ -57,6 +57,17 @@ export function DayStatement({ report }: { report: DayReport }) {
         </Alert>
       ) : null}
       {report.unconverted > 0 ? <Alert tone="danger" title={t("reports.unconverted", { count: formatInteger(report.unconverted, locale) })} /> : null}
+      {p.openLines > 0 ? (
+        // Not a warning: an open-priced item has no cost by design (2026-09-23). Said, so the day still adds up to the drawer.
+        <p className="rounded-md border border-border bg-surface-raised p-3 text-sm" data-testid="open-items">
+          {t("reports.open_items", {
+            count: formatInteger(p.openLines, locale),
+            usd: formatDecimal(p.openUsd, locale),
+            local: formatDecimal(p.openLocal, locale),
+            currency: tDynamic(`currency.short.${cur}`),
+          })}
+        </p>
+      ) : null}
 
       <div className="overflow-x-auto rounded-md border border-border bg-surface-raised">
         <table className="w-full text-sm" data-testid="statement">

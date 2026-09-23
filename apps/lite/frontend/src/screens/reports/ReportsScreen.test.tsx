@@ -46,6 +46,9 @@ const row = (overrides: Partial<ProductRow>): ProductRow => ({
   unknownQuantity: "0.000",
   unknownUsd: "0.00",
   unknownLocal: "0",
+  openLines: 0,
+  openUsd: "0.00",
+  openLocal: "0",
   ...overrides,
 });
 
@@ -83,6 +86,16 @@ describe("ReportsScreen", () => {
     renderWithProviders(<ReportsScreen />, { client: fakeClient({ reports: { day }, owner: { status: async () => elevated } }), locale: "en" });
     await settle();
     expect(screen.getByRole("alert")).toHaveTextContent("3 lines sold with no recorded cost — 3.20 USD / 48,000 SYP — are not in profit or margin");
+  });
+
+  // 2026-09-23: an open-priced item has no cost by design. It is outside profit like a missing cost, but it is not a
+  // missing cost — so it is said plainly, not raised as an alarm the owner can do nothing about.
+  it("shows open-price sales apart and plainly, never as a missing cost", async () => {
+    const day = async () => aDayReport({ profit: aProfit({ openLines: 2, openUsd: "0.33", openLocal: "5000" }) });
+    renderWithProviders(<ReportsScreen />, { client: fakeClient({ reports: { day }, owner: { status: async () => elevated } }), locale: "en" });
+    await settle();
+    expect(screen.getByTestId("open-items")).toHaveTextContent("2 open-price lines sold — 0.33 USD / 5,000 SYP — at prices typed at the till.");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("a cancelled PIN shows no figures, and the owner can ask again", async () => {

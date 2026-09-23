@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import { Link } from "react-router-dom";
+import { useOptionalNotifications } from "@/alerts/NotificationProvider";
 import { useClient } from "@/api/ClientContext";
 import type {
   CartInput,
@@ -31,7 +32,8 @@ import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { CellInput, SelectField, TextField } from "@/ui/Field";
 import { addToCart, minusOne, plusOne, type CartEntry, type Pick } from "./cart";
-import { forgetCart, keepCart, recoverCart } from "./openCart";
+import { dropHeld, forgetCart, heldCarts, holdCart, keepCart, recoverCart, takeHeld, MAX_HELD, type HeldCart } from "./openCart";
+import { OpenItemDialog } from "./OpenItemDialog";
 import { ReturnWizard } from "./ReturnWizard";
 import { QuickRepayment } from "./QuickRepayment";
 import { ratePair } from "@/i18n/figures";
@@ -62,6 +64,7 @@ export function TillScreen() {
   const { withOwner } = useOwner();
   const { rate } = useRate();
   const { t, tDynamic, errorText, locale } = useLocale();
+  const notifications = useOptionalNotifications();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [units, setUnits] = useState<Map<string, Unit>>(new Map());
@@ -89,7 +92,8 @@ export function TillScreen() {
 
   const [quote, setQuote] = useState<CartQuote | null>(null);
   const [quoteError, setQuoteError] = useState<unknown>(null);
-  const [pending, setPending] = useState(false);
+  // Which cart the quote (or the refusal) on screen answers: the cart as typed and the re-pricing it was asked for.
+  const [answered, setAnswered] = useState<{ input: CartInput; requote: number } | null>(null);
   const [requote, setRequote] = useState(0);
   const [stale, setStale] = useState(false);
   const [payError, setPayError] = useState<unknown>(null);
@@ -100,6 +104,10 @@ export function TillScreen() {
   const [done, setDone] = useState<Sale | null>(null);
   // F8 opens the return wizard (2026-09-20): the customer is at the counter with the paper in hand.
   const [returning, setReturning] = useState(false);
+  // An open-priced item waiting for its price (2026-09-23).
+  const [pricing, setPricing] = useState<Pick | null>(null);
+  // Carts put aside while the next customer is served (2026-09-23).
+  const [held, setHeld] = useState<HeldCart[]>(() => heldCarts());
   // A customer settling what they owe, without leaving the till (2026-09-20).
   const [repaying, setRepaying] = useState(false);
   const [repaid, setRepaid] = useState(false);
@@ -156,6 +164,7 @@ export function TillScreen() {
         productId: l.productId,
         quantity: l.quantity,
         discountPercent: l.discountPercent,
+        price: l.price,
       })),
       settlement,
       saleDiscount,
@@ -178,16 +187,19 @@ export function TillScreen() {
   );
 
   // Price the cart as typed whenever it settles. A newer request wins; an answer to an older one is dropped.
+  //
+  // The cart is being priced from the very render it changes in until Go answers for THAT cart. It is derived, not set by
+  // an effect: an effect runs after the render, and a key pressed in between saw a cart with no quote that was not being
+  // priced either, and F9 did nothing, silently — J12 pressed it two milliseconds after a line was added (2026-09-23).
+  const beingPriced = input.lines.length > 0 && (answered?.input !== input || answered.requote !== requote);
   const request = useRef(0);
   useEffect(() => {
     const id = ++request.current;
     if (input.lines.length === 0) {
       setQuote(null);
       setQuoteError(null);
-      setPending(false);
       return;
     }
-    setPending(true);
     const timer = setTimeout(() => {
       client.till
         .quote(input)
@@ -195,14 +207,13 @@ export function TillScreen() {
           if (id !== request.current) return;
           setQuote(q);
           setQuoteError(null);
+          setAnswered({ input, requote });
         })
         .catch((e) => {
           if (id !== request.current) return;
           setQuote(null);
           setQuoteError(e);
-        })
-        .finally(() => {
-          if (id === request.current) setPending(false);
+          setAnswered({ input, requote });
         });
     }, QUOTE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -214,6 +225,10 @@ export function TillScreen() {
   const add = (pick: Pick) => {
     setResults(null);
     setNotFound("");
+    if (pick.openPrice) {
+      setPricing(pick);
+      return;
+    }
     if (pick.unitDecimals > 0) {
       setWeigh(pick);
       return;
@@ -229,7 +244,68 @@ export function TillScreen() {
     nameEn: p.nameEn,
     unitCode: p.unitCode,
     unitDecimals: units.get(p.unitCode)?.inputDecimals ?? 0,
+    openPrice: p.openPrice,
+    priceCurrency: p.priceCurrency,
   });
+
+  // The Misc button (2026-09-23): the shop's open-priced item, created the first time it is asked for.
+  const openMisc = async () => {
+    try {
+      add(pickOf(await client.till.openItem()));
+    } catch (e) {
+      setLoadError(e);
+    }
+  };
+
+  // Hold and resume (2026-09-23). Only what was picked is kept, never a price: a held cart is priced again when it comes
+  // back, because the rate may have moved while it waited.
+  const hold = () => {
+    if (cart.length === 0) return;
+    const put = holdCart({
+      lines: cart,
+      saleDiscount,
+      payment: credit ? "credit" : "cash",
+      customer: credit ? customer : null,
+    });
+    if (!put) return;
+    setHeld(heldCarts());
+    setCart([]);
+    setSaleDiscount("");
+    resetPayment();
+    setDone(null);
+    focusScan();
+  };
+
+  const resume = (id: string) => {
+    // A cart already open is put aside first, so resuming never throws away what the cashier was doing.
+    if (cart.length > 0) {
+      holdCart({
+        lines: cart,
+        saleDiscount,
+        payment: credit ? "credit" : "cash",
+        customer: credit ? customer : null,
+      });
+    }
+    const back = takeHeld(id);
+    setHeld(heldCarts());
+    if (!back) return;
+    setCart(back.lines);
+    setSaleDiscount(back.saleDiscount);
+    if (back.payment === "credit" && back.customer) {
+      choosePayment("credit");
+      setCustomer(back.customer);
+    } else {
+      choosePayment("cash");
+    }
+    setStale(false);
+    focusScan();
+  };
+
+  const drop = (id: string) => {
+    dropHeld(id);
+    setHeld(heldCarts());
+    focusScan();
+  };
 
   const scan = async (event: FormEvent) => {
     setDone(null);
@@ -297,7 +373,7 @@ export function TillScreen() {
   const pay = useCallback(
     async (event?: FormEvent) => {
       event?.preventDefault();
-      if (!quote || pending || busy) return;
+      if (!quote || beingPriced || busy) return;
       setBusy(true);
       setPayError(null);
       try {
@@ -322,6 +398,8 @@ export function TillScreen() {
         setTenderCurrency("");
         setChangeCurrency("");
         setStale(false);
+        // A sale can take a product below its reorder level: the bell hears it now, not in a minute (2026-09-23).
+        void notifications?.refresh();
       } catch (e) {
         if (e instanceof BindingError && e.code === CODE_QUOTE_STALE) {
           setStale(true);
@@ -333,7 +411,7 @@ export function TillScreen() {
         setBusy(false);
       }
     },
-    [quote, pending, busy, withOwner, client, input],
+    [quote, beingPriced, busy, withOwner, client, input, notifications, printer],
   );
 
   // Every product the shop sells, browsable without a search (the owner's request, 2026-09-16): the quick buttons the
@@ -359,7 +437,7 @@ export function TillScreen() {
   const credit = payment === "credit";
   const canPay =
     Boolean(quote) &&
-    !pending &&
+    !beingPriced &&
     !busy &&
     !noRate &&
     cart.length > 0 &&
@@ -367,30 +445,33 @@ export function TillScreen() {
 
   // A pay key pressed while the cart is still being priced pays as soon as Go's quote arrives — found by the end-to-end journey
   // (J3): a cashier's F9 straight after a scan did nothing, silently. Anything that changes the cart first cancels it.
-  const [payWhenPriced, setPayWhenPriced] = useState(false);
+  //
+  // The request names the cart it was made for, so a change voids it by being a different cart. It used to be cancelled by
+  // an effect on the cart, and an effect that ran late cancelled a request made AFTER the change it was reacting to (J12).
+  const [payFor, setPayFor] = useState<CartInput | null>(null);
   const requestPay = () => {
     if (canPay) void pay();
-    else if (cart.length > 0 && pending && !busy) setPayWhenPriced(true);
+    else if (beingPriced && !busy) setPayFor(input);
   };
   useEffect(() => {
-    if (!payWhenPriced || pending) return;
-    setPayWhenPriced(false);
-    if (canPay) void pay();
-  }, [payWhenPriced, pending, canPay, pay]);
-  useEffect(() => {
-    setPayWhenPriced(false);
-  }, [cart, payment, settlement, tendered, tenderCurrency, saleDiscount]);
+    if (payFor === null || beingPriced) return;
+    setPayFor(null);
+    if (payFor === input && canPay) void pay();
+  }, [payFor, input, beingPriced, canPay, pay]);
 
   // The counter's keys (L8 D-L8.9): F9 pays, F4 switches cash and credit, F2 goes to the last line's quantity, + and − on an empty
   // scan field change a counted last line by one, Escape clears search results. Not while a dialog is open — it has the keyboard.
   const keys = useRef<(event: KeyPress) => void>(() => {});
   keys.current = (event: KeyPress) => {
-    if (receipt || picking || weigh || returning || repaying) return;
+    if (receipt || picking || weigh || returning || repaying || pricing) return;
     const last = cart[cart.length - 1];
     const inScan = document.activeElement === scanField.current;
     if (event.key === "F9") {
       event.preventDefault();
       requestPay();
+    } else if (event.key === "F6") {
+      event.preventDefault();
+      hold();
     } else if (event.key === "F8") {
       event.preventDefault();
       setReturning(true);
@@ -490,7 +571,13 @@ export function TillScreen() {
               autoFocus
             />
           </form>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void openMisc()} data-testid="till-misc">
+              {t("till.misc")}
+            </Button>
+            <Button onClick={hold} disabled={cart.length === 0 || held.length >= MAX_HELD} data-testid="till-hold">
+              {t("till.hold")}
+            </Button>
             <Button onClick={() => setReturning(true)} data-testid="till-return">
               {t("returns.title")}
             </Button>
@@ -499,6 +586,29 @@ export function TillScreen() {
             </Button>
           </div>
           {repaid ? <Alert tone="success" title={t("till.repaid")} testId="till-repaid" /> : null}
+          {held.length > 0 ? (
+            <div className="flex flex-wrap gap-2" data-testid="held-carts" aria-label={t("till.held_label")}>
+              {held.map((h, i) => (
+                <span key={h.id} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm" data-testid="held-cart">
+                  <button type="button" className="underline" onClick={() => resume(h.id)}>
+                    {t("till.held_item", {
+                      number: String(i + 1),
+                      count: String(h.lines.length),
+                      time: new Date(h.at).toLocaleTimeString(locale === "ar" ? "ar-u-nu-latn" : "en", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: false,
+                      }),
+                    })}
+                    {h.customer ? ` · ${h.customer.name}` : ""}
+                  </button>
+                  <button type="button" aria-label={t("till.held_drop", { number: String(i + 1) })} onClick={() => drop(h.id)}>
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
           <p className="text-xs text-text-muted" data-testid="till-keys">
             {t("till.keys")}
           </p>
@@ -950,6 +1060,24 @@ export function TillScreen() {
           }}
           onClose={() => {
             setRepaying(false);
+            setTimeout(focusScan, 0);
+          }}
+        />
+      ) : null}
+
+      {pricing ? (
+        <OpenItemDialog
+          pick={pricing}
+          currency={pricing.priceCurrency || local || "SYP"}
+          onAdd={(price, quantity) => {
+            const pick = pricing;
+            setPricing(null);
+            setCart((c) => addToCart(c, pick, quantity, price));
+            setStale(false);
+            setTimeout(focusScan, 0);
+          }}
+          onClose={() => {
+            setPricing(null);
             setTimeout(focusScan, 0);
           }}
         />

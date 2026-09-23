@@ -56,6 +56,9 @@ type Line struct {
 	CostKnown          bool
 	CostUSDMinor       int64
 	CostLocalMinor     int64
+	// OpenPrice is a line of an open-priced product: no cost by design, and kept apart from the lines whose cost
+	// nobody has entered yet (2026-09-23).
+	OpenPrice bool
 }
 
 // Sale is a sale as it was stored, with what its void hands back.

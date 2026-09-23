@@ -42,7 +42,8 @@ export function StockScreen() {
   const loadProducts = useCallback(
     async (query: string, inactive: boolean) => {
       try {
-        setProducts(await client.catalog.products({ text: query, includeInactive: inactive }));
+        // An open-priced item is never counted (2026-09-23): it has no stock to receive, count or adjust.
+        setProducts((await client.catalog.products({ text: query, includeInactive: inactive })).filter((p) => !p.openPrice));
         setError(null);
       } catch (e) {
         setError(e);

@@ -132,6 +132,9 @@ func (s *Service) receive(ctx context.Context, in ReceiveInput, act receiveAct) 
 		if err != nil {
 			return err
 		}
+		if product.OpenPrice {
+			return domain.ErrOpenPriceNoStock()
+		}
 		if !product.Active {
 			return errs.Conflict(domain.CodeInactiveProduct, "reactivate the product before receiving it")
 		}
@@ -175,6 +178,9 @@ func (s *Service) Count(ctx context.Context, in CountInput) (domain.Movement, er
 		product, err := s.catalogue.Product(ctx, in.ProductID)
 		if err != nil {
 			return err
+		}
+		if product.OpenPrice {
+			return domain.ErrOpenPriceNoStock()
 		}
 		counted, err := domain.ParseQuantity(in.Counted, product.UnitDecimals, domain.FieldQuantity)
 		if err != nil {
@@ -222,6 +228,9 @@ func (s *Service) Adjust(ctx context.Context, in AdjustInput) (domain.Movement, 
 		product, err := s.catalogue.Product(ctx, in.ProductID)
 		if err != nil {
 			return err
+		}
+		if product.OpenPrice {
+			return domain.ErrOpenPriceNoStock()
 		}
 		quantity, err := domain.ParseQuantity(in.Quantity, product.UnitDecimals, domain.FieldQuantity)
 		if err != nil {
@@ -322,6 +331,9 @@ func (s *Service) ReverseReceipt(ctx context.Context, receiptID id.ID, note stri
 		if err != nil {
 			return err
 		}
+		if product.OpenPrice {
+			return domain.ErrOpenPriceNoStock()
+		}
 		level, st, err := s.begin(ctx, receipt.ProductID)
 		if err != nil {
 			return err
@@ -355,8 +367,10 @@ type CorrectCostInput struct {
 func (s *Service) CorrectCost(ctx context.Context, in CorrectCostInput) (domain.Movement, error) {
 	var out domain.Movement
 	err := s.tx.Do(ctx, func(ctx context.Context) error {
-		if _, err := s.catalogue.Product(ctx, in.ProductID); err != nil {
+		if product, err := s.catalogue.Product(ctx, in.ProductID); err != nil {
 			return err
+		} else if product.OpenPrice {
+			return domain.ErrOpenPriceNoStock()
 		}
 		avg, err := domain.ParseUSDCost(in.AverageCost)
 		if err != nil {
@@ -561,6 +575,13 @@ func (s *Service) Valuation(ctx context.Context) (Valuation, error) {
 	if !s.gate.Allowed(ctx) {
 		return Valuation{}, ownerRequired()
 	}
+	return s.ValuationUnguarded(ctx)
+}
+
+// ValuationUnguarded is the stock's value with no owner check, for the application's own use: the notification engine
+// records what the shop is worth every day whether or not anyone is in owner mode, and decides what to DISCLOSE at its
+// own boundary (2026-09-23). Never bound to a screen — VerifyUnguarded's precedent.
+func (s *Service) ValuationUnguarded(ctx context.Context) (Valuation, error) {
 	levels, err := s.store.Levels(ctx)
 	if err != nil {
 		return Valuation{}, err

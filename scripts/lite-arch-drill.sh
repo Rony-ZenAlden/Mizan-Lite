@@ -292,6 +292,18 @@ drill lite-reports-forbids-cashbook "reports may not import another Lite module"
   internal/lite/reports/reportstest/zz_drill.go "package reportstest
 import _ \"$M/internal/lite/cashbook\""
 
+drill lite-alerts-isolated "alerts may not import another Lite module" \
+  internal/lite/alerts/zz_drill.go "package alerts
+import _ \"$M/internal/lite/catalog\""
+
+drill lite-alerts-domain-isolated "alerts may not import another Lite module" \
+  internal/lite/alerts/domain/zz_drill.go "package domain
+import _ \"$M/internal/lite/stock/domain\""
+
+drill lite-alerts-store-isolated "alerts may not import another Lite module" \
+  internal/lite/alerts/infra/sqlite/zz_drill.go "package sqlite
+import _ \"$M/internal/lite/reports\""
+
 drill lite-cashbook-isolated "cashbook may not import another Lite module" \
   internal/lite/cashbook/zz_drill.go "package cashbook
 import _ \"$M/internal/lite/reports\""

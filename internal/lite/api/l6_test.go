@@ -119,11 +119,17 @@ var reportDTOs = []reflect.Type{
 	reflect.TypeFor[api.ProductsReportDTO](), reflect.TypeFor[api.StockLineDTO](), reflect.TypeFor[api.ReconciliationDTO](), reflect.TypeFor[api.ShelfLineDTO](),
 	reflect.TypeFor[api.LeftOutDTO](), reflect.TypeFor[api.StockReportDTO](), reflect.TypeFor[api.CashEntryDTO](), reflect.TypeFor[api.DrawerCurrencyDTO](),
 	reflect.TypeFor[api.DrawerDTO](),
+	// 0.9.7's returns and 0.9.9's notification engine: held to the same rule, a figure is a string.
+	reflect.TypeFor[api.ReturnsDTO](), reflect.TypeFor[api.AlertsDTO](), reflect.TypeFor[api.LowStockDTO](),
+	reflect.TypeFor[api.StaleDTO](), reflect.TypeFor[api.CapitalDTO](), reflect.TypeFor[api.NotificationDTO](),
 }
 
 // TestEveryReportFigureIsAString holds DESIGN D9 at L6's boundary: the integers allowed are counts and places.
 func TestEveryReportFigureIsAString(t *testing.T) {
-	counts := map[string]bool{"Sales": true, "UnknownLines": true, "Unconverted": true, "CreditSales": true, "Voids": true, "BelowCost": true, "Seq": true}
+	counts := map[string]bool{"Sales": true, "UnknownLines": true, "Unconverted": true, "CreditSales": true, "Voids": true, "BelowCost": true, "Seq": true,
+		// How many returns, how many returned lines had no cost, how many open-priced lines, how many prices sell at a
+		// loss, how many days of history, how many items a notification stands for — counts, not money.
+		"Count": true, "Unknown": true, "OpenLines": true, "LossCount": true, "HistoryDays": true, "HistoryNeeded": true}
 	for _, typ := range reportDTOs {
 		for i := range typ.NumField() {
 			f := typ.Field(i)

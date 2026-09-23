@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatInteger } from "./numbers";
+import { formatInteger, typeable } from "./numbers";
 
 // Arabic-Indic (U+0660–0669) and Extended Arabic-Indic (U+06F0–06F9) digits.
 const NON_LATIN_DIGITS = /[٠-٩۰-۹]/;
@@ -93,5 +93,18 @@ describe("formatCountdown", () => {
     expect(formatCountdown(61)).toBe("1:01");
     expect(formatCountdown(5)).toBe("0:05");
     expect(formatCountdown(-3)).toBe("0:00");
+  });
+});
+
+describe("typeable — the figure a form starts from (0.9.9)", () => {
+  it("is the new pound of a dual reading, which is what a person types in dual mode", () => {
+    expect(typeable("150 (15000)")).toBe("150");
+    expect(typeable("136.75 (13675)")).toBe("136.75");
+  });
+
+  it("is a single figure as it is", () => {
+    expect(typeable("15000")).toBe("15000");
+    expect(typeable("3.25")).toBe("3.25");
+    expect(typeable("")).toBe("");
   });
 });

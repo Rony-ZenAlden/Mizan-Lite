@@ -89,7 +89,7 @@ func TestACheckRefusesAnImpossiblePrintJob(t *testing.T) {
 		name, constraint string
 		row              map[string]any
 	}{
-		{"an unknown kind", "document_kind IN", map[string]any{"document_kind": "invoice"}},
+		{"an unknown kind", "document_kind IN", map[string]any{"document_kind": "fax"}},
 		{"a receipt of nothing (NULL)", "ck_print_jobs_subject", map[string]any{"subject_id": nil}},
 		{"a test page of a sale", "ck_print_jobs_subject", map[string]any{"document_kind": "test"}},
 		{"copy zero", "copy_no >= 1", map[string]any{"copy_no": 0}},

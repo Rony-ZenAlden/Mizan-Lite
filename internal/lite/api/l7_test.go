@@ -96,7 +96,7 @@ func TestReceiptsPrintThroughTheChosenPathAndCopiesAreStamped(t *testing.T) {
 		t.Fatalf("printers %+v", list)
 	}
 	set.Owner.EndElevation()
-	settings := api.PrinterSettingsInput{Printer: "Xprinter XP-80", PaperMM: "80", Path: "raw", AutoPrint: "credit", Drawer: true, Phone: "0933 123 456", Footer: "أهلاً بكم"}
+	settings := api.PrinterSettingsInput{Printer: "Xprinter XP-80", PaperMM: "80", Path: "raw", AutoPrint: "credit", Drawer: true, Footer: "أهلاً بكم"}
 	// Printer settings are saved at the counter since 2026-09-16 (owner.ReservedActs), and recorded in the owner's history.
 	if r := set.Printers.Save(settings); !r.OK || r.Data.Printer != "Xprinter XP-80" || r.Data.PaperMM != 80 || !r.Data.Drawer {
 		t.Fatalf("save without owner mode = %+v", r)
@@ -148,7 +148,7 @@ func TestReceiptsPrintThroughTheChosenPathAndCopiesAreStamped(t *testing.T) {
 	if test := set.Printers.Test(); !test.OK || test.Data.CopyNo != 1 {
 		t.Fatalf("test page %+v", test)
 	}
-	if r := set.Print.Preview(api.PreviewInput{Kind: "invoice"}); codeOf(t, r) != api.CodeNotPrintable {
+	if r := set.Print.Preview(api.PreviewInput{Kind: "fax"}); codeOf(t, r) != api.CodeNotPrintable {
 		t.Fatal("an unknown document")
 	}
 }
@@ -234,11 +234,15 @@ func textOf(doc documents.Document) string {
 			}
 		case documents.Table:
 			b.WriteString(strings.Join(x.Headings, " | ") + "\n")
-			for _, r := range append(x.Rows, x.Total) {
+			for _, r := range append(append(x.Rows, x.Total), x.Footer...) {
 				for _, c := range r {
 					b.WriteString(c.Text + " | ")
 				}
 				b.WriteString("\n")
+			}
+		case documents.Fields:
+			for _, f := range append(append([]documents.Field(nil), x.Start...), x.End...) {
+				b.WriteString(f.Label + " " + f.Value.Text + "\n")
 			}
 		}
 	}

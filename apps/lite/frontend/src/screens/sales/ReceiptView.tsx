@@ -5,6 +5,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
 import { formatDateTime } from "@/i18n/time";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
+import { InvoicePanel } from "@/printing/InvoicePanel";
 import { PrintPanel } from "@/printing/PrintPanel";
 import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
@@ -38,7 +39,8 @@ export function ReceiptView({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<"screen" | "paper">("screen");
+  // The receipt on screen, as it prints on the roll, or the sale's A4 invoice (0.10.0).
+  const [view, setView] = useState<"screen" | "paper" | "invoice">("screen");
 
   const inSettlement = (local: string, usd: string) => (sale.settlement === "USD" ? usd : local);
   const net = (l: SaleLine) => inSettlement(l.netLocal, l.netUsd);
@@ -62,9 +64,9 @@ export function ReceiptView({
   };
 
   return (
-    <Dialog title={t("receipt.title", { number: String(sale.receiptNo) })} onClose={onClose}>
+    <Dialog title={t("receipt.title", { number: String(sale.receiptNo) })} onClose={onClose} wide={view === "invoice"}>
       <div role="tablist" aria-label={t("print.views")} className="flex gap-1">
-        {(["screen", "paper"] as const).map((name) => (
+        {(["screen", "paper", "invoice"] as const).map((name) => (
           <button
             key={name}
             type="button"
@@ -73,7 +75,7 @@ export function ReceiptView({
             onClick={() => setView(name)}
             className={`rounded-md px-3 py-1 text-sm ${view === name ? "bg-primary text-primary-fg" : "border border-border hover:bg-surface"}`}
           >
-            {name === "screen" ? t("print.view_screen") : t("print.view_paper")}
+            {name === "screen" ? t("print.view_screen") : name === "paper" ? t("print.view_paper") : t("print.view_invoice")}
           </button>
         ))}
       </div>
@@ -175,6 +177,7 @@ export function ReceiptView({
       </article>
 
       <PrintPanel kind="sale" id={sale.id} auto={autoPrint} preview={view === "paper"} />
+      <InvoicePanel saleId={sale.id} preview={view === "invoice"} />
 
       {voiding ? (
         <form className="space-y-3" onSubmit={submitVoid}>

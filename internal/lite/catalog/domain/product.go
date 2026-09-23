@@ -102,6 +102,9 @@ type Product struct {
 	// PricedRateNano is the exchange rate that was in force when the price was last set, or 0 where none was (or the
 	// product is open-priced). It is how a price the dollar has left behind is found (2026-09-23).
 	PricedRateNano int64
+	// UnitsPerCartonMicro is how many of the product's unit make one carton (طرد), at 10⁻⁶, or 0 for none (0.10.0).
+	// Not a package product (package.go): a carton is how goods are counted on an invoice, never a thing in stock.
+	UnitsPerCartonMicro int64
 	// QuickSlot is the till button, 1–QuickSlots, or 0 for none.
 	QuickSlot  int
 	Active     bool
@@ -138,6 +141,8 @@ type Draft struct {
 	// OpenPrice makes a product whose price is typed at the till and which is never counted in stock. It then takes no
 	// price, cost or margin of its own.
 	OpenPrice bool
+	// UnitsPerCarton is how many of the unit make one carton (طرد); empty for none (0.10.0).
+	UnitsPerCarton string
 }
 
 // NewProduct validates a draft into a product. It is active, on no till button, at version 1.
@@ -156,6 +161,9 @@ func NewProduct(productID id.ID, d Draft, ref Reference) (Product, error) {
 			WithField(FieldUnit, CodeUnknownUnit, "unknown unit").WithParam("value", d.UnitCode)
 	}
 	p.UnitCode = d.UnitCode
+	if p, err = p.WithCartonSize(d.UnitsPerCarton, ref); err != nil {
+		return Product{}, err
+	}
 	if d.OpenPrice {
 		// Its price is typed at the till, every time. A stored price, a cost or a margin would be figures the product
 		// never uses, and a shop reading them would take them for the truth.

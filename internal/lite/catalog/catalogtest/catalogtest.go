@@ -277,7 +277,7 @@ func StoreContract(t *testing.T, newStore func(t *testing.T) catalog.Store) {
 		}
 		p, err := domain.NewProduct(productID, domain.Draft{
 			NameAR: nameAR, NameEN: "English " + nameAR, Barcode: barcode,
-			UnitCode: "kg", PriceCurrency: "USD", Price: "3.25",
+			UnitCode: "kg", PriceCurrency: "USD", Price: "3.25", UnitsPerCarton: "12.5",
 		}, ref)
 		if err != nil {
 			t.Fatal(err)
@@ -311,6 +311,24 @@ func StoreContract(t *testing.T, newStore func(t *testing.T) catalog.Store) {
 		got, err := s.Get(ctx, p.ID)
 		if err != nil || got != p {
 			t.Fatalf("Get = %+v, %v\nwant %+v", got, err, p)
+		}
+	})
+
+	t.Run("a carton size is kept, and cleared as none rather than as nothing", func(t *testing.T) {
+		s := newStore(t)
+		p := product(t, "دبس رمان", "")
+		if err := s.Insert(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := s.Get(ctx, p.ID); got.UnitsPerCartonMicro != 12_500_000 {
+			t.Fatalf("carton = %d micro, want 12.5 kg", got.UnitsPerCartonMicro)
+		}
+		p.UnitsPerCartonMicro = 0
+		if _, err := s.Update(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := s.Get(ctx, p.ID); got.UnitsPerCartonMicro != 0 {
+			t.Fatalf("a cleared carton reads back as %d", got.UnitsPerCartonMicro)
 		}
 	})
 

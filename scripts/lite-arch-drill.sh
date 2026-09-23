@@ -99,6 +99,11 @@ drill lite-pure-text-moneyfmt "textkey, numinput, bizdate, tender and moneyfmt m
   internal/lite/moneyfmt/zz_drill.go "package moneyfmt
 import _ \"$M/internal/platform/database\""
 
+# tafqeet joined lite-pure-text in 0.10.0, planted in tafqeet itself for the same reason.
+drill lite-pure-text-tafqeet "textkey, numinput, bizdate, tender and moneyfmt may import only" \
+  internal/lite/tafqeet/zz_drill.go "package tafqeet
+import _ \"$M/internal/platform/database\""
+
 drill lite-cmd-entry "Lite's commands may import only" \
   cmd/lite-demoseed/zz_drill.go "package main
 import _ \"$M/internal/platform/config\""

@@ -110,9 +110,11 @@ type Product struct {
 	ReorderMicro int64
 	HasReorder   bool
 	// OpenPrice marks a product sold at a price typed at the till, never counted in stock (2026-09-23).
-	OpenPrice  bool
-	Active     bool
-	RowVersion int64
+	OpenPrice bool
+	// UnitsPerCartonMicro is how many of the unit make one carton (طرد), or 0 for none (0.10.0).
+	UnitsPerCartonMicro int64
+	Active              bool
+	RowVersion          int64
 }
 
 // Stocked is what the till needs about a product's stock: supplied by the stock module through a port.
@@ -215,6 +217,29 @@ type Line struct {
 	// OpenPrice is the line of an open-priced product: sold at a typed price, never taken off a shelf, and with no cost
 	// by design rather than one nobody has entered. Kept on the line as the name and unit are (2026-09-23).
 	OpenPrice bool
+	// UnitsPerCartonMicro is the carton size the product had when it was sold, or 0 for none (0.10.0).
+	UnitsPerCartonMicro int64
+}
+
+// Cartons is how many cartons (طرد) the line is, in tenths rounded half up — an invoice counts "1.5" cartons, not 1.4999.
+// ok is false for a line whose product has no carton size.
+func (l Line) Cartons() (tenths int64, ok bool) {
+	if l.UnitsPerCartonMicro <= 0 {
+		return 0, false
+	}
+	// quantity ÷ carton × 10, rounded half up: (2 × 10 × quantity + carton) ÷ (2 × carton), exact in integers.
+	return (20*l.QuantityMicro + l.UnitsPerCartonMicro) / (2 * l.UnitsPerCartonMicro), true
+}
+
+// Cartons is the sale's cartons in tenths, summed over the lines that have a carton size; ok is false when none has.
+func (s Sale) Cartons() (tenths int64, ok bool) {
+	for _, l := range s.Lines {
+		if t, has := l.Cartons(); has {
+			tenths += t
+			ok = true
+		}
+	}
+	return tenths, ok
 }
 
 // NetLocalMinor is the line after its discount, in the local currency.

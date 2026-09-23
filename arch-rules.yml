@@ -129,7 +129,9 @@ rules:
         # it would make "what does this figure mean" depend on something other than the figure and the shop's choice.
         # numinput is itself one of them, so one of them reading a typed number the way every parser does keeps them all
         # pure (0.9.9): moneyfmt.Base moved the point in the text AS TYPED, and read "١٫٥" as 1.5 old pounds, not 150.
-        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**", "self/internal/lite/tender/**", "self/internal/lite/moneyfmt/**"]
+        # tafqeet joined in 0.10.0: an amount in words is a statement of the sum on every invoice, and must depend on nothing
+        # but the figure and the currency's names.
+        applies_to: ["self/internal/lite/textkey/**", "self/internal/lite/numinput/**", "self/internal/lite/bizdate/**", "self/internal/lite/tender/**", "self/internal/lite/moneyfmt/**", "self/internal/lite/tafqeet/**"]
         allow_only: ["std", "self/internal/kernel/errs", "self/internal/lite/numinput"]
         message: "textkey, numinput, bizdate, tender and moneyfmt may import only the standard library, kernel/errs and numinput — domain packages and services depend on them"
 

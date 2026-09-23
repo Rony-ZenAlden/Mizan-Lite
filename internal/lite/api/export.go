@@ -104,15 +104,12 @@ func (w words) render(x exportable, format string) ([]byte, error) {
 // paperHeader is the shop's own heading on an A4 export: its name, then the address and telephone it set for its receipts
 // (the owner's request, 2026-09-16 — the same header on a receipt and on a report, not one of each).
 func (w words) paperHeader(x exportable) []documents.Block {
-	blocks := []documents.Block{documents.Title{Text: x.title, Subtitle: w.user(w.settings.ShopName) + " · " + x.subtitle}}
-	r := w.settings.Receipt
-	if r.Address != "" {
-		blocks = append(blocks, documents.Paragraph{Text: w.user(r.Address), Small: true})
+	var blocks []documents.Block
+	if w.logo != nil {
+		blocks = append(blocks, documents.Image{Picture: w.logo, MaxLines: logoLines})
 	}
-	if r.Phone != "" {
-		blocks = append(blocks, documents.Paragraph{Text: w.fig(r.Phone), Small: true})
-	}
-	return blocks
+	blocks = append(blocks, documents.Title{Text: x.title, Subtitle: w.user(w.settings.ShopName) + " · " + x.subtitle})
+	return append(blocks, w.whereToFind(false)...)
 }
 
 // shopDetails is the address and telephone on one line, for a workbook's heading; empty when neither is set.
@@ -154,6 +151,11 @@ func (e *Export) save(ctx context.Context, app *bootstrap.App, format string, co
 	if err != nil {
 		return ExportResultDTO{}, err
 	}
+	return e.write(ctx, w, w.filename(x, format), format, body)
+}
+
+// write asks where to save a rendered file and writes it atomically; a cancelled dialog writes nothing.
+func (e *Export) write(ctx context.Context, w words, name, format string, body []byte) (ExportResultDTO, error) {
 	files, err := e.core.dialogs()
 	if err != nil {
 		return ExportResultDTO{}, err
@@ -162,7 +164,7 @@ func (e *Export) save(ctx context.Context, app *bootstrap.App, format string, co
 	if format == FormatXLSX {
 		filter = Filter{Name: w.t("doc.filter_xlsx"), Pattern: "*.xlsx"}
 	}
-	path, err := files.SaveFile(ctx, w.t("doc.save_title"), w.filename(x, format), []Filter{filter})
+	path, err := files.SaveFile(ctx, w.t("doc.save_title"), name, []Filter{filter})
 	if err != nil {
 		return ExportResultDTO{}, errs.Wrap(err, errs.CategoryConflict, CodeSaveFailed, "the save dialog failed")
 	}
@@ -176,6 +178,23 @@ func (e *Export) save(ctx context.Context, app *bootstrap.App, format string, co
 		return ExportResultDTO{}, err
 	}
 	return ExportResultDTO{Path: path, Bytes: len(body)}, nil
+}
+
+// Invoice saves a sale's A4 invoice as a PDF (0.10.0): the invoice to send, or to print on any printer at all. Anyone
+// at the counter may — it goes to the customer.
+func (e *Export) Invoice(saleID string) envelope.Result[ExportResultDTO] {
+	return call(e.core, "Export.Invoice", func(ctx context.Context, app *bootstrap.App) (ExportResultDTO, error) {
+		w, err := newWords(ctx, app)
+		if err != nil {
+			return ExportResultDTO{}, err
+		}
+		p, err := build(ctx, app, w, "invoice", saleID)
+		if err != nil {
+			return ExportResultDTO{}, err
+		}
+		name := unsafeName.ReplaceAllString(w.settings.ShopName+" - "+p.title, " ")
+		return e.write(ctx, w, strings.Join(strings.Fields(name), " ")+"."+FormatPDF, FormatPDF, documents.PDF(w.ts, p.doc))
+	})
 }
 
 // Report exports the Day, Month, Products, Stock or Cash drawer report. The reports are the owner's; so is the drawer's export,

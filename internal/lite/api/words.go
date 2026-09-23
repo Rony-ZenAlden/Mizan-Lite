@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"image"
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/kernel/clock"
@@ -22,6 +23,8 @@ type words struct {
 	tz       *time.Location
 	ts       *typeset.Typesetter
 	settings settingsdomain.Settings
+	// logo is the shop's logo, nil when it has none: every document's header draws it (0.10.0).
+	logo image.Image
 }
 
 func newWords(ctx context.Context, app *bootstrap.App) (words, error) {
@@ -36,6 +39,16 @@ func newWords(ctx context.Context, app *bootstrap.App) (words, error) {
 	w := words{app: app, loc: locale.Locale(current.Locale), dir: documents.RTL, tz: app.Location(), ts: ts, settings: current}
 	if current.Locale == settingsdomain.English {
 		w.dir = documents.LTR
+	}
+	stored, found, err := app.Settings.Logo(ctx)
+	if err != nil {
+		return words{}, err
+	}
+	if found {
+		// A logo that cannot be decoded prints the name in type instead: a damaged picture must not stop a receipt.
+		if img, decodeErr := settingsdomain.DecodeLogo(stored); decodeErr == nil {
+			w.logo = img
+		}
 	}
 	return w, nil
 }

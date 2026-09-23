@@ -49,7 +49,7 @@ func (f *Fake) SentCopies(_ context.Context, subjectID id.ID) (int, error) {
 	defer f.mu.Unlock()
 	n := 0
 	for _, j := range f.jobs {
-		if j.SubjectID == subjectID && j.Sent {
+		if j.SubjectID == subjectID && j.Sent && j.Kind != printing.KindInvoice {
 			n++
 		}
 	}
@@ -128,6 +128,28 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Fatal("a place used twice")
 		}
 	})
+	t.Run("an A4 invoice is recorded, and is not a copy of the receipt", func(t *testing.T) {
+		sub := newSubject(t)
+		sale, _ := id.New()
+		for _, j := range []printing.Job{
+			{Kind: printing.KindSale, SubjectID: sale, CopyNo: 1, Printer: "Xprinter", Path: "driver", Sent: true},
+			{Kind: printing.KindInvoice, SubjectID: sale, CopyNo: 1, Printer: "HP LaserJet", Path: "driver", Sent: true},
+		} {
+			j.ID, _ = id.New()
+			j.Seq, _ = sub.Store.NextSeq(ctx)
+			j.PrintedAt = at
+			if err := sub.Store.Insert(ctx, j); err != nil {
+				t.Fatalf("%s: %v", j.Kind, err)
+			}
+		}
+		if n, _ := sub.Store.SentCopies(ctx, sale); n != 1 {
+			t.Fatalf("the invoice counted as a receipt copy: %d copies", n)
+		}
+		if jobs, _ := sub.Store.Jobs(ctx, 1); len(jobs) != 1 || jobs[0].Kind != printing.KindInvoice {
+			t.Fatalf("the invoice was not recorded: %+v", jobs)
+		}
+	})
+
 	t.Run("vouchers are numbered once, without gaps", func(t *testing.T) {
 		sub := newSubject(t)
 		a, b := sub.NewEntry(t), sub.NewEntry(t)

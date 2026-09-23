@@ -38,6 +38,7 @@ type CustomerDTO struct {
 	Name       string       `json:"name"`
 	Phone      string       `json:"phone"`
 	Note       string       `json:"note"`
+	City       string       `json:"city"`
 	Active     bool         `json:"active"`
 	RowVersion int64        `json:"rowVersion"`
 	Balances   []BalanceDTO `json:"balances"`
@@ -55,6 +56,7 @@ type CustomerInput struct {
 	Name  string `json:"name"`
 	Phone string `json:"phone"`
 	Note  string `json:"note"`
+	City  string `json:"city"`
 }
 
 // UpdateCustomerInput edits a customer at a version.
@@ -64,6 +66,7 @@ type UpdateCustomerInput struct {
 	Name       string `json:"name"`
 	Phone      string `json:"phone"`
 	Note       string `json:"note"`
+	City       string `json:"city"`
 }
 
 // SetCustomerActiveInput activates or deactivates a customer.
@@ -243,7 +246,7 @@ func (v debtView) balance(s domain.Summary) BalanceDTO {
 
 func (v debtView) customer(w customers.WithBalances) CustomerDTO {
 	c := w.Customer
-	dto := CustomerDTO{ID: c.ID.String(), Name: c.Name, Phone: c.Phone, Note: c.Note, Active: c.Active, RowVersion: c.RowVersion,
+	dto := CustomerDTO{ID: c.ID.String(), Name: c.Name, Phone: c.Phone, Note: c.Note, City: c.City, Active: c.Active, RowVersion: c.RowVersion,
 		Balances: make([]BalanceDTO, 0, len(w.Summaries))}
 	for _, s := range w.Summaries {
 		dto.Balances = append(dto.Balances, v.balance(s))
@@ -312,7 +315,7 @@ func (c *Customers) withCustomer(method string, fn func(ctx context.Context, app
 // Create adds a customer. Anyone may.
 func (c *Customers) Create(in CustomerInput) envelope.Result[CustomerDTO] {
 	return c.withCustomer("Customers.Create", func(ctx context.Context, app *bootstrap.App) (domain.Customer, error) {
-		return app.Customers.Create(ctx, domain.Draft{Name: in.Name, Phone: in.Phone, Note: in.Note})
+		return app.Customers.Create(ctx, domain.Draft{Name: in.Name, Phone: in.Phone, Note: in.Note, City: in.City})
 	})
 }
 
@@ -323,7 +326,7 @@ func (c *Customers) Update(in UpdateCustomerInput) envelope.Result[CustomerDTO] 
 		if err != nil {
 			return domain.Customer{}, err
 		}
-		return app.Customers.Update(ctx, customers.UpdateInput{ID: customerID, RowVersion: in.RowVersion, Draft: domain.Draft{Name: in.Name, Phone: in.Phone, Note: in.Note}})
+		return app.Customers.Update(ctx, customers.UpdateInput{ID: customerID, RowVersion: in.RowVersion, Draft: domain.Draft{Name: in.Name, Phone: in.Phone, Note: in.Note, City: in.City}})
 	})
 }
 

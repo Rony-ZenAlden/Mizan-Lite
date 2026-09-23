@@ -344,7 +344,7 @@ describe("ReportsScreen — returns and the end of day (owner's request, 2026-09
   });
 
   it("says the statement is on screen only when no printer is set up", async () => {
-    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, footer: "", invoicePrinter: "" });
     const day = guarded(async () => aDayReport());
     renderWithProviders(<ReportsScreen />, {
       client: fakeClient({ reports: { day }, owner: { elevate: async () => elevated }, printers: { settings: none } }),
@@ -358,7 +358,7 @@ describe("ReportsScreen — returns and the end of day (owner's request, 2026-09
 
   it("offers the 80 mm print when a printer is set up", async () => {
     const zReport = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }));
-    const set = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    const set = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, footer: "", invoicePrinter: "" });
     const day = guarded(async () => aDayReport());
     renderWithProviders(<ReportsScreen />, {
       client: fakeClient({ reports: { day }, owner: { elevate: async () => elevated }, printers: { settings: set }, print: { zReport } }),

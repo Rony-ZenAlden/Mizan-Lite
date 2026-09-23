@@ -36,7 +36,7 @@ func TestAReprintIsACopyAndAFailureIsNot(t *testing.T) {
 	if n, _ := svc.NextCopy(ctx, ""); n != 1 {
 		t.Fatal("a test page")
 	}
-	if _, err := svc.Record(ctx, printing.Job{Kind: "invoice"}); errs.CodeOf(err) != printing.CodeUnknownKind {
+	if _, err := svc.Record(ctx, printing.Job{Kind: "fax"}); errs.CodeOf(err) != printing.CodeUnknownKind {
 		t.Fatal(err)
 	}
 	e, _ := id.New()

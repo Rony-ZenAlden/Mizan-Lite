@@ -164,8 +164,43 @@ type bitmapInfo struct {
 	palette       [2][4]byte
 }
 
+// sheets draws a paged document through GDI, one page on each sheet, each scaled to the printable width with its
+// proportions kept — an A4 invoice on an A4 printer (0.10.0).
+func sheets(job Job) error {
+	dc, _, err := procCreateDC.Call(uintptr(unsafe.Pointer(utf16("WINSPOOL"))), uintptr(unsafe.Pointer(utf16(job.Printer))), 0, 0)
+	if dc == 0 {
+		return failed(err, "opening the printer", job)
+	}
+	defer func() { _, _, _ = procDeleteDC.Call(dc) }()
+	info := gdiDocInfo{docName: utf16(job.Title)}
+	info.size = int32(unsafe.Sizeof(info))
+	if r, _, callErr := procGdiStartDoc.Call(dc, uintptr(unsafe.Pointer(&info))); int32(r) <= 0 {
+		return failed(callErr, "starting the print job", job)
+	}
+	defer func() { _, _, _ = procGdiEndDoc.Call(dc) }()
+	pageWidth, _, _ := procGetDeviceCaps.Call(dc, horzres)
+	for _, page := range job.Pages {
+		if r, _, callErr := procGdiStartPage.Call(dc); int32(r) <= 0 {
+			return failed(callErr, "starting the page", job)
+		}
+		bits, header := dib(page)
+		b := page.Bounds()
+		height := int(pageWidth) * b.Dy() / b.Dx()
+		r, _, callErr := procStretchDIBits.Call(dc, 0, 0, pageWidth, uintptr(height), 0, 0, uintptr(b.Dx()), uintptr(b.Dy()),
+			uintptr(unsafe.Pointer(&bits[0])), uintptr(unsafe.Pointer(&header)), dibRGBColors, srccopy)
+		_, _, _ = procGdiEndPage.Call(dc)
+		if r == 0 {
+			return failed(callErr, "drawing the page", job)
+		}
+	}
+	return nil
+}
+
 // driver draws the bitmap on the printer's page through GDI, scaled to the printable width.
 func driver(job Job) error {
+	if len(job.Pages) > 0 {
+		return sheets(job)
+	}
 	dc, _, err := procCreateDC.Call(uintptr(unsafe.Pointer(utf16("WINSPOOL"))), uintptr(unsafe.Pointer(utf16(job.Printer))), 0, 0)
 	if dc == 0 {
 		return failed(err, "opening the printer", job)

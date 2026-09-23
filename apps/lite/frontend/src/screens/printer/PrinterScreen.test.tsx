@@ -35,8 +35,8 @@ describe("PrinterScreen", () => {
     await userEvent.selectOptions(screen.getByLabelText("How receipts reach the printer"), "raw");
     await userEvent.selectOptions(screen.getByLabelText("Automatic printing"), "all");
     await userEvent.click(screen.getByLabelText("Open the cash drawer when a receipt prints"));
-    await userEvent.type(screen.getByLabelText("Phone"), "011 222 3344");
-    await userEvent.type(screen.getByLabelText("Address"), "دمشق — المزة");
+    // The A4 printer for invoices (0.10.0), chosen from the same list.
+    await userEvent.selectOptions(screen.getByLabelText("A4 printer for invoices"), "Office Laser");
     await userEvent.type(screen.getByLabelText("Line at the foot of the receipt"), "شكراً لزيارتكم");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await userEvent.type(await screen.findByLabelText("Owner PIN"), "246813");
@@ -50,10 +50,11 @@ describe("PrinterScreen", () => {
       path: "raw",
       autoPrint: "all",
       drawer: true,
-      phone: "011 222 3344",
-      address: "دمشق — المزة",
       footer: "شكراً لزيارتكم",
+      invoicePrinter: "Office Laser",
     });
+    // The shop's phone and address live under Settings > Store information now, one place for every document's head.
+    expect(screen.getByTestId("printer-header-moved")).toHaveTextContent("Store information");
     expect(screen.getByRole("status")).toHaveTextContent("The printer settings were saved");
   });
 
@@ -112,6 +113,8 @@ describe("PrinterScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Refresh the list" }));
     await settle();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Xprinter XP-80" })).toBeInTheDocument();
+    // Listed for the receipt printer, and for the A4 printer beside it (0.10.0).
+    expect(within(screen.getByLabelText("Receipt printer")).getByRole("option", { name: "Xprinter XP-80" })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("A4 printer for invoices")).getByRole("option", { name: "Xprinter XP-80" })).toBeInTheDocument();
   });
 });

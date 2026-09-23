@@ -37,6 +37,8 @@ type SaleLineDTO struct {
 	DiscountUSD     string `json:"discountUsd"`
 	NetLocal        string `json:"netLocal"`
 	NetUSD          string `json:"netUsd"`
+	// Cartons is how many cartons (طرد) the line is, one decimal — "" for a product with no carton size (0.10.0).
+	Cartons string `json:"cartons"`
 }
 
 // SaleDTO is a sale as recorded — its receipt.
@@ -77,6 +79,8 @@ type SaleDTO struct {
 	// VoidReturn is the cash a void of this sale hands back, in VoidReturnCurrency (L6 §7.2): shown before the PIN.
 	VoidReturn         string `json:"voidReturn"`
 	VoidReturnCurrency string `json:"voidReturnCurrency"`
+	// Cartons is the sale's cartons (عدد الطرود), one decimal, over the lines that have a carton size; "" if none has.
+	Cartons string `json:"cartons"`
 }
 
 // DayTotalsDTO is one currency's side of a day.
@@ -124,6 +128,9 @@ func (v tillView) line(l salesdomain.Line, local string) SaleLineDTO {
 		DiscountLocal:   v.money(l.DiscountLocalMinor, local), DiscountUSD: v.money(l.DiscountUSDMinor, usd),
 		NetLocal: v.money(l.NetLocalMinor(), local), NetUSD: v.money(l.NetUSDMinor(), usd),
 	}
+	if tenths, ok := l.Cartons(); ok {
+		dto.Cartons = numinput.FormatFixed(tenths, 1, 1)
+	}
 	return dto
 }
 
@@ -161,6 +168,9 @@ func (v tillView) sale(s salesdomain.Sale) SaleDTO {
 	}
 	for _, l := range s.Lines {
 		dto.Lines = append(dto.Lines, v.line(l, local))
+	}
+	if tenths, ok := s.Cartons(); ok {
+		dto.Cartons = numinput.FormatFixed(tenths, 1, 1)
 	}
 	return dto
 }

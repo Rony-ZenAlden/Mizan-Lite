@@ -35,6 +35,8 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
   const [costPrice, setCostPrice] = useState(typeable(product?.costPrice ?? ""));
   // The level at or below which the shop wants to be told to buy more (2026-09-20). Empty means never tell me.
   const [reorderLevel, setReorderLevel] = useState(product?.reorderLevel ?? "");
+  // How many of the unit make one carton (طرد) — what the invoice's carton column counts in (0.10.0). Empty for none.
+  const [unitsPerCarton, setUnitsPerCarton] = useState(product?.unitsPerCarton ?? "");
   // An item whose price is typed at the till and which is never counted (2026-09-23). Chosen at creation only: the
   // schema refuses to change it afterwards, because a stocked product turned open would strand its stock.
   const [openPrice, setOpenPrice] = useState(product?.openPrice ?? false);
@@ -81,13 +83,15 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
         onSaved(
           await client.catalog.createProduct(
             openPrice
-              ? { nameAr, nameEn, barcode, unitCode, priceCurrency, price: "", costPrice: "", marginPercent: "", marginAmount: "", openPrice: true }
+              ? { nameAr, nameEn, barcode, unitCode, priceCurrency, price: "", costPrice: "", marginPercent: "", marginAmount: "", openPrice: true,
+                  unitsPerCarton: unitsPerCarton.trim() }
               : {
                   nameAr, nameEn, barcode, unitCode, priceCurrency, price,
                   costPrice,
                   marginPercent: lastTyped === "percent" ? marginPercent : "",
                   marginAmount: lastTyped === "amount" ? marginAmount : "",
                   openPrice: false,
+                  unitsPerCarton: unitsPerCarton.trim(),
                 },
           ),
         );
@@ -95,8 +99,9 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
       }
       // Fresh, so the edit carries the current version rather than the one the list showed.
       let current = await client.catalog.product(product.id);
-      if (current.nameAr !== nameAr || current.nameEn !== nameEn || current.barcode !== barcode) {
-        current = await client.catalog.updateProduct({ id: current.id, rowVersion: current.rowVersion, nameAr, nameEn, barcode });
+      if (current.nameAr !== nameAr || current.nameEn !== nameEn || current.barcode !== barcode || current.unitsPerCarton !== unitsPerCarton.trim()) {
+        current = await client.catalog.updateProduct({ id: current.id, rowVersion: current.rowVersion, nameAr, nameEn, barcode,
+          unitsPerCarton: unitsPerCarton.trim() });
       }
       // The cost travels with the price: both live on the product, and one call keeps them consistent. "-" takes a cost
       // off; "" leaves whatever is stored alone.
@@ -144,6 +149,17 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
           dir="ltr"
           autoComplete="off"
         />}
+        <TextField
+          label={t("product.units_per_carton")}
+          hint={t("product.units_per_carton_hint")}
+          value={unitsPerCarton}
+          onChange={(e) => setUnitsPerCarton(e.target.value)}
+          error={fieldError("unitsPerCarton")}
+          inputMode="decimal"
+          dir="ltr"
+          autoComplete="off"
+          data-testid="product-units-per-carton"
+        />
         <SelectField
           label={t("product.unit")}
           value={unitCode}

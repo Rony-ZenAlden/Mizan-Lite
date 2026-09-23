@@ -3,6 +3,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"os"
@@ -66,6 +67,41 @@ func (s *Store) Save(ctx context.Context, key, value string, at time.Time) error
 	if _, err := s.db.Writer(ctx).ExecContext(ctx,
 		`INSERT INTO settings (setting_key, value, updated_at) VALUES (?, ?, ?)`,
 		key, value, stamp); err != nil {
+		return s.db.Dialect().TranslateError(err)
+	}
+	return nil
+}
+
+// Logo is the shop's logo, and whether there is one.
+func (s *Store) Logo(ctx context.Context) (domain.Logo, bool, error) {
+	var l domain.Logo
+	err := s.db.Reader(ctx).QueryRowContext(ctx, `SELECT png, width, height FROM shop_logo WHERE id = 1`).
+		Scan(&l.PNG, &l.Width, &l.Height)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Logo{}, false, nil
+	}
+	if err != nil {
+		return domain.Logo{}, false, s.db.Dialect().TranslateError(err)
+	}
+	return l, true, nil
+}
+
+// PutLogo stores the logo, replacing the one there was: a delete then an insert, portable where an upsert is not.
+func (s *Store) PutLogo(ctx context.Context, l domain.Logo, at time.Time) error {
+	if err := s.DeleteLogo(ctx); err != nil {
+		return err
+	}
+	if _, err := s.db.Writer(ctx).ExecContext(ctx,
+		`INSERT INTO shop_logo (id, png, width, height, updated_at) VALUES (1, ?, ?, ?, ?)`,
+		l.PNG, l.Width, l.Height, clock.Format(at)); err != nil {
+		return s.db.Dialect().TranslateError(err)
+	}
+	return nil
+}
+
+// DeleteLogo removes the logo; removing none is not an error.
+func (s *Store) DeleteLogo(ctx context.Context) error {
+	if _, err := s.db.Writer(ctx).ExecContext(ctx, `DELETE FROM shop_logo WHERE id = 1`); err != nil {
 		return s.db.Dialect().TranslateError(err)
 	}
 	return nil

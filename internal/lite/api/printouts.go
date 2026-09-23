@@ -1,12 +1,18 @@
 package api
 
 import (
+	"context"
 	"strconv"
+	"strings"
 
+	"github.com/mizan-erp/mizan/internal/kernel/clock"
+	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	customersdomain "github.com/mizan-erp/mizan/internal/lite/customers/domain"
 	"github.com/mizan-erp/mizan/internal/lite/documents"
 	fxdomain "github.com/mizan-erp/mizan/internal/lite/fx/domain"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 	salesdomain "github.com/mizan-erp/mizan/internal/lite/sales/domain"
+	"github.com/mizan-erp/mizan/internal/lite/tafqeet"
 	"github.com/mizan-erp/mizan/internal/lite/tender"
 )
 
@@ -21,20 +27,41 @@ func isZeroFigure(s string) bool {
 	return true
 }
 
-// header is the shop's lines at the top of every receipt and voucher.
+// logoLines is how tall the logo stands at the head of a document, in body lines.
+const logoLines = 4
+
+// header is the shop's lines at the top of every receipt and voucher: its logo when it has one, its name, and where to
+// find it.
 func (w words) header(shop string, copyNo int, subtitle string) []documents.Block {
-	blocks := []documents.Block{documents.Title{Text: w.user(shop), Subtitle: subtitle, Center: true}}
-	r := w.settings.Receipt
-	if r.Address != "" {
-		blocks = append(blocks, documents.Paragraph{Text: w.user(r.Address), Small: true, Center: true})
+	var blocks []documents.Block
+	if w.logo != nil {
+		blocks = append(blocks, documents.Image{Picture: w.logo, MaxLines: logoLines})
 	}
-	if r.Phone != "" {
-		blocks = append(blocks, documents.Paragraph{Text: w.fig(r.Phone), Small: true, Center: true})
-	}
+	blocks = append(blocks, documents.Title{Text: w.user(shop), Subtitle: subtitle, Center: true})
+	blocks = append(blocks, w.whereToFind(true)...)
 	if copyNo > 1 {
 		blocks = append(blocks, documents.Stamp{Text: w.t("doc.copy", "number", w.fig(strconv.Itoa(copyNo)))})
 	}
 	return append(blocks, documents.Rule{Dashed: true})
+}
+
+// whereToFind is the shop's city, address and phone, each a small line — set once under Settings > Store information.
+func (w words) whereToFind(center bool) []documents.Block {
+	var blocks []documents.Block
+	r := w.settings.Receipt
+	var place []string
+	for _, part := range []string{r.City, r.Address} {
+		if part != "" {
+			place = append(place, w.user(part))
+		}
+	}
+	if len(place) > 0 {
+		blocks = append(blocks, documents.Paragraph{Text: strings.Join(place, " · "), Small: true, Center: center})
+	}
+	if r.Phone != "" {
+		blocks = append(blocks, documents.Paragraph{Text: w.t("doc.phone", "phone", w.fig(r.Phone)), Small: true, Center: center})
+	}
+	return blocks
 }
 
 func (w words) footer() []documents.Block {
@@ -81,6 +108,9 @@ func (w words) receiptDocument(sale SaleDTO, copyNo int) documents.Document {
 		pairs = append(pairs, documents.Pair{Label: w.t("receipt.rounding", "note", w.fig(documents.Group(sale.CashNote))), Value: documents.T(w.money(sale.Rounding, settle))})
 	}
 	pairs = append(pairs, documents.Pair{Label: w.t("receipt.total"), Value: documents.T(w.money(sale.Total, settle)), Bold: true})
+	if sale.Cartons != "" {
+		pairs = append(pairs, documents.Pair{Label: w.t("invoice.cartons"), Value: documents.F(sale.Cartons)})
+	}
 	credit := sale.Payment == string(salesdomain.PaymentCredit)
 	if credit {
 		pairs = append(pairs, documents.Pair{Label: w.t("receipt.paid_now"), Value: documents.T(w.money(sale.Tendered, sale.TenderCurrency))})
@@ -95,12 +125,157 @@ func (w words) receiptDocument(sale SaleDTO, copyNo int) documents.Document {
 			documents.Pair{Label: w.t("receipt.tendered"), Value: documents.T(w.money(sale.Tendered, sale.TenderCurrency))},
 			documents.Pair{Label: w.t("receipt.change"), Value: documents.T(w.money(sale.Change, sale.ChangeCurrency))})
 	}
-	blocks = append(blocks, documents.Pairs{Rows: pairs}, documents.Rule{Dashed: true},
+	blocks = append(blocks, documents.Pairs{Rows: pairs})
+	if said := w.inWords(sale.Total, settle); said != "" {
+		blocks = append(blocks, documents.Paragraph{Text: said, Small: true, Center: true})
+	}
+	blocks = append(blocks, documents.Rule{Dashed: true},
 		documents.Paragraph{Text: w.rate(sale.Rate, sale.LocalCurrency), Small: true, Center: true})
 	if credit {
 		blocks = append(blocks, documents.Signature{Label: w.t("doc.customer_signature")})
 	}
 	return documents.Document{Direction: w.dir, Blocks: append(blocks, w.footer()...)}
+}
+
+// inWords is an amount as the invoice states it — "فقط … لا غير" — in the figure the shop reads first: the new pound of
+// a dual reading. "" for a currency or figure that cannot be written, which a document then leaves out rather than
+// print words that do not say the figure.
+func (w words) inWords(amount, currency string) string {
+	fresh, _, _ := moneyfmt.SplitDual(amount)
+	c, ok := tafqeet.ForCode(currency)
+	if !ok || fresh == "" {
+		return ""
+	}
+	write := tafqeet.Arabic
+	if w.english() {
+		write = tafqeet.English
+	}
+	said, err := write(fresh, c)
+	if err != nil {
+		return ""
+	}
+	return said
+}
+
+// invoiceParty is who an invoice is made out to: a credit sale's customer, or nobody for a cash sale.
+type invoiceParty struct{ Name, Phone, City string }
+
+// invoicePartyOf reads the customer of a credit sale — the name as the sale recorded it, the phone and city as they are
+// now, since those are how to reach them.
+func invoicePartyOf(ctx context.Context, app *bootstrap.App, sale SaleDTO) (invoiceParty, error) {
+	if sale.CreditCustomerID == "" {
+		return invoiceParty{}, nil
+	}
+	customerID, err := parseCustomerID(sale.CreditCustomerID)
+	if err != nil {
+		return invoiceParty{}, err
+	}
+	c, err := app.Customers.Customer(ctx, customerID)
+	if err != nil {
+		return invoiceParty{}, err
+	}
+	return invoiceParty{Name: sale.CreditCustomerName, Phone: c.Phone, City: c.City}, nil
+}
+
+// invoiceColumns are the model invoice's columns, start edge first (2026-09-24): the line's total, the item, how many,
+// the unit, the cartons, a note, the price. Widths are relative.
+var invoiceColumns = []int{14, 28, 9, 9, 7, 12, 15}
+
+// invoiceDocument is a sale's A4 invoice, laid out as the owner's model invoice (2026-09-24): the shop at the head —
+// its logo, or its name in type — the customer and the date, a ruled table of the lines, and under it the cartons, the
+// total and the amount in words beside the net.
+func (w words) invoiceDocument(sale SaleDTO, party invoiceParty) documents.Document {
+	settle := sale.Settlement
+	var blocks []documents.Block
+	if w.logo != nil {
+		blocks = append(blocks, documents.Image{Picture: w.logo, MaxLines: logoLines + 1})
+	}
+	blocks = append(blocks, documents.Title{Text: w.user(w.settings.ShopName), Subtitle: w.t("invoice.kind"), Center: true})
+	blocks = append(blocks, w.whereToFind(true)...)
+	if sale.Status == string(salesdomain.StatusVoided) {
+		blocks = append(blocks, documents.Stamp{Text: w.t("doc.voided")})
+	}
+
+	customer := w.t("invoice.cash_customer")
+	if party.Name != "" {
+		customer = w.user(party.Name)
+	}
+	start := []documents.Field{
+		{Label: w.t("invoice.customer"), Value: documents.T(customer)},
+		{Label: w.t("invoice.number"), Value: documents.F(strconv.FormatInt(sale.ReceiptNo, 10))},
+	}
+	if party.City != "" {
+		start = append(start, documents.Field{Label: w.t("invoice.city"), Value: documents.T(w.user(party.City))})
+	}
+	end := []documents.Field{{Label: w.t("invoice.date"), Value: documents.F(w.dayOf(sale.SoldAt))}}
+	if party.Phone != "" {
+		end = append(end, documents.Field{Label: w.t("invoice.phone"), Value: documents.F(party.Phone)})
+	}
+	blocks = append(blocks, documents.Fields{Start: start, End: end})
+
+	figure := func(s string) documents.Cell { return documents.F(documents.Group(s)) }
+	rows := make([][]documents.Cell, 0, len(sale.Lines))
+	for _, l := range sale.Lines {
+		net := l.NetLocal
+		if settle == tender.USD {
+			net = l.NetUSD
+		}
+		price := figure(l.UnitPrice)
+		if l.PriceCurrency != settle {
+			// A dollar price on a pound invoice says it is dollars; the line's total is already in pounds.
+			price = documents.M(w.money(l.UnitPrice, l.PriceCurrency))
+		}
+		note := ""
+		if l.DiscountPercent != "" {
+			note = w.t("receipt.line_discount", "percent", w.fig(l.DiscountPercent))
+		}
+		rows = append(rows, []documents.Cell{figure(net), documents.T(w.name(l.NameAR, l.NameEN)), figure(l.Quantity),
+			{Text: w.unit(l.UnitCode), Center: true}, {Text: w.fig(l.Cartons), Center: true}, documents.T(note), price})
+	}
+
+	gross, discount := sale.LinesLocal, sale.DiscountLocal
+	if settle == tender.USD {
+		gross, discount = sale.LinesUSD, sale.DiscountUSD
+	}
+	var footer [][]documents.Cell
+	if sale.Cartons != "" {
+		footer = append(footer, []documents.Cell{{Text: w.t("invoice.cartons"), Span: 4}, {Text: w.fig(sale.Cartons), Center: true}, {Span: 2}})
+	}
+	footer = append(footer, []documents.Cell{{Text: w.t("invoice.gross"), Span: 5}, {Text: w.money(gross, settle), End: true, Span: 2}})
+	if !isZeroFigure(discount) {
+		footer = append(footer, []documents.Cell{{Text: w.t("receipt.discount"), Span: 5}, {Text: w.money(discount, settle), End: true, Span: 2}})
+	}
+	if !isZeroFigure(sale.Rounding) {
+		footer = append(footer, []documents.Cell{{Text: w.t("receipt.rounding", "note", w.fig(documents.Group(sale.CashNote))), Span: 5},
+			{Text: w.money(sale.Rounding, settle), End: true, Span: 2}})
+	}
+	footer = append(footer, []documents.Cell{{Text: w.inWords(sale.Total, settle), Span: 5}, {Text: w.t("invoice.net"), Center: true},
+		{Text: w.money(sale.Total, settle), End: true}})
+	blocks = append(blocks, documents.Table{Grid: true, Widths: invoiceColumns, Rows: rows, Footer: footer,
+		Headings: []string{w.t("invoice.col.total"), w.t("invoice.col.item"), w.t("invoice.col.quantity"), w.t("invoice.col.unit"),
+			w.t("invoice.col.cartons"), w.t("invoice.col.notes"), w.t("invoice.col.price")}})
+
+	if sale.Payment == string(salesdomain.PaymentCredit) && sale.CreditCustomerID != "" {
+		blocks = append(blocks, documents.Pairs{Rows: []documents.Pair{
+			{Label: w.t("receipt.paid_now"), Value: documents.T(w.money(sale.Tendered, sale.TenderCurrency))},
+			{Label: w.t("receipt.debt_added"), Value: documents.T(w.money(sale.CreditAmount, sale.CreditCurrency))},
+			{Label: w.t("receipt.balance_after"), Value: documents.T(w.money(sale.CreditBalanceAfter, sale.CreditCurrency))},
+		}}, documents.Signature{Label: w.t("doc.customer_signature")})
+	}
+	blocks = append(blocks, documents.Paragraph{Text: w.rate(sale.Rate, sale.LocalCurrency), Small: true})
+	blocks = append(blocks, w.footer()...)
+	return documents.Document{Direction: w.dir, Blocks: blocks, Footer: "-{page}-",
+		Meta: documents.Meta{Title: w.t("invoice.title", "number", strconv.FormatInt(sale.ReceiptNo, 10)), Author: w.settings.ShopName,
+			Created: w.app.Now().UTC().Format("D:20060102150405")}}
+}
+
+// dayOf is a stored timestamp's day in the shop's time — an invoice is dated, not timed.
+func (w words) dayOf(stamp string) string {
+	at, ok := clock.ParseTimestamp(stamp)
+	if !ok {
+		return stamp
+	}
+	return at.In(w.tz).Format("02/01/2006")
 }
 
 // voucherDocument is a debt payment's or refund's voucher (سند قبض، سند صرف).

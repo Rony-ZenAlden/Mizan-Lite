@@ -28,7 +28,7 @@ describe("ProductForm — create", () => {
     await settle();
 
     expect(createProduct).toHaveBeenCalledWith({
-      costPrice: "", marginPercent: "", marginAmount: "", openPrice: false,
+      costPrice: "", marginPercent: "", marginAmount: "", openPrice: false, unitsPerCarton: "",
       nameAr: "دبس رمان", nameEn: "Pomegranate molasses", barcode: "٦٢٢٣", unitCode: "jar", priceCurrency: "SYP", price: "٤٥٠٠٠",
     });
     expect(onSaved).toHaveBeenCalledWith(aProduct({ id: "new" }));
@@ -95,7 +95,8 @@ describe("ProductForm — edit", () => {
     await settle();
 
     expect(product).toHaveBeenCalledWith(existing.id); // read fresh before editing
-    expect(updateProduct).toHaveBeenCalledWith({ id: existing.id, rowVersion: 3, nameAr: existing.nameAr, nameEn: "Olive oil, local", barcode: "" });
+    expect(updateProduct).toHaveBeenCalledWith({ id: existing.id, rowVersion: 3, nameAr: existing.nameAr, nameEn: "Olive oil, local", barcode: "",
+      unitsPerCarton: "" });
     expect(setPrice).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: "Owner PIN required" })).not.toBeInTheDocument();
     expect(onSaved).toHaveBeenCalled();
@@ -302,5 +303,37 @@ describe("ProductForm — an open-price item (owner's request, 2026-09-23)", () 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(createProduct).toHaveBeenCalledWith(expect.objectContaining({ nameAr: "كيس", openPrice: true, price: "", costPrice: "" }));
     expect(onSaved).toHaveBeenCalled();
+  });
+});
+
+describe("ProductForm — the carton an invoice counts in (0.10.0)", () => {
+  it("sends how many of the unit make one carton, on create and when it is changed", async () => {
+    const createProduct = vi.fn(async () => aProduct({ id: "new" }));
+    renderWithProviders(<ProductForm onSaved={() => undefined} onClose={() => undefined} />, { client: fakeClient({ catalog: { createProduct } }), locale: "en" });
+    await settle();
+    await userEvent.type(screen.getByLabelText("Arabic name"), "فنجان قهوة");
+    await userEvent.selectOptions(screen.getByLabelText("Selling unit"), "jar");
+    await userEvent.type(screen.getByLabelText("Price"), "18");
+    await userEvent.type(screen.getByLabelText("Units per carton"), "٦");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await settle();
+    expect(createProduct).toHaveBeenCalledWith(expect.objectContaining({ unitsPerCarton: "٦" }));
+  });
+
+  it("an edited carton size is saved without the owner's PIN — it changes no price", async () => {
+    const existing = aProduct({ id: "p1", rowVersion: 2, unitsPerCarton: "6" });
+    const updateProduct = vi.fn(async () => aProduct({ id: "p1", rowVersion: 3, unitsPerCarton: "12" }));
+    renderWithProviders(<ProductForm product={existing} onSaved={() => undefined} onClose={() => undefined} />, {
+      client: fakeClient({ catalog: { updateProduct, product: async () => existing } }),
+      locale: "en",
+    });
+    await settle();
+    expect(screen.getByLabelText("Units per carton")).toHaveValue("6");
+    await userEvent.clear(screen.getByLabelText("Units per carton"));
+    await userEvent.type(screen.getByLabelText("Units per carton"), "12");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await settle();
+    expect(updateProduct).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", rowVersion: 2, unitsPerCarton: "12" }));
+    expect(screen.queryByRole("dialog", { name: "Owner PIN required" })).not.toBeInTheDocument();
   });
 });

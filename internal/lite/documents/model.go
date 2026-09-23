@@ -7,6 +7,7 @@
 package documents
 
 import (
+	"image"
 	"strings"
 
 	"github.com/mizan-erp/mizan/internal/lite/typeset"
@@ -30,6 +31,11 @@ type Cell struct {
 	// End sets text against the cell's end edge without isolating it whole — an amount with its currency's name, whose figure
 	// is isolated inside (Money).
 	End bool
+	// Span is how many columns the cell covers, from its own; 0 and 1 are one. An invoice's footer rows are cells that
+	// span the columns above them (0.10.0).
+	Span int
+	// Center sets the text in the middle of its cell — a grid's headings and short codes.
+	Center bool
 }
 
 // M is an amount cell: Money's text, set where figures are.
@@ -71,6 +77,31 @@ type Table struct {
 	Rows     [][]Cell
 	// Total is a last row set in bold, or nil.
 	Total []Cell
+	// Grid rules every cell on all four sides, as a printed invoice is (0.10.0); otherwise rows are divided by a line
+	// under each.
+	Grid bool
+	// Footer rows follow the rows inside the same grid — an invoice's package count, total and amount in words — set in
+	// bold and never repeated on a new page.
+	Footer [][]Cell
+}
+
+// Image is a picture — the shop's logo — centred, at most MaxLines body lines tall and never wider than the page. A
+// thermal printer prints it in black and white; a PDF keeps its colours (0.10.0).
+type Image struct {
+	Picture  image.Image
+	MaxLines float32
+}
+
+// Field is a label and its value on one line: "السيد: رياض العمر".
+type Field struct {
+	Label string
+	Value Cell
+}
+
+// Fields is two columns of fields side by side: Start at the start edge — the customer on an Arabic invoice, on the
+// right — and End at the end edge, the date and the phone (0.10.0).
+type Fields struct {
+	Start, End []Field
 }
 
 // Paragraph is wrapped text.
@@ -116,6 +147,8 @@ func (Space) block()     {}
 func (Stamp) block()     {}
 func (Signature) block() {}
 func (Barcode) block()   {}
+func (Image) block()     {}
+func (Fields) block()    {}
 
 // Document is what is rendered.
 type Document struct {
@@ -239,10 +272,15 @@ func Unisolated(doc Document) []string {
 			for _, h := range b.Headings {
 				check(h, false)
 			}
-			for _, r := range append(b.Rows, b.Total) {
+			for _, r := range append(append(b.Rows, b.Total), b.Footer...) {
 				for _, c := range r {
 					check(c.Text, c.Figure)
 				}
+			}
+		case Fields:
+			for _, f := range append(append([]Field(nil), b.Start...), b.End...) {
+				check(f.Label, false)
+				check(f.Value.Text, f.Value.Figure)
 			}
 		}
 	}

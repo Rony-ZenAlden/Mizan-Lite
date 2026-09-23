@@ -30,6 +30,8 @@ const (
 	// KindLabel is a shelf label or price tag, of a product; KindZReport is the day's statement on 80 mm paper.
 	KindLabel   Kind = "label"
 	KindZReport Kind = "zreport"
+	// KindInvoice is a sale's A4 invoice (0.10.0). Printing one is not a copy of the receipt: SentCopies counts receipts.
+	KindInvoice Kind = "invoice"
 )
 
 // Job is one print job as recorded.
@@ -50,7 +52,8 @@ type Job struct {
 type Store interface {
 	NextSeq(ctx context.Context) (int64, error)
 	Insert(ctx context.Context, j Job) error
-	// SentCopies counts the jobs of a subject the queue took.
+	// SentCopies counts the jobs of a subject the queue took — its receipts and vouchers, not its A4 invoices, so an
+	// invoice printed for the customer does not turn the next receipt into "copy 2".
 	SentCopies(ctx context.Context, subjectID id.ID) (int, error)
 	Jobs(ctx context.Context, limit int) ([]Job, error)
 	// AssignVoucher gives an entry the next voucher number; an entry numbered already keeps its number.
@@ -88,7 +91,7 @@ func (s *Service) NextCopy(ctx context.Context, subjectID id.ID) (int, error) {
 // Record writes a job the printers package sent, or failed to.
 func (s *Service) Record(ctx context.Context, j Job) (Job, error) {
 	switch j.Kind {
-	case KindSale, KindCreditSale, KindPayment, KindRefund, KindTest, KindLabel, KindZReport:
+	case KindSale, KindCreditSale, KindPayment, KindRefund, KindTest, KindLabel, KindZReport, KindInvoice:
 	default:
 		return Job{}, errs.Validation(CodeUnknownKind, "unknown print job").WithParam("value", string(j.Kind))
 	}

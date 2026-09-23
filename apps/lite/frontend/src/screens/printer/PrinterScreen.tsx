@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { useClient } from "@/api/ClientContext";
 import type { PrintResult, PrinterInfo, PrinterSettings } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
@@ -10,14 +11,16 @@ import { Checkbox } from "@/ui/Checkbox";
 import { SelectField, TextField } from "@/ui/Field";
 import { Spinner } from "@/ui/Spinner";
 
-// The limits Go holds (settings/domain MaxPhoneRunes, MaxLineRunes); the field stops typing where Go would refuse.
-const MAX_PHONE = 40;
+// The limit Go holds (settings/domain MaxLineRunes); the field stops typing where Go would refuse.
 const MAX_LINE = 120;
 
 /**
  * The receipt printer (L7 §5, §9.2): the printers the operating system knows, the paper, how the receipt reaches the printer —
  * through its driver (the default, Q-L7.1) or straight to it as ESC/POS — what prints itself (Q-L7.2), the cash drawer
- * (Q-L7.11), and the lines under the shop's name (Q-L7.12). Changing them is the owner's; the test page is anyone's.
+ * (Q-L7.11), and the line at the foot of every receipt. Changing them is the owner's; the test page is anyone's.
+ *
+ * The A4 printer an invoice goes to is here too (0.10.0) — an office printer, beside the receipt roll. What heads every
+ * document — the shop's name, logo, phone, city and address — is under Settings > Store information, set once for all.
  */
 export function PrinterScreen() {
   const client = useClient();
@@ -126,9 +129,33 @@ export function PrinterScreen() {
         <Checkbox label={t("printer.drawer")} checked={form.drawer} onChange={(e) => set("drawer", e.target.checked)} />
         {form.drawer && form.path !== "raw" ? <p className="text-xs text-text-muted">{t("printer.drawer_hint")}</p> : null}
 
+        <h3 className="pt-2 font-semibold">{t("printer.invoice")}</h3>
+        <SelectField
+          label={t("printer.invoice_printer")}
+          value={form.invoicePrinter}
+          onChange={(e) => set("invoicePrinter", e.target.value)}
+          error={errors.field("invoicePrinter")}
+          hint={t("printer.invoice_printer_hint")}
+          data-testid="invoice-printer"
+        >
+          <option value="">{t("printer.invoice_none")}</option>
+          {printers.map((p) => (
+            <option key={p.name} value={p.name}>
+              {p.default ? t("printer.default_name", { name: p.name }) : p.name}
+            </option>
+          ))}
+          {form.invoicePrinter && !printers.some((p) => p.name === form.invoicePrinter) ? (
+            <option value={form.invoicePrinter}>{t("printer.missing_name", { name: form.invoicePrinter })}</option>
+          ) : null}
+        </SelectField>
+
         <h3 className="pt-2 font-semibold">{t("printer.header")}</h3>
-        <TextField label={t("printer.phone")} value={form.phone} onChange={(e) => set("phone", e.target.value)} error={errors.field("phone")} maxLength={MAX_PHONE} dir="ltr" autoComplete="off" />
-        <TextField label={t("printer.address")} value={form.address} onChange={(e) => set("address", e.target.value)} error={errors.field("address")} maxLength={MAX_LINE} autoComplete="off" />
+        <p className="text-sm text-text-muted" data-testid="printer-header-moved">
+          {t("printer.header_moved")}{" "}
+          <Link to="/settings" className="underline">
+            {t("printer.header_open")}
+          </Link>
+        </p>
         <TextField label={t("printer.footer")} value={form.footer} onChange={(e) => set("footer", e.target.value)} error={errors.field("footer")} maxLength={MAX_LINE} hint={t("printer.footer_hint")} autoComplete="off" />
 
         {errors.form ? <Alert tone="danger" title={errors.form} /> : null}

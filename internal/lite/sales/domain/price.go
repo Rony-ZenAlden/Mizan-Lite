@@ -251,6 +251,7 @@ func priceLine(lineNo int, li LineInput, c Context, cur currencies, demand map[i
 	line := PricedLine{Line: Line{
 		LineNo: lineNo, ProductID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode, QuantityMicro: qtyMicro,
 		PriceCurrency: p.PriceCurrency, UnitPriceMicro: unitPrice, DiscountPercentMicro: percent, OpenPrice: p.OpenPrice,
+		UnitsPerCartonMicro: p.UnitsPerCartonMicro,
 	}}
 	// Both currencies from ONE exact product, each rounded once (DESIGN §4.4, L4 §3.1).
 	var local, usd money.Money

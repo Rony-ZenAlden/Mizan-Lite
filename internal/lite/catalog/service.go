@@ -218,16 +218,21 @@ type UpdateInput struct {
 	NameAR     string
 	NameEN     string
 	Barcode    string
+	// UnitsPerCarton is how many of the unit make one carton; empty clears it (0.10.0).
+	UnitsPerCarton string
 }
 
-// Update changes a product's names and barcode.
+// Update changes a product's names, barcode and carton size: what describes it, not what it costs.
 func (s *Service) Update(ctx context.Context, in UpdateInput) (domain.Product, error) {
-	return s.change(ctx, in.ID, in.RowVersion, func(ctx context.Context, current domain.Product, _ domain.Reference) (domain.Product, error) {
+	return s.change(ctx, in.ID, in.RowVersion, func(ctx context.Context, current domain.Product, ref domain.Reference) (domain.Product, error) {
 		next, err := current.Rename(in.NameAR, in.NameEN)
 		if err != nil {
 			return current, err
 		}
 		if next, err = next.WithBarcode(in.Barcode); err != nil {
+			return current, err
+		}
+		if next, err = next.WithCartonSize(in.UnitsPerCarton, ref); err != nil {
 			return current, err
 		}
 		return next, s.checkUnique(ctx, next)

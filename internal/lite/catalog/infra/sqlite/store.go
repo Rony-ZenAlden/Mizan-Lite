@@ -24,7 +24,7 @@ type Store struct {
 func NewStore(db database.DB, clk clock.Clock) *Store { return &Store{db: db, clk: clk} }
 
 const productColumns = `id, name_ar, name_en, barcode, uom_code, price_currency, sell_price_micro,
-	cost_price_micro, reorder_micro, quick_slot, is_active, row_version, open_price, priced_rate_nano`
+	cost_price_micro, reorder_micro, quick_slot, is_active, row_version, open_price, priced_rate_nano, units_per_carton_micro`
 
 func (s *Store) Units(ctx context.Context) ([]domain.Unit, error) {
 	rows, err := s.db.Reader(ctx).QueryContext(ctx,
@@ -76,13 +76,14 @@ func scanProduct(row scanner) (domain.Product, error) {
 		active  int
 		open    int
 		priced  sql.NullInt64
+		carton  sql.NullInt64
 	)
 	if err := row.Scan(&rawID, &p.NameAR, &nameEN, &barcode, &p.UnitCode, &p.PriceCurrency,
-		&p.PriceMicro, &cost, &reorder, &slot, &active, &p.RowVersion, &open, &priced); err != nil {
+		&p.PriceMicro, &cost, &reorder, &slot, &active, &p.RowVersion, &open, &priced, &carton); err != nil {
 		return domain.Product{}, err
 	}
 	// NULL is "no rate was in force when this was priced", which reads as 0: nothing to measure staleness against.
-	p.OpenPrice, p.PricedRateNano = open == 1, priced.Int64
+	p.OpenPrice, p.PricedRateNano, p.UnitsPerCartonMicro = open == 1, priced.Int64, carton.Int64
 	// NULL is "nobody has said what this costs", which is not the same as a cost of nothing (L9). The reorder level
 	// reads the same way: no level means the product is never called low (2026-09-20).
 	p.CostMicro, p.HasCost = cost.Int64, cost.Valid
@@ -204,11 +205,13 @@ func (s *Store) Insert(ctx context.Context, p domain.Product) error {
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `
 		INSERT INTO products (id, name_ar, name_en, name_key, search_text, barcode, uom_code,
 		                      price_currency, sell_price_micro, cost_price_micro, cost_currency, reorder_micro,
-		                      quick_slot, is_active, row_version, created_at, updated_at, open_price, priced_rate_nano)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                      quick_slot, is_active, row_version, created_at, updated_at, open_price, priced_rate_nano,
+		                      units_per_carton_micro)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID.String(), p.NameAR, nullable(p.NameEN), p.NameKey(), p.SearchText(), nullable(p.Barcode),
 		p.UnitCode, p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p), nullableReorder(p),
-		nullableSlot(p.QuickSlot), boolInt(p.Active), p.RowVersion, now, now, boolInt(p.OpenPrice), nullableRate(p))
+		nullableSlot(p.QuickSlot), boolInt(p.Active), p.RowVersion, now, now, boolInt(p.OpenPrice), nullableRate(p),
+		nullablePositive(p.UnitsPerCartonMicro))
 	return s.db.Dialect().TranslateError(err)
 }
 
@@ -219,12 +222,12 @@ func (s *Store) Update(ctx context.Context, p domain.Product) (domain.Product, e
 		UPDATE products
 		   SET name_ar = ?, name_en = ?, name_key = ?, search_text = ?, barcode = ?,
 		       price_currency = ?, sell_price_micro = ?, cost_price_micro = ?, cost_currency = ?, reorder_micro = ?,
-		       quick_slot = ?, is_active = ?, priced_rate_nano = ?,
+		       quick_slot = ?, is_active = ?, priced_rate_nano = ?, units_per_carton_micro = ?,
 		       row_version = row_version + 1, updated_at = ?
 		 WHERE id = ? AND row_version = ?`,
 		p.NameAR, nullable(p.NameEN), p.NameKey(), p.SearchText(), nullable(p.Barcode),
 		p.PriceCurrency, p.PriceMicro, nullableCost(p), nullableCostCurrency(p), nullableReorder(p),
-		nullableSlot(p.QuickSlot), boolInt(p.Active), nullableRate(p),
+		nullableSlot(p.QuickSlot), boolInt(p.Active), nullableRate(p), nullablePositive(p.UnitsPerCartonMicro),
 		clock.Format(s.clk.Now()), p.ID.String(), p.RowVersion)
 	if err != nil {
 		return domain.Product{}, s.db.Dialect().TranslateError(err)
@@ -336,6 +339,14 @@ func nullableCost(p domain.Product) any {
 }
 
 // nullableRate writes NULL where no rate was in force when the product was priced.
+// nullablePositive writes NULL for "none" — a carton of nothing is no carton size.
+func nullablePositive(v int64) any {
+	if v <= 0 {
+		return nil
+	}
+	return v
+}
+
 func nullableRate(p domain.Product) any {
 	if p.PricedRateNano <= 0 {
 		return nil

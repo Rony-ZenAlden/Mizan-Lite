@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState } from "./client";
+import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -55,8 +55,14 @@ export function aProduct(overrides: Partial<Product> = {}): Product {
     marginPercent: "",
     reorderLevel: "",
     openPrice: false,
+    unitsPerCarton: "",
     ...overrides,
   };
+}
+
+/** The store information as Go sends it: a name, a phone and a city, and no logo — with any field replaceable. */
+export function aShop(overrides: Partial<ShopState> = {}): ShopState {
+  return { name: "بقالية المونة", phone: "0933 123 456", city: "عفرين", address: "", logo: "", logoWidth: 0, logoHeight: 0, ...overrides };
 }
 
 /** The last internet check, as Go sends it, with any field replaceable. */
@@ -210,6 +216,7 @@ export function aSale(overrides: Partial<Sale> = {}): Sale {
     creditReversed: false,
     voidReturn: "73000",
     voidReturnCurrency: "SYP",
+    cartons: "",
     lines: q.lines.map((l, i) => ({
       id: `line-${i + 1}`,
       lineNo: i + 1,
@@ -227,6 +234,7 @@ export function aSale(overrides: Partial<Sale> = {}): Sale {
       discountUsd: l.discountUsd,
       netLocal: l.netLocal,
       netUsd: l.netUsd,
+      cartons: "",
     })),
     ...overrides,
   };
@@ -239,6 +247,7 @@ export function aCustomer(overrides: Partial<Customer> = {}): Customer {
     name: "أبو محمد",
     phone: "0933 123 456",
     note: "الحلاق",
+    city: "",
     active: true,
     rowVersion: 1,
     balances: [{ currency: "USD", balance: "9.58", owedSince: "2026-09-12", lastPayment: "2026-09-14", reference: "143700", referenceCurrency: "SYP" }],
@@ -575,7 +584,7 @@ export function aBackupStatus(overrides: Partial<BackupStatus> = {}): BackupStat
 
 /** Printer settings as Go sends them: an 80 mm printer through its driver, credit printed automatically. */
 export function printerSettings(overrides: Partial<PrinterSettings> = {}): PrinterSettings {
-  return { printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "credit", drawer: false, phone: "", address: "", footer: "", ...overrides };
+  return { printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "credit", drawer: false, footer: "", invoicePrinter: "", ...overrides };
 }
 
 /** A client answering as a healthy, set-up application, with any method replaceable. */
@@ -612,6 +621,11 @@ export function fakeClient(overrides: Overrides = {}): Client {
           localRateUrl: input.localRateUrl ?? "",
           localRateField: input.localRateField ?? "",
         }),
+      shop: async () => aShop(),
+      saveShop: async (input) => aShop(input),
+      pickLogoFile: async () => ({ path: "/Users/shop/Pictures/logo.png", cancelled: false }),
+      setLogo: async () => aShop({ logo: "iVBORw0KGgo=", logoWidth: 300, logoHeight: 120 }),
+      removeLogo: async () => aShop(),
     },
     catalog: {
       importTemplate: async () => ({ path: "/Users/shop/Documents/products.xlsx", bytes: 1, cancelled: false }),
@@ -806,12 +820,14 @@ export function fakeClient(overrides: Overrides = {}): Client {
       statement: async () => ({ path: "/Users/shop/Documents/statement.pdf", bytes: 4096, cancelled: false }),
       debtLedger: async () => ({ path: "/Users/shop/Documents/ledger.xlsx", bytes: 4096, cancelled: false }),
       salesHistory: async () => ({ path: "/Users/shop/Documents/sales.xlsx", bytes: 4096, cancelled: false }),
+      invoice: async () => ({ path: "/Users/shop/Documents/invoice.pdf", bytes: 4096, cancelled: false }),
       showInFolder: async () => true,
     },
     print: {
       sale: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
       entry: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
       preview: async () => ({ png: "iVBORw0KGgo=", width: 576, height: 600, copyNo: 1 }),
+      invoice: async () => ({ printer: "Office Laser", copyNo: 1, path: "driver" }),
       label: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
       zReport: async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }),
     },

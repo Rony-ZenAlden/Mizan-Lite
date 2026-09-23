@@ -20,6 +20,7 @@ const (
 	CodeNameTooLong      = "lite.customers.name_too_long"
 	CodeDuplicateName    = "lite.customers.duplicate_name"
 	CodePhoneInvalid     = "lite.customers.phone_invalid"
+	CodeCityTooLong      = "lite.customers.city_too_long"
 	CodeNoteTooLong      = "lite.customers.note_too_long"
 	CodeNotFound         = "lite.customers.not_found"
 	CodeInactive         = "lite.customers.inactive"
@@ -50,6 +51,8 @@ const (
 	MaxNameRunes  = 100
 	MaxPhoneRunes = 20
 	MaxNoteRunes  = 200
+	// MaxCityRunes bounds الجهة, the town or quarter printed on the customer's invoices (0.10.0).
+	MaxCityRunes = 60
 )
 
 // Fields named in validation errors.
@@ -57,6 +60,7 @@ const (
 	FieldName           = "name"
 	FieldPhone          = "phone"
 	FieldNote           = "note"
+	FieldCity           = "city"
 	FieldAmount         = "amount"
 	FieldTendered       = "tendered"
 	FieldChangeCurrency = "changeCurrency"
@@ -69,6 +73,7 @@ type Customer struct {
 	Name       string
 	Phone      string
 	Note       string
+	City       string
 	Active     bool
 	RowVersion int64
 	CreatedAt  time.Time
@@ -79,6 +84,7 @@ type Draft struct {
 	Name  string
 	Phone string
 	Note  string
+	City  string
 }
 
 // NameKey is the name as compared and searched.
@@ -89,7 +95,7 @@ func NewCustomer(customerID id.ID, d Draft) (Customer, error) {
 	return Customer{ID: customerID, Active: true, RowVersion: 1}.Edit(d)
 }
 
-// Edit sets the name, phone and note.
+// Edit sets the name, phone, note and city.
 func (c Customer) Edit(d Draft) (Customer, error) {
 	name := strings.TrimSpace(d.Name)
 	// A name made only of marks has an empty key, and could never be found or told apart: it is as missing as none.
@@ -110,7 +116,12 @@ func (c Customer) Edit(d Draft) (Customer, error) {
 		return c, errs.Validation(CodeNoteTooLong, "the note is too long").
 			WithField(FieldNote, CodeNoteTooLong, "too long").WithParam("max", strconv.Itoa(MaxNoteRunes))
 	}
-	c.Name, c.Phone, c.Note = name, phone, note
+	city := strings.TrimSpace(d.City)
+	if utf8.RuneCountInString(city) > MaxCityRunes {
+		return c, errs.Validation(CodeCityTooLong, "the city is too long").
+			WithField(FieldCity, CodeCityTooLong, "too long").WithParam("max", strconv.Itoa(MaxCityRunes))
+	}
+	c.Name, c.Phone, c.Note, c.City = name, phone, note, city
 	return c, nil
 }
 

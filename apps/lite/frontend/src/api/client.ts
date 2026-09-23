@@ -33,6 +33,9 @@ export type ImportRow = Plain<api.ImportRowDTO>;
 export type ImportProblem = Plain<api.ImportProblemDTO>;
 export type ImportResult = Plain<api.ImportResultDTO>;
 export type SettingsState = Plain<api.SettingsDTO>;
+export type ShopState = Plain<api.ShopDTO>;
+export type ShopInput = Plain<api.ShopInput>;
+export type LogoFile = Plain<api.LogoFileDTO>;
 export type SettingsInput = Plain<api.SettingsInput>;
 export type FirstRunInput = Plain<api.FirstRunInput>;
 export type Unit = Plain<api.UnitDTO>;
@@ -151,6 +154,13 @@ export function createClient() {
     settings: {
       get: () => unwrap(Settings.Get),
       update: (input: SettingsInput) => unwrap(() => Settings.Update(api.SettingsInput.createFrom(input))),
+      // Store information and the logo (0.10.0). Picking the file changes nothing; setLogo does, as a guarded act, so a
+      // PIN asked for there retries the save alone and never reopens the dialog.
+      shop: () => unwrap(Settings.Shop),
+      saveShop: (input: ShopInput) => unwrap(() => Settings.SaveShop(api.ShopInput.createFrom(input))),
+      pickLogoFile: () => unwrap(Settings.PickLogoFile),
+      setLogo: (path: string) => unwrap(() => Settings.SetLogo(path)),
+      removeLogo: () => unwrap(Settings.RemoveLogo),
     },
     catalog: {
       units: () => unwrap(Catalog.Units),
@@ -254,12 +264,17 @@ export function createClient() {
         unwrap(() => Export.DebtLedger(api.ExportRangeInput.createFrom({ from, to, format }))),
       salesHistory: (from: string, to: string, format: ExportFormat) =>
         unwrap(() => Export.SalesHistory(api.ExportRangeInput.createFrom({ from, to, format }))),
+      // A sale's A4 invoice as a PDF (0.10.0): to send, or to print on any printer.
+      invoice: (saleId: string) => unwrap(() => Export.Invoice(saleId)),
       showInFolder: (path: string) => unwrap(() => Export.ShowInFolder(path)),
     },
     print: {
       sale: (saleId: string) => unwrap(() => Print.Sale(saleId)),
       entry: (entryId: string) => unwrap(() => Print.Entry(entryId)),
-      preview: (kind: "sale" | "entry" | "test", id: string) => unwrap(() => Print.Preview(api.PreviewInput.createFrom({ kind, id }))),
+      preview: (kind: "sale" | "entry" | "test" | "invoice", id: string) =>
+        unwrap(() => Print.Preview(api.PreviewInput.createFrom({ kind, id }))),
+      // A sale's A4 invoice on the A4 printer chosen on the Printer screen (0.10.0).
+      invoice: (saleId: string) => unwrap(() => Print.Invoice(saleId)),
       // A label is "<product id>" or "<product id>*<copies>"; the Z-report takes a business date, "" for today.
       label: (productId: string, copies = 1) => unwrap(() => Print.Label(copies > 1 ? `${productId}*${copies}` : productId)),
       zReport: (date: string) => unwrap(() => Print.ZReport(date)),

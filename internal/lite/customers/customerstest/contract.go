@@ -30,7 +30,7 @@ func mustID(t *testing.T) id.ID {
 // ACustomer is a customer as the service would create one.
 func ACustomer(t *testing.T, name string) domain.Customer {
 	t.Helper()
-	c, err := domain.NewCustomer(mustID(t), domain.Draft{Name: name, Phone: "0933 123 456", Note: "الحلاق"})
+	c, err := domain.NewCustomer(mustID(t), domain.Draft{Name: name, Phone: "0933 123 456", Note: "الحلاق", City: "حلب"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 			t.Fatal(err)
 		}
 		got, err := sub.Store.Customer(ctx, c.ID)
-		if err != nil || got.Name != c.Name || got.Phone != c.Phone || got.Note != c.Note || !got.Active || got.RowVersion != 1 || !got.CreatedAt.Equal(c.CreatedAt) {
+		if err != nil || got.Name != c.Name || got.Phone != c.Phone || got.Note != c.Note || got.City != "حلب" || !got.Active || got.RowVersion != 1 || !got.CreatedAt.Equal(c.CreatedAt) {
 			t.Fatalf("Customer = %+v, %v", got, err)
 		}
 		if byKey, found, _ := sub.Store.CustomerByNameKey(ctx, "ابو محمد"); !found || byKey.ID != c.ID {
@@ -89,10 +89,14 @@ func StoreContract(t *testing.T, newSubject func(t *testing.T) Subject) {
 		if err = sub.Store.InsertCustomer(ctx, ACustomer(t, "ابو محمد")); err == nil {
 			t.Fatal("two customers with one name key")
 		}
-		c.Phone, c.Active = "", false
+		c.Phone, c.City, c.Active = "", "", false
 		updated, err := sub.Store.UpdateCustomer(ctx, c)
 		if err != nil || updated.RowVersion != 2 {
 			t.Fatalf("Update = %+v, %v", updated, err)
+		}
+		// An emptied city reads back empty — stored as nothing, not as an empty string the CHECK refuses.
+		if again, _ := sub.Store.Customer(ctx, c.ID); again.City != "" {
+			t.Fatalf("the city was not cleared: %q", again.City)
 		}
 		if _, err := sub.Store.UpdateCustomer(ctx, c); errs.CodeOf(err) != "database.concurrent_modification" {
 			t.Fatalf("a stale update: %v", err)

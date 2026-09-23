@@ -181,7 +181,7 @@ describe("SettingsScreen — the PIN switch (owner's request, 2026-09-17)", () =
 
 describe("SettingsScreen — printing (owner's request, 2026-09-20)", () => {
   it("offers silent printing only once a printer is set up, and says so when none is", async () => {
-    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, footer: "", invoicePrinter: "" });
     renderWithProviders(<SettingsScreen />, { client: fakeClient({ printers: { settings: none } }), locale: "en" });
     await settle();
     expect(screen.getByTestId("settings-printer-state")).toHaveTextContent("No printer is set up");
@@ -190,8 +190,8 @@ describe("SettingsScreen — printing (owner's request, 2026-09-20)", () => {
   });
 
   it("saves the choice against the printer's settings", async () => {
-    const save = vi.fn(async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" }));
-    const set = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, phone: "", address: "", footer: "" });
+    const save = vi.fn(async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, footer: "", invoicePrinter: "" }));
+    const set = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "none", drawer: false, footer: "", invoicePrinter: "" });
     renderWithProviders(<SettingsScreen />, { client: fakeClient({ printers: { settings: set, save } }), locale: "en" });
     await settle();
 

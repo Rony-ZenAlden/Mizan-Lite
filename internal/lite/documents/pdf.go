@@ -16,6 +16,7 @@ import (
 func PDF(ts *typeset.Typesetter, doc Document) []byte {
 	lo := layout(ts, doc, A4)
 	used := [2]map[uint16][]rune{{}, {}}
+	var pictures []image.Image
 	contents := make([]string, len(lo.pages))
 	for i, p := range lo.pages {
 		var b strings.Builder
@@ -43,6 +44,9 @@ func PDF(ts *typeset.Typesetter, doc Document) []byte {
 				fmt.Fprintf(&b, "%s %s %s %s re f\n", num(o.x), num(A4.Height-o.y-o.y2), num(o.x2), num(o.y2))
 			case opRect:
 				fmt.Fprintf(&b, "[] 0 d %s w %s %s %s %s re S\n", num(o.width), num(o.x), num(A4.Height-o.y-o.y2), num(o.x2), num(o.y2))
+			case opImage:
+				pictures = append(pictures, o.pic)
+				fmt.Fprintf(&b, "q %s 0 0 %s %s %s cm /Im%d Do Q\n", num(o.x2), num(o.y2), num(o.x), num(A4.Height-o.y-o.y2), len(pictures))
 			}
 		}
 		contents[i] = b.String()
@@ -62,6 +66,13 @@ func PDF(ts *typeset.Typesetter, doc Document) []byte {
 		resources += " /F2 " + ref(fontRefs[1])
 	}
 	resources += " >>"
+	if len(pictures) > 0 {
+		resources += " /XObject <<"
+		for i, pic := range pictures {
+			resources += fmt.Sprintf(" /Im%d %s", i+1, ref(w.picture(pic)))
+		}
+		resources += " >>"
+	}
 	var kids []string
 	for _, c := range contents {
 		content := w.stream("", []byte(c))
@@ -99,6 +110,21 @@ func RasterPDF(img *image.Gray, pageWidth, imageWidth float32) []byte {
 	w.set(1, "<< /Type /Catalog /Pages 2 0 R >>")
 	w.set(2, fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count 1 >>", ref(pageRef)))
 	return w.bytes(0)
+}
+
+// picture is an image XObject: eight-bit RGB, transparency composited over the white page, so a logo drawn on nothing
+// prints on paper rather than on black.
+func (w *pdfWriter) picture(pic image.Image) int {
+	b := pic.Bounds()
+	data := make([]byte, 0, b.Dx()*b.Dy()*3)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, a := pic.At(x, y).RGBA()
+			white := 0xffff - a
+			data = append(data, byte((r+white)>>8), byte((g+white)>>8), byte((bl+white)>>8))
+		}
+	}
+	return w.stream(fmt.Sprintf("/Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8", b.Dx(), b.Dy()), data)
 }
 
 func usedAlready(m map[uint16][]rune, g typeset.Glyph) bool {

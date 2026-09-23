@@ -1,6 +1,7 @@
 package api
 
 import (
+	"image"
 	"context"
 	"encoding/base64"
 	"strconv"
@@ -63,6 +64,8 @@ type printable struct {
 	copyNo  int
 	cash    bool // a cash sale or payment: the drawer may open (Q-L7.11)
 	title   string
+	// paged is an A4 document — the invoice — printed on the A4 printer, not the receipt roll (0.10.0).
+	paged bool
 }
 
 func media(paper int) documents.Media {
@@ -150,6 +153,18 @@ func build(ctx context.Context, app *bootstrap.App, w words, kind, rawID string)
 		}
 		return printable{doc: w.labelDocument(toProductDTO(p, view), copies), kind: printing.KindLabel,
 			subject: productID, copyNo: 1, title: w.t("label.title")}, nil
+	case "invoice":
+		sale, err := receiptDTO(ctx, app, rawID)
+		if err != nil {
+			return printable{}, err
+		}
+		party, err := invoicePartyOf(ctx, app, sale)
+		if err != nil {
+			return printable{}, err
+		}
+		// An invoice is printed as often as the customer needs one; each is the invoice, not a copy of it.
+		return printable{doc: w.invoiceDocument(sale, party), kind: printing.KindInvoice, subject: id.ID(sale.ID), copyNo: 1,
+			title: w.t("invoice.title", "number", strconv.FormatInt(sale.ReceiptNo, 10)), paged: true}, nil
 	case "zreport":
 		day, err := app.Reports.Day(ctx, rawID)
 		if err != nil {
@@ -165,23 +180,40 @@ func build(ctx context.Context, app *bootstrap.App, w words, kind, rawID string)
 	return printable{}, errs.Validation(CodeNotPrintable, "unknown document").WithParam("kind", kind)
 }
 
+// invoiceDPI is how finely an A4 invoice is drawn for a printer driver that takes pictures (Windows): fine enough for
+// 8-point Arabic, small enough to spool quickly. macOS takes the PDF itself, which has no resolution.
+const invoiceDPI = 200
+
+// CodeNoInvoicePrinter refuses to print an invoice before an A4 printer is chosen; the screen offers the PDF instead.
+const CodeNoInvoicePrinter = "lite.print.no_invoice_printer"
+
 // send renders and prints a document, and records the job whatever happens.
 func (c *core) send(ctx context.Context, app *bootstrap.App, w words, p printable) (PrintResultDTO, error) {
 	r := w.settings.Receipt
-	m := media(r.PaperMM)
-	img := documents.Raster(w.ts, p.doc, m)
-	job := printers.Job{Printer: r.Printer, Path: printers.Path(r.Path), Title: p.title, Raster: img, PaperMillimetres: r.PaperMM}
-	if job.Path == printers.PathRaw {
-		job.Escpos = documents.ESCPOS(img, r.Drawer && p.cash)
+	var job printers.Job
+	if p.paged {
+		if r.InvoicePrinter == "" {
+			return PrintResultDTO{}, errs.Conflict(CodeNoInvoicePrinter, "no A4 printer is chosen")
+		}
+		// No paper width: an A4 printer prints the A4 page as it is, never "fitted" to a roll.
+		job = printers.Job{Printer: r.InvoicePrinter, Path: printers.PathDriver, Title: p.title,
+			DriverPDF: documents.PDF(w.ts, p.doc), Pages: documents.RasterPages(w.ts, p.doc, documents.A4.Scaled(invoiceDPI/72.0))}
 	} else {
-		job.DriverPDF = documents.RasterPDF(img, m.PaperPoints, m.PrintPoints)
+		m := media(r.PaperMM)
+		img := documents.Raster(w.ts, p.doc, m)
+		job = printers.Job{Printer: r.Printer, Path: printers.Path(r.Path), Title: p.title, Raster: img, PaperMillimetres: r.PaperMM}
+		if job.Path == printers.PathRaw {
+			job.Escpos = documents.ESCPOS(img, r.Drawer && p.cash)
+		} else {
+			job.DriverPDF = documents.RasterPDF(img, m.PaperPoints, m.PrintPoints)
+		}
 	}
 	c.mu.RLock()
 	system := c.printers
 	c.mu.RUnlock()
 	sendErr := system.Send(ctx, job)
-	if r.Printer != "" {
-		record := printing.Job{Kind: p.kind, SubjectID: p.subject, CopyNo: p.copyNo, Printer: r.Printer, Path: r.Path, Sent: sendErr == nil}
+	if job.Printer != "" {
+		record := printing.Job{Kind: p.kind, SubjectID: p.subject, CopyNo: p.copyNo, Printer: job.Printer, Path: string(job.Path), Sent: sendErr == nil}
 		if sendErr != nil {
 			record.ErrorCode = errs.CodeOf(sendErr)
 			if record.ErrorCode == "" {
@@ -195,7 +227,7 @@ func (c *core) send(ctx context.Context, app *bootstrap.App, w words, p printabl
 	if sendErr != nil {
 		return PrintResultDTO{}, sendErr
 	}
-	return PrintResultDTO{Printer: r.Printer, CopyNo: p.copyNo, Path: r.Path}, nil
+	return PrintResultDTO{Printer: job.Printer, CopyNo: p.copyNo, Path: string(job.Path)}, nil
 }
 
 func (p *Print) print(method, kind, rawID string) envelope.Result[PrintResultDTO] {
@@ -230,6 +262,11 @@ func (p *Print) Sale(saleID string) envelope.Result[PrintResultDTO] {
 	return p.print("Print.Sale", "sale", saleID)
 }
 
+// Invoice prints a sale's A4 invoice on the A4 printer (0.10.0). Anyone at the counter may: it goes to the customer.
+func (p *Print) Invoice(saleID string) envelope.Result[PrintResultDTO] {
+	return p.print("Print.Invoice", "invoice", saleID)
+}
+
 // Entry prints a debt payment's voucher (anyone) or a refund's (owner).
 func (p *Print) Entry(entryID string) envelope.Result[PrintResultDTO] {
 	return p.print("Print.Entry", "entry", entryID)
@@ -246,8 +283,12 @@ func (p *Print) Preview(in PreviewInput) envelope.Result[PreviewDTO] {
 		if err != nil {
 			return PreviewDTO{}, err
 		}
-		m := media(w.settings.Receipt.PaperMM)
-		img := documents.Raster(w.ts, doc.doc, m)
+		var img *image.Gray
+		if doc.paged {
+			img = stackPages(documents.RasterPages(w.ts, doc.doc, documents.A4.Scaled(previewDPI/72.0)))
+		} else {
+			img = documents.Raster(w.ts, doc.doc, media(w.settings.Receipt.PaperMM))
+		}
 		return PreviewDTO{PNG: base64.StdEncoding.EncodeToString(documents.PNG(img)), Width: img.Bounds().Dx(), Height: img.Bounds().Dy(), CopyNo: doc.copyNo}, nil
 	})
 }
@@ -259,31 +300,34 @@ type PrinterDTO struct {
 }
 
 // PrinterSettingsDTO is the receipt printer and the receipt's header and footer.
+//
+// The shop's phone and address moved to Settings > Store information in 0.10.0, beside the name, the city and the logo
+// they are printed with: one place to change what heads every document.
 type PrinterSettingsDTO struct {
 	Printer   string `json:"printer"`
 	PaperMM   int    `json:"paperMm"`
 	Path      string `json:"path"`
 	AutoPrint string `json:"autoPrint"`
 	Drawer    bool   `json:"drawer"`
-	Phone     string `json:"phone"`
-	Address   string `json:"address"`
 	Footer    string `json:"footer"`
+	// InvoicePrinter is the printer an A4 invoice goes to; "" is none, and an invoice is saved as a PDF instead.
+	InvoicePrinter string `json:"invoicePrinter"`
 }
 
 // PrinterSettingsInput changes them; PaperMM is "80" or "58".
 type PrinterSettingsInput struct {
-	Printer   string `json:"printer"`
-	PaperMM   string `json:"paperMm"`
-	Path      string `json:"path"`
-	AutoPrint string `json:"autoPrint"`
-	Drawer    bool   `json:"drawer"`
-	Phone     string `json:"phone"`
-	Address   string `json:"address"`
-	Footer    string `json:"footer"`
+	Printer        string `json:"printer"`
+	PaperMM        string `json:"paperMm"`
+	Path           string `json:"path"`
+	AutoPrint      string `json:"autoPrint"`
+	Drawer         bool   `json:"drawer"`
+	Footer         string `json:"footer"`
+	InvoicePrinter string `json:"invoicePrinter"`
 }
 
 func printerSettings(r settingsdomain.Receipt) PrinterSettingsDTO {
-	return PrinterSettingsDTO{Printer: r.Printer, PaperMM: r.PaperMM, Path: r.Path, AutoPrint: r.AutoPrint, Drawer: r.Drawer, Phone: r.Phone, Address: r.Address, Footer: r.Footer}
+	return PrinterSettingsDTO{Printer: r.Printer, PaperMM: r.PaperMM, Path: r.Path, AutoPrint: r.AutoPrint, Drawer: r.Drawer,
+		Footer: r.Footer, InvoicePrinter: r.InvoicePrinter}
 }
 
 // List is the operating system's printers.
@@ -316,7 +360,7 @@ func (p *Printers) Save(in PrinterSettingsInput) envelope.Result[PrinterSettings
 		err := app.DB.Do(ctx, func(ctx context.Context) error {
 			drawer := strconv.FormatBool(in.Drawer)
 			next, err := app.Settings.Update(ctx, settingsdomain.Update{Printing: settingsdomain.PrintingUpdate{Printer: &in.Printer, PaperMM: &in.PaperMM,
-				Path: &in.Path, AutoPrint: &in.AutoPrint, Drawer: &drawer, Phone: &in.Phone, Address: &in.Address, Footer: &in.Footer}})
+				Path: &in.Path, AutoPrint: &in.AutoPrint, Drawer: &drawer, Footer: &in.Footer, InvoicePrinter: &in.InvoicePrinter}})
 			if err != nil {
 				return err
 			}
@@ -339,4 +383,33 @@ func (p *Printers) Test() envelope.Result[PrintResultDTO] {
 // requireOwner asks for owner mode and records the act in the owner's history, inside the caller's transaction.
 func requireOwner(ctx context.Context, app *bootstrap.App, action, after string) error {
 	return app.Owner.Require(ctx, owner.Act{Action: action, After: after})
+}
+
+// previewDPI is an A4 page on screen: legible at the dialog's width without a page's worth of pixels per line.
+const previewDPI = 110
+
+// stackPages sets an A4 document's pages one under another with a grey gap between — how the screen shows an invoice.
+func stackPages(pages []*image.Gray) *image.Gray {
+	const gap = 16
+	if len(pages) == 0 {
+		return image.NewGray(image.Rect(0, 0, 1, 1))
+	}
+	width, height := pages[0].Bounds().Dx(), 0
+	for _, p := range pages {
+		height += p.Bounds().Dy()
+	}
+	height += gap * (len(pages) - 1)
+	out := image.NewGray(image.Rect(0, 0, width, height))
+	for i := range out.Pix {
+		out.Pix[i] = 0xd0
+	}
+	y := 0
+	for _, p := range pages {
+		b := p.Bounds()
+		for row := range b.Dy() {
+			copy(out.Pix[(y+row)*out.Stride:(y+row)*out.Stride+width], p.Pix[row*p.Stride:row*p.Stride+width])
+		}
+		y += b.Dy() + gap
+	}
+	return out
 }

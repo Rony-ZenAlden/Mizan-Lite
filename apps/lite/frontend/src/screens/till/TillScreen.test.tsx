@@ -372,7 +372,7 @@ describe("TillScreen — on credit", () => {
     await userEvent.type(within(picker).getByLabelText("Phone (optional)"), "0944");
     await userEvent.click(within(picker).getByRole("button", { name: "Save" }));
     await settle();
-    expect(create).toHaveBeenCalledWith({ name: "خالد", phone: "0944", note: "" });
+    expect(create).toHaveBeenCalledWith({ name: "خالد", phone: "0944", note: "", city: "" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByTestId("till-customer")).toHaveTextContent("On credit to خالد");
     expect(screen.getAllByTestId("cart-line")).toHaveLength(1);
@@ -436,7 +436,7 @@ describe("TillScreen — printing the receipt (Q-L7.2)", () => {
 
   it("with everything printing itself a cash sale prints; with no printer chosen nothing does", async () => {
     const sale = vi.fn(async () => ({ printer: "Xprinter XP-80", copyNo: 1, path: "driver" }));
-    const all = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" });
+    const all = async () => ({ printer: "Xprinter XP-80", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, footer: "", invoicePrinter: "" });
     const first: { unmount?: () => void } = {};
     await sell(fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale }, printers: { settings: all } }), first);
     await settle();
@@ -449,7 +449,7 @@ describe("TillScreen — printing the receipt (Q-L7.2)", () => {
   // standing between the cashier and the next customer with nothing to offer. The sale is recorded either way.
   it("with no printer the sale finishes without a receipt panel to dismiss", async () => {
     const sale = vi.fn(async () => ({ printer: "", copyNo: 1, path: "driver" }));
-    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, phone: "", address: "", footer: "" });
+    const none = async () => ({ printer: "", paperMm: 80, path: "driver", autoPrint: "all", drawer: false, footer: "", invoicePrinter: "" });
     renderWithProviders(<TillScreen />, {
       client: fakeClient({ catalog: { products }, till: { scan: scanJam }, print: { sale }, printers: { settings: none } }),
       locale: "en",

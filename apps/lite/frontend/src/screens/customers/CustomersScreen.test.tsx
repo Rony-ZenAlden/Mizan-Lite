@@ -87,9 +87,12 @@ describe("CustomersScreen", () => {
     expect(await within(dialog).findByText("A customer with this name already exists: “أبو محمد”. Add a nickname to tell them apart.")).toBeInTheDocument();
     await userEvent.clear(within(dialog).getByLabelText("Name"));
     await userEvent.type(within(dialog).getByLabelText("Name"), "أبو محمد - الحلاق");
+    // الجهة, printed on the customer's invoices (0.10.0).
+    await userEvent.type(within(dialog).getByLabelText("City"), "حلب");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("dialog", { name: "Statement — أبو محمد - الحلاق" })).toBeInTheDocument();
     expect(statement).toHaveBeenCalledWith("new", "USD");
+    expect(create).toHaveBeenLastCalledWith({ name: "أبو محمد - الحلاق", phone: "", note: "", city: "حلب" });
   });
 
   it("the statement has a tab per currency and every entry with its balance after", async () => {

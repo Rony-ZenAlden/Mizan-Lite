@@ -356,19 +356,26 @@ func TestTheBackupFrequencyIsTheShopsToChoose(t *testing.T) {
 }
 
 // TestTheShopsHeaderIsOnEveryPrintedThing is the owner's request of 2026-09-16: the shop's name, address and telephone are
-// saved once, in the printer settings, and appear the same on a receipt and on an A4 report — on paper and in a workbook.
+// saved once and appear the same on a receipt and on an A4 report — on paper and in a workbook. Since 0.10.0 they are
+// saved under Settings > Store information, with the city and the logo.
 func TestTheShopsHeaderIsOnEveryPrintedThing(t *testing.T) {
 	set, oil := tillShop(t)
 	files := &fakeFiles{}
 	set.SetFiles(files)
-	saved := set.Printers.Save(api.PrinterSettingsInput{Printer: "XP-80", PaperMM: "80", Path: "driver", AutoPrint: "none",
-		Phone: "0933 123 456", Address: "شارع القوتلي، عفرين", Footer: "أهلاً بكم"})
-	if !saved.OK {
+	if saved := set.Printers.Save(api.PrinterSettingsInput{Printer: "XP-80", PaperMM: "80", Path: "driver", AutoPrint: "none",
+		Footer: "أهلاً بكم"}); !saved.OK {
 		t.Fatal(saved.Error)
 	}
+	shop := set.Settings.SaveShop(api.ShopInput{Name: "بقالية المونة", Phone: "0933 123 456", City: "عفرين", Address: "شارع القوتلي، عفرين"})
+	if !shop.OK {
+		t.Fatal(shop.Error)
+	}
 	// Saved once and kept: read back through a second call, as a restart would.
-	if again := set.Printers.Settings(); again.Data.Phone != "0933 123 456" || again.Data.Address != "شارع القوتلي، عفرين" || again.Data.Footer != "أهلاً بكم" {
+	if again := set.Settings.Shop(); again.Data.Phone != "0933 123 456" || again.Data.Address != "شارع القوتلي، عفرين" || again.Data.City != "عفرين" {
 		t.Fatalf("the shop's header was not kept: %+v", again.Data)
+	}
+	if again := set.Printers.Settings(); again.Data.Footer != "أهلاً بكم" {
+		t.Fatalf("the receipt's footer was not kept: %+v", again.Data)
 	}
 
 	cart := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "1"}}}

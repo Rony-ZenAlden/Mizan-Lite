@@ -62,6 +62,9 @@ type ProductDTO struct {
 	ReorderLevel string `json:"reorderLevel"`
 	// OpenPrice marks an item sold at a price typed at the till and never counted in stock (2026-09-23).
 	OpenPrice bool `json:"openPrice"`
+	// UnitsPerCarton is how many of the unit make one carton (طرد), a quantity in the product's own unit, or "" for none —
+	// what an invoice's carton column counts in (0.10.0).
+	UnitsPerCarton string `json:"unitsPerCarton"`
 }
 
 // catalogueView is the reference data and package links a product is formatted against.
@@ -135,6 +138,10 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 	// A reorder level is a QUANTITY, not money: it is never redenominated, and it is read in the product's own unit.
 	if p.HasReorder {
 		dto.ReorderLevel = domain.FormatMicro(p.ReorderMicro, v.ref.Units[p.UnitCode].InputDecimals)
+	}
+	// So is a carton size.
+	if p.UnitsPerCartonMicro > 0 {
+		dto.UnitsPerCarton = domain.FormatMicro(p.UnitsPerCartonMicro, v.ref.Units[p.UnitCode].InputDecimals)
 	}
 	return dto
 }
@@ -247,6 +254,8 @@ type CreateProductInput struct {
 	// OpenPrice creates an item sold at a price typed at the till, never counted in stock (2026-09-23). It then takes no
 	// price, cost or margin, and cannot be changed afterwards.
 	OpenPrice bool `json:"openPrice"`
+	// UnitsPerCarton is how many of the unit make one carton; "" for none (0.10.0).
+	UnitsPerCarton string `json:"unitsPerCarton"`
 }
 
 // CreateProduct adds a product.
@@ -266,7 +275,7 @@ func (c *Catalog) CreateProduct(in CreateProductInput) envelope.Result[ProductDT
 			MarginPercent: in.MarginPercent,
 			MarginAmount:  shop.Base(in.MarginAmount, in.PriceCurrency),
 
-			OpenPrice: in.OpenPrice})
+			OpenPrice: in.OpenPrice, UnitsPerCarton: in.UnitsPerCarton})
 	})
 }
 
@@ -277,6 +286,8 @@ type UpdateProductInput struct {
 	NameAR     string `json:"nameAr"`
 	NameEN     string `json:"nameEn"`
 	Barcode    string `json:"barcode"`
+	// UnitsPerCarton is how many of the unit make one carton; "" clears it (0.10.0).
+	UnitsPerCarton string `json:"unitsPerCarton"`
 }
 
 // UpdateProduct changes a product's names and barcode.
@@ -288,6 +299,7 @@ func (c *Catalog) UpdateProduct(in UpdateProductInput) envelope.Result[ProductDT
 		}
 		return app.Catalog.Update(ctx, catalog.UpdateInput{
 			ID: parsed, RowVersion: in.RowVersion, NameAR: in.NameAR, NameEN: in.NameEN, Barcode: in.Barcode,
+			UnitsPerCarton: in.UnitsPerCarton,
 		})
 	})
 }

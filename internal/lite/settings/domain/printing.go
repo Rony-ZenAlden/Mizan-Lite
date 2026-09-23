@@ -20,8 +20,12 @@ const (
 	KeyShopPhone     = "shop.phone"
 	KeyShopAddress   = "shop.address"
 	KeyReceiptFooter = "receipt.footer"
-	KeyBackupFolder  = "backup.outside_folder"
-	KeyBackupEvery   = "backup.every"
+	// KeyShopCity is the town the shop is in, under its name on every invoice (0.10.0).
+	KeyShopCity = "shop.city"
+	// KeyInvoicePrinter is the printer an A4 invoice goes to — an office printer, not the receipt roll (0.10.0).
+	KeyInvoicePrinter = "invoice.printer"
+	KeyBackupFolder   = "backup.outside_folder"
+	KeyBackupEvery    = "backup.every"
 )
 
 // Codes for the printing and backup settings.
@@ -81,6 +85,9 @@ type Receipt struct {
 	Phone     string
 	Address   string
 	Footer    string
+	City      string
+	// InvoicePrinter is where an A4 invoice is printed; "" is none chosen, and the invoice is saved as a PDF instead.
+	InvoicePrinter string
 }
 
 // DefaultReceipt is a fresh installation's: no printer, 80 mm, through the driver, credit printed automatically.
@@ -159,6 +166,7 @@ const (
 	MaxPrinterRunes = 200
 	MaxPhoneRunes   = 40
 	MaxLineRunes    = 120
+	MaxCityRunes    = 60
 )
 
 // storedPrinting resolves one printing or backup row; handled is false for a key it does not own.
@@ -181,6 +189,10 @@ func (s *Settings) storedPrinting(key, value string) (handled bool, err error) {
 		r.Address, err = ParseText(value, "address", MaxLineRunes)
 	case KeyReceiptFooter:
 		r.Footer, err = ParseText(value, "footer", MaxLineRunes)
+	case KeyShopCity:
+		r.City, err = ParseText(value, "city", MaxCityRunes)
+	case KeyInvoicePrinter:
+		r.InvoicePrinter, err = ParseText(value, "invoicePrinter", MaxPrinterRunes)
 	case KeyBackupFolder:
 		s.BackupFolder, err = ParseFolder(value)
 	case KeyBackupEvery:
@@ -194,6 +206,7 @@ func (s *Settings) storedPrinting(key, value string) (handled bool, err error) {
 // PrintingUpdate is a change to the printing and backup settings; nil leaves a field as it is.
 type PrintingUpdate struct {
 	Printer, PaperMM, Path, AutoPrint, Drawer, Phone, Address, Footer, BackupFolder, BackupEvery *string
+	City, InvoicePrinter                                                                         *string
 }
 
 func (s Settings) applyPrinting(u PrintingUpdate, changes []Change) (Settings, []Change, error) {
@@ -234,6 +247,16 @@ func (s Settings) applyPrinting(u PrintingUpdate, changes []Change) (Settings, [
 			r.Footer = p
 			return p, err
 		}},
+		{u.City, KeyShopCity, s.Receipt.City, func(v string) (string, error) {
+			p, err := ParseText(v, "city", MaxCityRunes)
+			r.City = p
+			return p, err
+		}},
+		{u.InvoicePrinter, KeyInvoicePrinter, s.Receipt.InvoicePrinter, func(v string) (string, error) {
+			p, err := ParseText(v, "invoicePrinter", MaxPrinterRunes)
+			r.InvoicePrinter = p
+			return p, err
+		}},
 		{u.BackupFolder, KeyBackupFolder, s.BackupFolder, func(v string) (string, error) { p, err := ParseFolder(v); next.BackupFolder = p; return p, err }},
 		{u.BackupEvery, KeyBackupEvery, s.BackupEvery, func(v string) (string, error) { p, err := ParseBackupEvery(v); next.BackupEvery = p; return p, err }},
 	}
@@ -271,6 +294,10 @@ func mergeDefault(r, d Receipt, key string) Receipt {
 		r.Address = d.Address
 	case KeyReceiptFooter:
 		r.Footer = d.Footer
+	case KeyShopCity:
+		r.City = d.City
+	case KeyInvoicePrinter:
+		r.InvoicePrinter = d.InvoicePrinter
 	}
 	return r
 }

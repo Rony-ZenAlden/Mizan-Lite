@@ -59,6 +59,9 @@ type Job struct {
 	DriverPDF []byte
 	// PaperMillimetres is the paper's width, for the driver path.
 	PaperMillimetres int
+	// Pages is a paged document at the printer's resolution — an A4 invoice (0.10.0). The driver path on Windows draws
+	// each on a sheet of its own; macOS prints DriverPDF, which is the same pages in vector form. A receipt has none.
+	Pages []*image.Gray
 }
 
 // System is the operating system's printing.

@@ -33,7 +33,7 @@ const saleColumns = `id, receipt_no, business_date, sold_at, status, payment, lo
 
 const lineColumns = `id, sale_id, line_no, product_id, name_ar_snapshot, name_en_snapshot, unit_code_snapshot, quantity_micro,
 	price_currency, unit_price_micro, gross_local_minor, gross_usd_minor, discount_percent_micro, discount_local_minor,
-	discount_usd_minor, unit_cost_usd_micro, cost_known, cost_usd_minor, cost_local_minor, open_price`
+	discount_usd_minor, unit_cost_usd_micro, cost_known, cost_usd_minor, cost_local_minor, open_price, units_per_carton_micro`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -79,10 +79,11 @@ func scanLine(row scanner) (domain.Line, id.ID, error) {
 		rawID, rawSale, rawProd string
 		nameEN                  sql.NullString
 		costKnown, open         int
+		carton                  sql.NullInt64
 	)
 	if err := row.Scan(&rawID, &rawSale, &l.LineNo, &rawProd, &l.NameAR, &nameEN, &l.UnitCode, &l.QuantityMicro, &l.PriceCurrency,
 		&l.UnitPriceMicro, &l.GrossLocalMinor, &l.GrossUSDMinor, &l.DiscountPercentMicro, &l.DiscountLocalMinor,
-		&l.DiscountUSDMinor, &l.UnitCostMicro, &costKnown, &l.CostUSDMinor, &l.CostLocalMinor, &open); err != nil {
+		&l.DiscountUSDMinor, &l.UnitCostMicro, &costKnown, &l.CostUSDMinor, &l.CostLocalMinor, &open, &carton); err != nil {
 		return domain.Line{}, "", err
 	}
 	var err error
@@ -96,7 +97,7 @@ func scanLine(row scanner) (domain.Line, id.ID, error) {
 	if l.ProductID, err = id.Parse(rawProd); err != nil {
 		return domain.Line{}, "", corrupt(err)
 	}
-	l.NameEN, l.CostKnown, l.OpenPrice = nameEN.String, costKnown == 1, open == 1
+	l.NameEN, l.CostKnown, l.OpenPrice, l.UnitsPerCartonMicro = nameEN.String, costKnown == 1, open == 1, carton.Int64
 	return l, saleID, nil
 }
 
@@ -132,10 +133,14 @@ func (s *Store) Insert(ctx context.Context, sale domain.Sale) error {
 		if l.OpenPrice {
 			open = 1
 		}
-		if _, err = w.ExecContext(ctx, `INSERT INTO sale_lines (`+lineColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		var carton any
+		if l.UnitsPerCartonMicro > 0 {
+			carton = l.UnitsPerCartonMicro
+		}
+		if _, err = w.ExecContext(ctx, `INSERT INTO sale_lines (`+lineColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			l.ID.String(), sale.ID.String(), l.LineNo, l.ProductID.String(), l.NameAR, nameEN, l.UnitCode, l.QuantityMicro,
 			l.PriceCurrency, l.UnitPriceMicro, l.GrossLocalMinor, l.GrossUSDMinor, l.DiscountPercentMicro, l.DiscountLocalMinor,
-			l.DiscountUSDMinor, l.UnitCostMicro, costKnown, l.CostUSDMinor, l.CostLocalMinor, open); err != nil {
+			l.DiscountUSDMinor, l.UnitCostMicro, costKnown, l.CostUSDMinor, l.CostLocalMinor, open, carton); err != nil {
 			return s.db.Dialect().TranslateError(err)
 		}
 	}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mizan-erp/mizan/internal/lite/settings"
+	"github.com/mizan-erp/mizan/internal/lite/settings/domain"
 )
 
 // ErrInjected is what a Fake returns once a failure has been armed.
@@ -28,6 +29,7 @@ var ErrInjected = errors.New("settingstest: injected failure")
 type Fake struct {
 	mu        sync.Mutex
 	rows      map[string]string
+	logo      *domain.Logo
 	failLoad  bool
 	failSave  bool
 	saveCalls int
@@ -78,6 +80,44 @@ func (f *Fake) Save(_ context.Context, key, value string, _ time.Time) error {
 		return ErrInjected
 	}
 	f.rows[key] = value
+	return nil
+}
+
+// Logo implements settings.Store. It returns a copy, as the database does.
+func (f *Fake) Logo(context.Context) (domain.Logo, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failLoad {
+		return domain.Logo{}, false, ErrInjected
+	}
+	if f.logo == nil {
+		return domain.Logo{}, false, nil
+	}
+	l := *f.logo
+	l.PNG = append([]byte(nil), l.PNG...)
+	return l, true, nil
+}
+
+// PutLogo implements settings.Store.
+func (f *Fake) PutLogo(_ context.Context, l domain.Logo, _ time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failSave {
+		return ErrInjected
+	}
+	l.PNG = append([]byte(nil), l.PNG...)
+	f.logo = &l
+	return nil
+}
+
+// DeleteLogo implements settings.Store.
+func (f *Fake) DeleteLogo(context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failSave {
+		return ErrInjected
+	}
+	f.logo = nil
 	return nil
 }
 
@@ -150,6 +190,36 @@ func StoreContract(t *testing.T, newStore func(t *testing.T) settings.Store) {
 			if rows[k] != v {
 				t.Errorf("row %q = %q, want %q", k, rows[k], v)
 			}
+		}
+	})
+
+	t.Run("a logo is stored, replaced, read back exactly and removed", func(t *testing.T) {
+		s := newStore(t)
+		if _, found, err := s.Logo(ctx); err != nil || found {
+			t.Fatalf("a new store has a logo: found %v, %v", found, err)
+		}
+		first := domain.Logo{PNG: []byte{0x89, 'P', 'N', 'G', 1}, Width: 10, Height: 5}
+		second := domain.Logo{PNG: []byte{0x89, 'P', 'N', 'G', 2, 3}, Width: 20, Height: 8}
+		for _, l := range []domain.Logo{first, second} {
+			if err := s.PutLogo(ctx, l, at); err != nil {
+				t.Fatalf("PutLogo: %v", err)
+			}
+		}
+		got, found, err := s.Logo(ctx)
+		if err != nil || !found || string(got.PNG) != string(second.PNG) || got.Width != 20 || got.Height != 8 {
+			t.Fatalf("Logo = %+v, %v, %v — want the second one only", got, found, err)
+		}
+		got.PNG[0] = 0
+		if again, _, _ := s.Logo(ctx); again.PNG[0] != 0x89 {
+			t.Fatal("the store changed through a logo it returned")
+		}
+		for range 2 { // removing none is not an error
+			if err := s.DeleteLogo(ctx); err != nil {
+				t.Fatalf("DeleteLogo: %v", err)
+			}
+		}
+		if _, found, _ := s.Logo(ctx); found {
+			t.Fatal("the logo is still there")
 		}
 	})
 

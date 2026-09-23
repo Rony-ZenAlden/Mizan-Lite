@@ -30,16 +30,17 @@ func NewStore(db database.DB, clk clock.Clock) *Store { return &Store{db: db, cl
 
 type scanner interface{ Scan(dest ...any) error }
 
-const customerColumns = `id, name, phone, note, is_active, row_version, created_at`
+const customerColumns = `id, name, phone, note, city, is_active, row_version, created_at`
 
 func scanCustomer(row scanner) (domain.Customer, error) {
 	var (
 		c              domain.Customer
 		rawID, created string
 		phone, note    sql.NullString
+		city           sql.NullString
 		active         int
 	)
-	if err := row.Scan(&rawID, &c.Name, &phone, &note, &active, &c.RowVersion, &created); err != nil {
+	if err := row.Scan(&rawID, &c.Name, &phone, &note, &city, &active, &c.RowVersion, &created); err != nil {
 		return domain.Customer{}, err
 	}
 	var err error
@@ -50,7 +51,7 @@ func scanCustomer(row scanner) (domain.Customer, error) {
 	if c.CreatedAt, ok = clock.ParseTimestamp(created); !ok {
 		return domain.Customer{}, errs.Internal(CodeCorrupt, "a customer's time does not parse").WithParam("value", created)
 	}
-	c.Phone, c.Note, c.Active = phone.String, note.String, active == 1
+	c.Phone, c.Note, c.City, c.Active = phone.String, note.String, city.String, active == 1
 	return c, nil
 }
 
@@ -71,18 +72,18 @@ func boolInt(b bool) int {
 func (s *Store) InsertCustomer(ctx context.Context, c domain.Customer) error {
 	now := clock.Format(s.clk.Now())
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `
-		INSERT INTO customers (id, name, name_key, phone, note, is_active, row_version, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-		c.ID.String(), c.Name, c.NameKey(), nullable(c.Phone), nullable(c.Note), boolInt(c.Active), clock.Format(c.CreatedAt), now)
+		INSERT INTO customers (id, name, name_key, phone, note, city, is_active, row_version, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		c.ID.String(), c.Name, c.NameKey(), nullable(c.Phone), nullable(c.Note), nullable(c.City), boolInt(c.Active), clock.Format(c.CreatedAt), now)
 	return s.db.Dialect().TranslateError(err)
 }
 
 func (s *Store) UpdateCustomer(ctx context.Context, c domain.Customer) (domain.Customer, error) {
 	res, err := s.db.Writer(ctx).ExecContext(ctx, `
 		UPDATE customers
-		   SET name = ?, name_key = ?, phone = ?, note = ?, is_active = ?, row_version = row_version + 1, updated_at = ?
+		   SET name = ?, name_key = ?, phone = ?, note = ?, city = ?, is_active = ?, row_version = row_version + 1, updated_at = ?
 		 WHERE id = ? AND row_version = ?`,
-		c.Name, c.NameKey(), nullable(c.Phone), nullable(c.Note), boolInt(c.Active), clock.Format(s.clk.Now()), c.ID.String(), c.RowVersion)
+		c.Name, c.NameKey(), nullable(c.Phone), nullable(c.Note), nullable(c.City), boolInt(c.Active), clock.Format(s.clk.Now()), c.ID.String(), c.RowVersion)
 	if err != nil {
 		return domain.Customer{}, s.db.Dialect().TranslateError(err)
 	}

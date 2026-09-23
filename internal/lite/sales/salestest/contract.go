@@ -42,7 +42,8 @@ func ASale(t *testing.T, receiptNo int64, rateID, oil, jar id.ID) domain.Sale {
 				PriceCurrency: "USD", UnitPriceMicro: 6_500_000, GrossLocalMinor: 195_000, GrossUSDMinor: 1_300, DiscountPercentMicro: 100_000,
 				DiscountLocalMinor: 19_500, DiscountUSDMinor: 130, UnitCostMicro: 4_680_000, CostKnown: true, CostUSDMinor: 936, CostLocalMinor: 140_400},
 			{ID: ids[2], LineNo: 2, ProductID: jar, NameAR: "دبس رمان", UnitCode: "jar", QuantityMicro: 1_000_000,
-				PriceCurrency: "SYP", UnitPriceMicro: 45_000_000_000, GrossLocalMinor: 45_000, GrossUSDMinor: 300},
+				PriceCurrency: "SYP", UnitPriceMicro: 45_000_000_000, GrossLocalMinor: 45_000, GrossUSDMinor: 300,
+				UnitsPerCartonMicro: 6_000_000}, // the carton size it was sold at (0.10.0)
 		},
 	}
 }

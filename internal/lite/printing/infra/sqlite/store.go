@@ -44,7 +44,7 @@ func (s *Store) Insert(ctx context.Context, j printing.Job) error {
 
 func (s *Store) SentCopies(ctx context.Context, subjectID id.ID) (int, error) {
 	var n int
-	err := s.db.Reader(ctx).QueryRowContext(ctx, `SELECT COUNT(*) FROM print_jobs WHERE subject_id = ? AND outcome = 'sent'`, subjectID.String()).Scan(&n)
+	err := s.db.Reader(ctx).QueryRowContext(ctx, `SELECT COUNT(*) FROM print_jobs WHERE subject_id = ? AND outcome = 'sent' AND document_kind <> 'invoice'`, subjectID.String()).Scan(&n)
 	return n, s.db.Dialect().TranslateError(err)
 }
 

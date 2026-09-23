@@ -8,7 +8,7 @@ import { Dialog } from "@/ui/Dialog";
 import { TextField } from "@/ui/Field";
 
 /**
- * A customer's name, phone and note (Q-L5.9). Anyone at the counter may create or edit one. Names are unique the way a
+ * A customer's name, phone, city and note (Q-L5.9; the city since 0.10.0 — الجهة on the customer's invoices). Anyone at the counter may create or edit one. Names are unique the way a
  * reader compares them — a second أبو محمد needs a nickname — and Go says so under the name.
  */
 export function CustomerFields({ customer, onSaved, onCancel }: { customer?: Customer; onSaved: (c: Customer) => void; onCancel: () => void }) {
@@ -17,6 +17,7 @@ export function CustomerFields({ customer, onSaved, onCancel }: { customer?: Cus
   const [name, setName] = useState(customer?.name ?? "");
   const [phone, setPhone] = useState(customer?.phone ?? "");
   const [note, setNote] = useState(customer?.note ?? "");
+  const [city, setCity] = useState(customer?.city ?? "");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const errors = formErrors(error, errorText);
@@ -29,8 +30,8 @@ export function CustomerFields({ customer, onSaved, onCancel }: { customer?: Cus
     try {
       onSaved(
         customer
-          ? await client.customers.update({ id: customer.id, rowVersion: customer.rowVersion, name, phone, note })
-          : await client.customers.create({ name, phone, note }),
+          ? await client.customers.update({ id: customer.id, rowVersion: customer.rowVersion, name, phone, note, city })
+          : await client.customers.create({ name, phone, note, city }),
       );
     } catch (e) {
       setError(e);
@@ -43,6 +44,7 @@ export function CustomerFields({ customer, onSaved, onCancel }: { customer?: Cus
     <form className="space-y-3" onSubmit={(e) => void submit(e)} aria-label={t("customers.form")}>
       <TextField label={t("customers.name")} value={name} onChange={(e) => setName(e.target.value)} error={errors.field("name")} hint={t("customers.name_hint")} maxLength={100} required autoComplete="off" />
       <TextField label={t("customers.phone")} value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.field("phone")} inputMode="tel" dir="ltr" maxLength={20} autoComplete="off" />
+      <TextField label={t("customers.city")} value={city} onChange={(e) => setCity(e.target.value)} error={errors.field("city")} hint={t("customers.city_hint")} maxLength={60} autoComplete="off" />
       <TextField label={t("customers.note")} value={note} onChange={(e) => setNote(e.target.value)} error={errors.field("note")} maxLength={200} autoComplete="off" />
       {errors.form ? (
         <p role="alert" className="text-sm text-danger">

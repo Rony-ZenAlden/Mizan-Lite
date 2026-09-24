@@ -114,7 +114,9 @@ func toProductDTO(p domain.Product, v catalogueView) ProductDTO {
 		PriceCurrency: p.PriceCurrency, Price: v.shop.Display(p.PriceText(v.ref), p.PriceCurrency), QuickSlot: p.QuickSlot, Active: p.Active,
 		RowVersion: p.RowVersion, OpenPrice: p.OpenPrice,
 	}
-	if v.hasRate {
+	// A dollars-only shop reads no price in pounds beside its dollars — not on the Products screen, not on a shelf label
+	// (0.10.1, the owner's report of 2026-09-24).
+	if v.hasRate && !v.shop.USDOnly() {
 		if converted, ok, err := v.rate.PriceInOther(p.PriceCurrency, p.PriceMicro, v.local, v.usd); err == nil && ok {
 			dto.ConvertedPrice, dto.ConvertedCurrency = v.shop.Display(converted.Text(), converted.Currency.Code), converted.Currency.Code
 		}

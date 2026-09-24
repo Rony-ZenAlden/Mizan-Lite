@@ -1,7 +1,7 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { aRate, aSettings, fakeClient, renderWithProviders } from "@/api/testing";
+import { aRate, aSettings, aShop, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import { ROUTES } from "./routes";
 import { Shell } from "./Shell";
@@ -102,6 +102,31 @@ describe("Shell header", () => {
     expect(endElevation).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByText(/Owner mode/)).not.toBeInTheDocument());
     await settled("en");
+  });
+
+  it("heads the screen with the shop's own logo when it has one, and with its name alone when not (0.10.1)", async () => {
+    const client = fakeClient({ settings: { shop: async () => aShop({ name: "الكردي", logo: "iVBORw0KGgo=", logoWidth: 800, logoHeight: 320 }) } });
+    renderWithProviders(<Shell />, { client, locale: "ar" });
+    const logo = await screen.findByTestId("header-logo");
+    expect(logo).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=");
+    expect(screen.getByTestId("header-shop-name")).toHaveTextContent("الكردي");
+    await settled("ar");
+  });
+
+  it("shows no logo for a shop that has none", async () => {
+    renderWithProviders(<Shell />, { locale: "ar" });
+    expect(await screen.findByText("بقالية المونة")).toBeInTheDocument();
+    expect(screen.queryByTestId("header-logo")).not.toBeInTheDocument();
+    await settled("ar");
+  });
+
+  it("a logo saved in Settings heads the screen at once, without a restart", async () => {
+    const client = fakeClient({ settings: { get: async () => aSettings({ locale: "en", direction: "ltr" }) } });
+    renderWithProviders(<Shell />, { client, locale: "en", route: "/settings" });
+    await screen.findByTestId("store-logo-choose");
+    expect(screen.queryByTestId("header-logo")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("store-logo-choose"));
+    expect(await screen.findByTestId("header-logo")).toHaveAttribute("src", "data:image/png;base64,iVBORw0KGgo=");
   });
 
   it("shows no owner indicator outside owner mode", async () => {

@@ -174,11 +174,20 @@ func TestAnInvoiceGoesToTheA4PrinterOrToAPDF(t *testing.T) {
 		t.Fatalf("the proposed name %q does not carry the shop's name", files.asked)
 	}
 
+	// The preview is the page the driver is handed, at the printer's resolution (0.10.1): the same width, pixel for pixel.
 	preview := set.Print.Preview(api.PreviewInput{Kind: "invoice", ID: sale.ID})
 	raw, _ := base64.StdEncoding.DecodeString(preview.Data.PNG)
 	img, err := png.Decode(bytes.NewReader(raw))
-	if !preview.OK || err != nil || img.Bounds().Dx() != 909 {
+	if !preview.OK || err != nil || img.Bounds().Dx() != job.Pages[0].Bounds().Dx() {
 		t.Fatalf("the invoice preview: %v, %v", preview.Error, err)
+	}
+	pageRows := job.Pages[0].Bounds().Dy()
+	for y := range pageRows {
+		for x := range img.Bounds().Dx() {
+			if got, want := color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y, job.Pages[0].GrayAt(x, y).Y; got != want {
+				t.Fatalf("the preview differs from the printed page at (%d, %d): %d, printed %d", x, y, got, want)
+			}
+		}
 	}
 }
 

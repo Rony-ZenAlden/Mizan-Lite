@@ -17,7 +17,8 @@ import (
 func main() {
 	dist := flag.String("dist", "apps/lite/frontend/dist", "the built frontend")
 	addr := flag.String("addr", "127.0.0.1:34199", "a loopback address to listen on")
-	fixture := flag.String("fixture", "seeded", "the shop to start with: empty or seeded")
+	fixture := flag.String("fixture", "seeded", "the shop to start with: empty, seeded or home")
+	homeLogo := flag.String("home-logo", "../../../assets/brands/al-kurdi/al-kurdi-logo-800.png", "the furniture demo's logo, for the home fixture")
 	flag.Parse()
 
 	root, err := os.MkdirTemp("", "mizan-lite-e2e-*")
@@ -27,7 +28,7 @@ func main() {
 	defer os.RemoveAll(root)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	bridge, err := e2e.New(e2e.Options{Dist: *dist, Root: root})
+	bridge, err := e2e.New(e2e.Options{Dist: *dist, Root: root, HomeLogo: *homeLogo})
 	if err != nil {
 		fail(err)
 	}

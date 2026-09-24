@@ -72,6 +72,7 @@ Sales → the receipt → **Void sale**. Before the PIN, the application states 
 - Settings → **How money is shown → US dollars only** converts the whole shop to dollars at today's rate: every price and cost, every customer's and supplier's balance in pounds, and the pounds in the drawer.
 - The application **shows every figure before anything changes**. Check them, tick the box and confirm with the owner PIN. If anything changed in between — a sale, a payment — it shows the new figures and asks again.
 - After that the till, the prices, the drawer and the reports are in dollars only. To go back, choose another way of showing money: everything stays in dollars.
+- **No pound figure appears anywhere afterwards** — not beside a line at the till, not on a receipt, an invoice, a price tag, the end-of-day report or an export. Sales made in pounds before the switch still show exactly as they were charged.
 
 ## Products from Excel
 
@@ -93,6 +94,8 @@ Printer: choose the receipt printer, the paper width (80 or 58 mm) and how recei
 
 - Credit sales and vouchers print themselves; cash receipts print on the button.
 - If a receipt does not print, the application says why and offers **Print again**. The sale is recorded either way.
+- **Settings → Store information:** the shop's name, phone, city and address, and its logo (**Add a logo…**, a PNG or JPG picture). They head every receipt and invoice, and the logo heads the screen beside the shop's name. Without a logo the name is printed in large type.
+- Every receipt also has an **Invoice (A4)** tab: **Print A4 invoice** on the A4 printer chosen on the Printer screen, or **Save invoice (PDF)** to send it or print it anywhere.
 
 ## Backups
 

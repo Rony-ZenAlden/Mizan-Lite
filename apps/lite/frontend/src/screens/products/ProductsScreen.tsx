@@ -4,6 +4,7 @@ import type { ImportResult, Product } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { formatDecimal } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
 import { Checkbox } from "@/ui/Checkbox";
@@ -22,6 +23,7 @@ export function ProductsScreen() {
   const client = useClient();
   const { withOwner } = useOwner();
   const { t, tDynamic, errorText, locale } = useLocale();
+  const { usdOnly } = useCurrencies();
   const [text, setText] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [products, setProducts] = useState<Product[] | null>(null);
@@ -94,7 +96,8 @@ export function ProductsScreen() {
                 <th className="p-2 text-start">{t("products.col.name")}</th>
                 <th className="p-2 text-start">{t("products.col.unit")}</th>
                 <th className="p-2 text-start">{t("products.col.price")}</th>
-                <th className="p-2 text-start">{t("products.col.converted")}</th>
+                {/* A dollars-only shop has no other currency to read a price in (0.10.1). */}
+                {usdOnly ? null : <th className="p-2 text-start">{t("products.col.converted")}</th>}
                 <th className="p-2 text-start">{t("products.col.slot")}</th>
                 <th className="p-2 text-start">{t("products.col.status")}</th>
                 <th className="p-2 text-start">{t("products.col.actions")}</th>
@@ -117,15 +120,17 @@ export function ProductsScreen() {
                       </>
                     )}
                   </td>
-                  <td className="p-2 text-text-muted">
-                    {p.convertedPrice && !p.openPrice ? (
-                      <>
-                        <bdi dir="ltr">≈ {formatDecimal(p.convertedPrice, locale)}</bdi> {tDynamic(`currency.${p.convertedCurrency}`)}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
+                  {usdOnly ? null : (
+                    <td className="p-2 text-text-muted">
+                      {p.convertedPrice && !p.openPrice ? (
+                        <>
+                          <bdi dir="ltr">≈ {formatDecimal(p.convertedPrice, locale)}</bdi> {tDynamic(`currency.${p.convertedCurrency}`)}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  )}
                   <td className="p-2">
                     <select
                       aria-label={t("products.slot_for", { name: name(p) })}

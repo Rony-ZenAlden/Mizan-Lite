@@ -385,8 +385,11 @@ func requireOwner(ctx context.Context, app *bootstrap.App, action, after string)
 	return app.Owner.Require(ctx, owner.Act{Action: action, After: after})
 }
 
-// previewDPI is an A4 page on screen: legible at the dialog's width without a page's worth of pixels per line.
-const previewDPI = 110
+// previewDPI is an A4 page on screen: the printer's own resolution, so the preview is the very bitmap a Windows driver is
+// handed, and the screen scales it down smoothly to the dialog's width. It was 110 until 0.10.1, where the invoice's small
+// lines — the address under the shop's name — lost the thin strokes of alef and lam to the black-and-white threshold, and a
+// preview read as a word with letters missing that the paper does not have (found 2026-09-25).
+const previewDPI = invoiceDPI
 
 // stackPages sets an A4 document's pages one under another with a grey gap between — how the screen shows an invoice.
 func stackPages(pages []*image.Gray) *image.Gray {

@@ -83,7 +83,7 @@ export function PaymentDialog({
   }, [client, customerId, currency, tenderCurrency, amount, all, changeCurrency, requote]);
 
   const errors = formErrors(quoteError ?? error, errorText);
-  const { currencies } = useCurrencies(localCurrency);
+  const { currencies, usdOnly } = useCurrencies(localCurrency);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -107,16 +107,19 @@ export function PaymentDialog({
   return (
     <Dialog title={t("payment.title", { name, currency: tDynamic(`currency.${currency}`) })} onClose={onClose}>
       <form className="space-y-3" onSubmit={(e) => void submit(e)}>
-        <SelectField label={t("payment.paid_in")} value={tenderCurrency} onChange={(e) => setTenderCurrency(e.target.value)}>
-          <option value="">{tDynamic(`currency.${currency}`)}</option>
-          {currencies
-            .filter((c) => c !== currency)
-            .map((c) => (
-              <option key={c} value={c}>
-                {tDynamic(`currency.${c}`)}
-              </option>
-            ))}
-        </SelectField>
+        {/* A dollars-only shop is paid and gives change in dollars: there is no currency to choose (0.10.1). */}
+        {usdOnly ? null : (
+          <SelectField label={t("payment.paid_in")} value={tenderCurrency} onChange={(e) => setTenderCurrency(e.target.value)}>
+            <option value="">{tDynamic(`currency.${currency}`)}</option>
+            {currencies
+              .filter((c) => c !== currency)
+              .map((c) => (
+                <option key={c} value={c}>
+                  {tDynamic(`currency.${c}`)}
+                </option>
+              ))}
+          </SelectField>
+        )}
         <Checkbox label={t("payment.all")} checked={all} onChange={(e) => setAll(e.target.checked)} />
         {all ? null : (
           <TextField
@@ -129,14 +132,16 @@ export function PaymentDialog({
             autoComplete="off"
           />
         )}
-        <SelectField label={t("payment.change_in")} value={changeCurrency} onChange={(e) => setChangeCurrency(e.target.value)} error={errors.field("changeCurrency")} hint={t("till.change_default_hint")}>
-          <option value="">{t("till.change_default")}</option>
-          {currencies.map((c) => (
-            <option key={c} value={c}>
-              {tDynamic(`currency.${c}`)}
-            </option>
-          ))}
-        </SelectField>
+        {usdOnly ? null : (
+          <SelectField label={t("payment.change_in")} value={changeCurrency} onChange={(e) => setChangeCurrency(e.target.value)} error={errors.field("changeCurrency")} hint={t("till.change_default_hint")}>
+            <option value="">{t("till.change_default")}</option>
+            {currencies.map((c) => (
+              <option key={c} value={c}>
+                {tDynamic(`currency.${c}`)}
+              </option>
+            ))}
+          </SelectField>
+        )}
         <TextField label={t("customers.note")} value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} autoComplete="off" />
 
         {quote ? (
@@ -161,9 +166,12 @@ export function PaymentDialog({
             <dd>
               <Money value={quote.balanceAfter} currency={quote.currency} className="font-semibold" />
             </dd>
-            <dd className="col-span-2 text-xs text-text-muted">
-              {t("till.rate", ratePair(quote.rate, localCurrency, locale, tDynamic))}
-            </dd>
+            {usdOnly ? null : (
+              // A dollars-only shop takes dollars and reads no rate (0.10.1).
+              <dd className="col-span-2 text-xs text-text-muted" data-testid="payment-rate">
+                {t("till.rate", ratePair(quote.rate, localCurrency, locale, tDynamic))}
+              </dd>
+            )}
           </dl>
         ) : null}
         {stale ? <Alert tone="danger" title={t("payment.stale")} /> : null}

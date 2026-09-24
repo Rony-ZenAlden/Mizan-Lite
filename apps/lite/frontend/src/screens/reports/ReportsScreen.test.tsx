@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { BindingError } from "@/api/envelope";
-import { aDayReport, aProfit, aStockReport, anAmount, fakeClient, renderWithProviders } from "@/api/testing";
+import { aDayReport, aProfit, aRate, aStockReport, anAmount, fakeClient, renderWithProviders } from "@/api/testing";
 import type { ProductRow, ProductsReport } from "@/api/client";
 import { ReportsScreen } from "./ReportsScreen";
 
@@ -96,6 +96,21 @@ describe("ReportsScreen", () => {
     await settle();
     expect(screen.getByTestId("open-items")).toHaveTextContent("2 open-price lines sold — 0.33 USD / 5,000 SYP — at prices typed at the till.");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("a dollars-only shop reads its day in dollars alone: no pound column, no pound figure in a note, no rate note (0.10.1)", async () => {
+    const day = async () => aDayReport({ profit: aProfit({ unknownLines: 3, unknownUsd: "3.20", unknownLocal: "48000", openLines: 2, openUsd: "0.33", openLocal: "5000" }) });
+    renderWithProviders(<ReportsScreen />, {
+      client: fakeClient({ reports: { day }, owner: { status: async () => elevated }, fx: { current: async () => aRate({ usdOnly: true }) } }),
+      locale: "en",
+    });
+    await settle();
+    expect(screen.getByRole("alert")).toHaveTextContent("3 lines sold with no recorded cost — 3.20 USD — are not in profit or margin");
+    expect(screen.getByTestId("open-items")).toHaveTextContent("2 open-price lines sold — 0.33 USD — at prices typed at the till.");
+    expect(screen.queryByTestId("rate-note")).not.toBeInTheDocument();
+    expect(screen.getByTestId("statement")).not.toHaveTextContent(/SYP|pound/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/SYP/);
+    expect(screen.getByTestId("open-items")).not.toHaveTextContent(/SYP/);
   });
 
   it("a cancelled PIN shows no figures, and the owner can ask again", async () => {

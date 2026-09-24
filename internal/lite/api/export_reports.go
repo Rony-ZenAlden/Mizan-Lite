@@ -7,6 +7,49 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/sheets"
 )
 
+// Dollars only (0.10.1): a dollars-only shop's reports are read in dollars — the screens hide every pound column — and
+// its exports are the same reports. dropAt takes a table's pound columns out; each builder names its own.
+
+// dropAt returns row without the entries at the given indexes, which are ascending. An index past the row's end is
+// ignored: a sheet's blank or note rows are shorter than its data rows.
+func dropAt[T any](row []T, at ...int) []T {
+	out := make([]T, 0, len(row))
+	next := 0
+	for i, c := range row {
+		for next < len(at) && at[next] < i {
+			next++
+		}
+		if next < len(at) && at[next] == i {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// dollarsOnly takes the pound columns at out of a table and a sheet in a dollars-only shop, and leaves both alone in
+// every other. The table's columns and the sheet's are given apart: a sheet carries a unit column the table does not.
+func (w words) dollarsOnly(t documents.Table, tableAt []int, sh sheets.Sheet, sheetAt []int) (documents.Table, sheets.Sheet) {
+	if !w.usdOnly() {
+		return t, sh
+	}
+	t.Headings = dropAt(t.Headings, tableAt...)
+	t.Widths = dropAt(t.Widths, tableAt...)
+	for i := range t.Rows {
+		t.Rows[i] = dropAt(t.Rows[i], tableAt...)
+	}
+	if t.Total != nil {
+		t.Total = dropAt(t.Total, tableAt...)
+	}
+	for i := range t.Footer {
+		t.Footer[i] = dropAt(t.Footer[i], tableAt...)
+	}
+	for i := range sh.Rows {
+		sh.Rows[i] = dropAt(sh.Rows[i], sheetAt...)
+	}
+	return t, sh
+}
+
 // statementRow is one line of a two-reading statement: a label, dollars, pounds.
 type statementRow struct {
 	label      string
@@ -33,7 +76,8 @@ func (w words) twoReadings(rows []statementRow, local string) (documents.Table, 
 		}
 		sh.Rows = append(sh.Rows, []sheets.Cell{label, a, b})
 	}
-	return t, sh, head
+	t, sh = w.dollarsOnly(t, []int{2}, sh, []int{2})
+	return t, sh, sh.Rows[0]
 }
 
 func percent(w words, v string) string {
@@ -58,7 +102,8 @@ func (w words) dayRows(d DayReportDTO) []statementRow {
 	if nonZero(p.DiscountUSD, p.DiscountLocal) {
 		rows = append(rows, statementRow{label: w.t("reports.sale_discounts"), usd: p.DiscountUSD, local: p.DiscountLocal})
 	}
-	if nonZero(p.RoundingLocal) {
+	// Rounding to a paper note is the pound's alone: a dollars-only statement has no line for it, as its screen has none.
+	if nonZero(p.RoundingLocal) && !w.usdOnly() {
 		rows = append(rows, statementRow{label: w.t("reports.rounding"), usd: "0.00", local: p.RoundingLocal})
 	}
 	rows = append(rows,
@@ -123,21 +168,30 @@ func (w words) takings(d DayReportDTO) (documents.Table, sheets.Sheet) {
 func (w words) dayExport(d DayReportDTO) exportable {
 	x := exportable{title: w.t("doc.report_day"), subtitle: w.date(d.Date)}
 	if d.Profit.UnknownLines > 0 {
-		x.blocks = append(x.blocks, documents.Paragraph{Bold: true, Text: w.t("reports.unknown_cost", "count", w.fig(strconv.Itoa(d.Profit.UnknownLines)),
-			"usd", w.fig(documents.Group(d.Profit.UnknownUSD)), "local", w.fig(documents.Group(d.Profit.UnknownLocal)), "currency", w.short(d.LocalCurrency))})
+		text := w.t("reports.unknown_cost", "count", w.fig(strconv.Itoa(d.Profit.UnknownLines)),
+			"usd", w.fig(documents.Group(d.Profit.UnknownUSD)), "local", w.fig(documents.Group(d.Profit.UnknownLocal)), "currency", w.short(d.LocalCurrency))
+		if w.usdOnly() {
+			text = w.t("reports.unknown_cost_usd", "count", w.fig(strconv.Itoa(d.Profit.UnknownLines)), "usd", w.fig(documents.Group(d.Profit.UnknownUSD)))
+		}
+		x.blocks = append(x.blocks, documents.Paragraph{Bold: true, Text: text})
 	}
 	if d.Unconverted > 0 {
 		x.blocks = append(x.blocks, documents.Paragraph{Bold: true, Text: w.t("reports.unconverted", "count", w.fig(strconv.Itoa(d.Unconverted)))})
 	}
 	table, sh, _ := w.twoReadings(w.dayRows(d), d.LocalCurrency)
 	sh.Name = w.t("doc.sheet_statement")
-	note := w.t("reports.rate_note_range")
-	if d.Rate != "" {
-		note = w.t("reports.rate_note", "rate", w.fig(documents.Group(d.Rate)))
-	}
 	takings, takingsSheet := w.takings(d)
-	x.blocks = append(x.blocks, table, documents.Paragraph{Text: note, Small: true}, documents.Heading{Text: w.t("reports.takings")}, takings)
-	sh.Rows = append(sh.Rows, []sheets.Cell{}, []sheets.Cell{sheets.Text(note)})
+	x.blocks = append(x.blocks, table)
+	// The note says at what rates the pound column was converted; a dollars-only statement has no pound column.
+	if !w.usdOnly() {
+		note := w.t("reports.rate_note_range")
+		if d.Rate != "" {
+			note = w.t("reports.rate_note", "rate", w.fig(documents.Group(d.Rate)))
+		}
+		x.blocks = append(x.blocks, documents.Paragraph{Text: note, Small: true})
+		sh.Rows = append(sh.Rows, []sheets.Cell{}, []sheets.Cell{sheets.Text(note)})
+	}
+	x.blocks = append(x.blocks, documents.Heading{Text: w.t("reports.takings")}, takings)
 	x.sheets = []sheets.Sheet{sh, takingsSheet}
 	return x
 }
@@ -162,6 +216,7 @@ func (w words) monthExport(m MonthReportDTO) exportable {
 	}
 	t.Total = nil
 	row(w.t("reports.month_total"), m.Total, true)
+	t, sh = w.dollarsOnly(t, []int{5, 6}, sh, []int{5, 6})
 	totalTable, totalSheet, _ := w.twoReadings(w.dayRows(m.Total), m.LocalCurrency)
 	totalSheet.Name = w.t("doc.sheet_totals")
 	x.blocks = []documents.Block{t, documents.Heading{Text: w.t("reports.month_total")}, totalTable}
@@ -189,15 +244,24 @@ func (w words) productsExport(p ProductsReportDTO) exportable {
 			num(r.CostUSD), num(r.ProfitUSD), num(r.MarginUSD), num(r.ProfitLocal), sheets.Text(noCost)})
 	}
 	recon := w.t("reports.reconciling_local", "discount", w.fig(documents.Group(p.DiscountLocal)), "rounding", w.fig(documents.Group(p.RoundingLocal)), "currency", w.short(p.LocalCurrency))
-	t.Rows = append(t.Rows, []documents.Cell{documents.T(w.t("reports.reconciling")), documents.T(""), documents.M(w.amount(p.DiscountUSD)),
+	reconciling := w.t("reports.reconciling")
+	if w.usdOnly() {
+		reconciling = w.t("reports.reconciling_usd") // no pound rounding to reconcile
+	}
+	t.Rows = append(t.Rows, []documents.Cell{documents.T(reconciling), documents.T(""), documents.M(w.amount(p.DiscountUSD)),
 		documents.T(""), documents.T(""), documents.T(""), documents.T(recon), documents.T("")})
 	t.Total = []documents.Cell{documents.T(w.t("reports.products_total", "count", w.fig(strconv.Itoa(p.Total.Sales)))), documents.T(""),
 		documents.M(w.amount(p.Total.RevenueUSD)), documents.M(w.amount(p.Total.CostUSD)), documents.M(w.amount(p.Total.ProfitUSD)),
 		documents.M(percent(w, p.Total.MarginUSD)), documents.M(w.amount(p.Total.ProfitLocal)), documents.T("")}
-	sh.Rows = append(sh.Rows,
-		[]sheets.Cell{sheets.Text(w.t("reports.reconciling")), {}, {}, num(p.DiscountUSD), {}, {}, {}, num(p.DiscountLocal), sheets.Text(w.t("reports.rounding")), num(p.RoundingLocal)},
+	reconcilingRow := []sheets.Cell{sheets.Text(reconciling), {}, {}, num(p.DiscountUSD), {}, {}, {}, num(p.DiscountLocal), sheets.Text(w.t("reports.rounding")), num(p.RoundingLocal)}
+	if w.usdOnly() {
+		reconcilingRow = reconcilingRow[:4] // the discount in dollars; the pounds' discount and rounding are not a dollars-only shop's
+	}
+	sh.Rows = append(sh.Rows, reconcilingRow,
 		[]sheets.Cell{sheets.Text(w.t("reports.products_total", "count", strconv.Itoa(p.Total.Sales))).Bolded(), {}, {}, num(p.Total.RevenueUSD).Bolded(),
 			num(p.Total.CostUSD).Bolded(), num(p.Total.ProfitUSD).Bolded(), num(p.Total.MarginUSD).Bolded(), num(p.Total.ProfitLocal).Bolded()})
+	// Dollars only: the pound profit column goes, and the pound reconciliation with it.
+	t, sh = w.dollarsOnly(t, []int{6}, sh, []int{7})
 	x.blocks = []documents.Block{t, documents.Paragraph{Text: w.t("reports.products_hint"), Small: true}}
 	x.sheets = []sheets.Sheet{sh}
 	return x
@@ -217,6 +281,7 @@ func (w words) stockExport(s StockReportDTO) exportable {
 	}
 	value.Total = []documents.Cell{documents.T(w.t("receipt.total")), documents.T(""), documents.T(""), documents.M(w.money(s.TotalUSD, "USD")), documents.M(w.money(s.TotalLocal, cur))}
 	valueSheet.Rows = append(valueSheet.Rows, []sheets.Cell{sheets.Text(w.t("receipt.total")).Bolded(), {}, {}, {}, num(s.TotalUSD).Bolded(), num(s.TotalLocal).Bolded()})
+	value, valueSheet = w.dollarsOnly(value, []int{4}, valueSheet, []int{5})
 	c := s.Reconciliation
 	reconRows := []struct{ key, v string }{{"reports.stock.opening", c.Opening}, {"reports.stock.received", c.Received}, {"reports.stock.sold", c.Sold},
 		{"reports.stock.losses", c.Losses}, {"reports.stock.gains", c.Gains}, {"reports.stock.revaluation", c.Revaluation}, {"reports.stock.packages", c.Packages},
@@ -250,6 +315,7 @@ func (w words) stockExport(s StockReportDTO) exportable {
 			num(l.ProfitUSD), num(l.ProfitLocal), sheets.Text(l.PriceCurrency), sheets.Text(below)})
 	}
 	shelf.Total = []documents.Cell{documents.T(w.t("receipt.total")), documents.T(""), documents.T(""), documents.T(""), documents.M(w.money(s.ShelfTotalUSD, "USD")), documents.M(w.money(s.ShelfTotalLocal, cur))}
+	shelf, shelfSheet = w.dollarsOnly(shelf, []int{5}, shelfSheet, []int{5})
 	left := documents.Table{Headings: []string{w.t("reports.col.product"), w.t("doc.col_reason")}}
 	leftSheet := sheets.Sheet{Name: w.t("doc.sheet_left_out"), Frozen: 1, Rows: [][]sheets.Cell{headings(w.t("reports.col.product"), w.t("doc.col_reason"))}}
 	for _, l := range s.LeftOut {

@@ -1,7 +1,7 @@
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { aProduct, fakeClient, renderWithProviders } from "@/api/testing";
+import { aProduct, aRate, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import { SEARCH_DEBOUNCE_MS, ProductsScreen } from "./ProductsScreen";
 
@@ -27,6 +27,18 @@ describe("ProductsScreen", () => {
     expect(within(row).getByText("≈ 3.00")).toBeInTheDocument();
     expect(within(row).getByText(/دولار أمريكي/)).toBeInTheDocument();
     expect(products).toHaveBeenCalledWith({ text: "", includeInactive: false });
+  });
+
+  it("a dollars-only shop has no column for the other currency (0.10.1)", async () => {
+    const products = vi.fn(async () => [aProduct({ nameAr: "طقم كاسات", nameEn: "Glass set", unitCode: "box", priceCurrency: "USD", price: "9.00", convertedPrice: "", convertedCurrency: "" })]);
+    renderWithProviders(<ProductsScreen />, {
+      client: fakeClient({ catalog: { products }, fx: { current: async () => aRate({ usdOnly: true }) } }),
+      locale: "en",
+    });
+    await settle();
+    expect(screen.queryByRole("columnheader", { name: "In the other currency" })).not.toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Glass set/ })).toHaveTextContent("9.00 US dollar");
+    expect(screen.getByRole("table")).not.toHaveTextContent(/SYP|pound|—/);
   });
 
   // 2026-09-23: an open-priced item's price is typed at the till, so a price here would be a nought that reads as "free",

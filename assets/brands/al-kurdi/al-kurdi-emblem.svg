@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 440" width="440" height="440" role="img" aria-label="الكردي — مفروشات وأدوات منزلية">
+<title>الكردي — مفروشات وأدوات منزلية</title>
+<defs>
+  <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#744B2D"/>
+    <stop offset="1" stop-color="#3A2416"/>
+  </linearGradient>
+</defs>
+<g transform="translate(20.00 20.00) scale(1.00000)">
+  <rect x="0" y="0" width="400" height="400" rx="92" fill="url(#wood)"/>
+  <rect x="18" y="18" width="364" height="364" rx="76" fill="none" stroke="#E2B45C" stroke-opacity="0.38" stroke-width="3"/>
+  <path d="M82 170 L200 80 L318 170" fill="none" stroke="#E2B45C" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="128" y="226" width="144" height="64" fill="#F7EDDF"/>
+  <rect x="134" y="160" width="132" height="80" rx="24" fill="#F7EDDF"/>
+  <rect x="104" y="204" width="44" height="90" rx="20" fill="#F7EDDF"/>
+  <rect x="252" y="204" width="44" height="90" rx="20" fill="#F7EDDF"/>
+  <rect x="142" y="238" width="116" height="42" rx="14" fill="#E8D3B2"/>
+  <path d="M200 252 L200 280" stroke="#D2B891" stroke-width="3" stroke-linecap="round"/>
+  <rect x="104" y="276" width="192" height="24" rx="11" fill="#F7EDDF"/>
+  <path d="M128 300 L121 326 M272 300 L279 326" stroke="#E2B45C" stroke-width="12" stroke-linecap="round"/>
+</g>
+</svg>

@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { aSale, fakeClient, renderWithProviders } from "@/api/testing";
+import { aRate, aSale, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import type { Day, VoidInput } from "@/api/client";
 import { isZero } from "./Money";
@@ -185,6 +185,35 @@ describe("ReceiptView — on credit", () => {
     expect(block).toHaveTextContent("The debt was reversed with the void.");
     expect(within(dialog).getByTestId("receipt")).toHaveTextContent("Paid now20,000 SYP");
     expect(within(dialog).getByTestId("receipt")).not.toHaveTextContent("Change");
+  });
+});
+
+describe("ReceiptView — US dollars only (0.10.1)", () => {
+  it("names no rate: a dollars-only shop's receipt reads dollars alone, as its printed receipt does", async () => {
+    renderWithProviders(<SalesScreen />, {
+      client: fakeClient({
+        sales: { list: async () => aDay({ sales: [dollarSale] }), receipt: async () => dollarSale },
+        fx: { current: async () => aRate({ usdOnly: true }) },
+      }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.click(within(screen.getAllByRole("row")[1]!).getByRole("button", { name: "Receipt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Receipt No. 8" });
+    expect(within(dialog).getByTestId("receipt")).toHaveTextContent("10.50 USD");
+    expect(within(dialog).queryByTestId("receipt-rate")).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId("receipt")).not.toHaveTextContent(/SYP|pound/i);
+  });
+
+  it("a shop reading pounds keeps the rate at the foot of the receipt", async () => {
+    renderWithProviders(<SalesScreen />, {
+      client: fakeClient({ sales: { list: async () => aDay({ sales: [dollarSale] }), receipt: async () => dollarSale } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.click(within(screen.getAllByRole("row")[1]!).getByRole("button", { name: "Receipt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Receipt No. 8" });
+    expect(within(dialog).getByTestId("receipt-rate")).toHaveTextContent("1 USD = 15,000 SYP");
   });
 });
 

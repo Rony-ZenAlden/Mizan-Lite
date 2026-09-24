@@ -372,11 +372,11 @@ func (l *layouter) row(cells []Cell, lefts, widths []float32, bold bool, size fl
 		inner := bx.width - m.gutter()*2
 		switch {
 		case c.Figure:
-			set[i] = setCell{lines: []typeset.Line{l.ts.Layout(cellText(c), st, l.dir)}, figure: true}
+			set[i] = setCell{lines: fitted(l.figureLines(c, st, inner), inner), figure: true}
 		case c.End || (bx.column < len(endAligned) && endAligned[bx.column]):
-			set[i] = setCell{lines: l.ts.Wrap(c.Text, st, l.dir, inner), figure: true}
+			set[i] = setCell{lines: fitted(l.ts.Wrap(c.Text, st, l.dir, inner), inner), figure: true}
 		default:
-			set[i] = setCell{lines: l.ts.Wrap(c.Text, st, l.dir, inner)}
+			set[i] = setCell{lines: fitted(l.ts.Wrap(c.Text, st, l.dir, inner), inner)}
 		}
 		set[i].center = c.Center
 		ch := float32(0)
@@ -422,6 +422,32 @@ func (l *layouter) row(cells []Cell, lefts, widths []float32, bold bool, size fl
 			l.cur().ops = append(l.cur().ops, op{kind: opLine, x: x, y: rowTop, x2: x, y2: l.y, width: gridLine})
 		}
 	}
+}
+
+// figureLines sets a figure cell on one line — or, a dual reading too wide for its column, the new figure over the old one
+// in its brackets, as the screen sets the old figure apart (0.10.1).
+func (l *layouter) figureLines(c Cell, st typeset.Style, inner float32) []typeset.Line {
+	whole := l.ts.Layout(cellText(c), st, l.dir)
+	if whole.Width <= inner {
+		return []typeset.Line{whole}
+	}
+	if fresh, legacy, ok := splitDual(c.Text); ok {
+		return []typeset.Line{l.ts.Layout(typeset.Isolate(fresh), st, l.dir), l.ts.Layout(typeset.Isolate("("+legacy+")"), st, l.dir)}
+	}
+	return []typeset.Line{whole}
+}
+
+// fitted returns lines that each stand inside width: a line wider is set smaller until it fits (0.10.1). Until then a figure
+// wider than its column ran across the rule into the next one — the invoice total the owner reported on 2026-09-24. A
+// figure is never cut, because a cut figure reads as another amount; the columns are sized for the figures a shop prints,
+// and this is the guarantee for the one that is wider.
+func fitted(lines []typeset.Line, width float32) []typeset.Line {
+	for i, ln := range lines {
+		if ln.Width > width && width > 0 {
+			lines[i] = ln.Scaled(width / ln.Width)
+		}
+	}
+	return lines
 }
 
 func (l *layouter) table(t Table) {

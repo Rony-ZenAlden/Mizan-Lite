@@ -230,10 +230,11 @@ func (v debtView) currency(code string) tender.Currency {
 	return tender.Currency{Code: code, Decimals: v.ref.Currencies[code].Decimals}
 }
 
-// balance formats one summary, with its reference in the other currency (Q-L5.8).
+// balance formats one summary, with its reference in the other currency (Q-L5.8) — none in a dollars-only shop, which
+// reads no pounds (0.10.1).
 func (v debtView) balance(s domain.Summary) BalanceDTO {
 	dto := BalanceDTO{Currency: s.Currency, Balance: v.money(s.BalanceMinor, s.Currency), OwedSince: s.OwedSince, LastPayment: s.LastPayment}
-	if v.rateNano > 0 {
+	if v.rateNano > 0 && !v.shop.USDOnly() {
 		other := tender.USD
 		if s.Currency == tender.USD {
 			other = v.local

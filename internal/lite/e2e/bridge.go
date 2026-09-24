@@ -52,6 +52,9 @@ type Options struct {
 	// Root is a directory the bridge owns: shops, saved files, the seeded template.
 	Root   string
 	Logger *slog.Logger
+	// HomeLogo is the furniture demo's logo file (assets/brands/al-kurdi), which the "home" fixture is seeded with as an
+	// owner uploads one (0.10.1). Only that fixture reads it.
+	HomeLogo string
 }
 
 // Bridge serves the frontend and one graph at a time.
@@ -66,6 +69,7 @@ type Bridge struct {
 	files   *Files
 	printer *Printer
 	seeded  string // a seeded shop's database, copied for each reset
+	home    string // the furniture demo's database, likewise
 	bound   map[string]reflect.Value
 }
 
@@ -89,8 +93,9 @@ func New(opts Options) (*Bridge, error) {
 	return b, nil
 }
 
-// Reset replaces the shop: "empty" is a fresh installation (first run), "seeded" the demo shop (PIN 481537). The saved files
-// and printed jobs are forgotten.
+// Reset replaces the shop: "empty" is a fresh installation (first run), "seeded" the demo shop (PIN 481537), "home" the
+// furniture and home-goods demo — dollars only, with its logo and a month and a half behind it (0.10.1, same PIN). The
+// saved files and printed jobs are forgotten.
 func (b *Bridge) Reset(ctx context.Context, fixture string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -107,11 +112,12 @@ func (b *Bridge) Reset(ctx context.Context, fixture string) error {
 	}
 	switch fixture {
 	case "empty":
-	case "seeded":
-		if err := b.ensureSeededLocked(ctx); err != nil {
+	case "seeded", "home":
+		template, err := b.templateLocked(ctx, fixture)
+		if err != nil {
 			return err
 		}
-		body, err := os.ReadFile(b.seeded)
+		body, err := os.ReadFile(template)
 		if err != nil {
 			return err
 		}
@@ -124,30 +130,46 @@ func (b *Bridge) Reset(ctx context.Context, fixture string) error {
 	return b.startLocked(ctx)
 }
 
-// ensureSeededLocked seeds the demo shop once and keeps its database for every later reset.
-func (b *Bridge) ensureSeededLocked(ctx context.Context) error {
-	if b.seeded != "" {
-		return nil
+// templateLocked seeds a demo shop once and keeps its database for every later reset.
+func (b *Bridge) templateLocked(ctx context.Context, fixture string) (string, error) {
+	kept := &b.seeded
+	if fixture == "home" {
+		kept = &b.home
 	}
-	p := paths.Layout(filepath.Join(b.opts.Root, "seed-template"))
+	if *kept != "" {
+		return *kept, nil
+	}
+	p := paths.Layout(filepath.Join(b.opts.Root, fixture+"-template"))
 	for _, dir := range []string{p.Data, p.Backups, p.Logs, p.WebView} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
+			return "", err
 		}
 	}
-	app, err := bootstrap.Start(ctx, bootstrap.Options{Paths: p, Logger: b.opts.Logger})
-	if err != nil {
-		return err
+	opts := demoseed.Options{PIN: SeedPIN, Locale: "ar"}
+	start := bootstrap.Options{Paths: p, Logger: b.opts.Logger}
+	if fixture == "home" {
+		logo, err := os.ReadFile(b.opts.HomeLogo)
+		if err != nil {
+			return "", fmt.Errorf("e2e: the home demo's logo (%w)", err)
+		}
+		// Its history is seeded under a clock the seeder steps, then left on now.
+		clk := demoseed.NewClock()
+		start.Clock = clk
+		opts.Profile, opts.Logo, opts.Days, opts.Clock, opts.Now = demoseed.ProfileHome, logo, demoseed.HomeDays, clk, clk.Now()
 	}
-	if _, err = demoseed.Run(ctx, app, demoseed.Options{PIN: SeedPIN, Locale: "ar"}); err != nil {
+	app, err := bootstrap.Start(ctx, start)
+	if err != nil {
+		return "", err
+	}
+	if _, err = demoseed.Run(ctx, app, opts); err != nil {
 		_ = app.Shutdown(ctx)
-		return err
+		return "", err
 	}
 	if err = app.Shutdown(ctx); err != nil {
-		return err
+		return "", err
 	}
-	b.seeded = p.DBFile
-	return nil
+	*kept = p.DBFile
+	return *kept, nil
 }
 
 func (b *Bridge) startLocked(ctx context.Context) error {

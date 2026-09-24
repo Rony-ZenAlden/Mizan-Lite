@@ -752,8 +752,14 @@ export function TillScreen() {
                             autoComplete="off"
                           />
                         </td>
-                        <td className="p-2">
-                          {priced ? (
+                        <td className="p-2" data-testid="cart-line-total">
+                          {priced && usdOnly ? (
+                            // A dollars-only shop reads each line in dollars alone: the pounds beside them were the
+                            // owner's report of 2026-09-24 (0.10.1).
+                            <p>
+                              <Money value={priced.netUsd} currency="USD" />
+                            </p>
+                          ) : priced ? (
                             <>
                               <p>
                                 <Money

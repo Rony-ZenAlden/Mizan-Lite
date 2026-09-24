@@ -40,6 +40,7 @@ what is not verified — once built.
 | **L11** | Partial returns, recurring expenses, reorder levels, price tags, the thermal Z-report | [DECISIONS.md](DECISIONS.md) — D-097.1–15 | ✅ shipped, tagged `lite-v0.9.7` |
 | **L12** | Held sales, the open-priced item, optional re-pricing after a rate move, one notification engine (bell, toasts, centre, capital in dollars) | [DECISIONS.md](DECISIONS.md) — D-099.1–18 | ✅ shipped, tagged `lite-v0.9.9` |
 | **L13** | The A4 invoice and the shop's own branding, suppliers and purchases (discounts, damage at intake), spoilage and losses, US dollars only | [DECISIONS.md](DECISIONS.md) — D-0100.1–20 | ✅ shipped, tagged `lite-v0.10.0` |
+| **0.10.1** | Dollars only everywhere, figures that stay in their cells, the shop's logo on screen, the furniture demo and its brand kit | [DECISIONS.md](DECISIONS.md) — D-0101.1–9 · [DEMO.md](DEMO.md) | ✅ shipped, tagged `lite-v0.10.1` |
 
 ## Conventions
 
@@ -63,5 +64,6 @@ Written for the shop, not for this repository: Arabic first, English beside it (
 | [guide/TROUBLESHOOTING.ar.md](guide/TROUBLESHOOTING.ar.md) · [guide/TROUBLESHOOTING.md](guide/TROUBLESHOOTING.md) | both |
 | [GLOSSARY.md](GLOSSARY.md) | one term for one thing, in both languages |
 | [RELEASE.md](RELEASE.md) | whoever cuts a release |
+| [DEMO.md](DEMO.md) | the owner, showing Lite to a client: the furniture demo shop, its logo, and how to open it on a Mac or a Windows till |
 | [phases/WINDOWS_PROTOCOL.md](phases/WINDOWS_PROTOCOL.md) · [phases/PILOT.md](phases/PILOT.md) | the owner, on a real machine and in a real shop |
 | [phases/L8_DOD_REVIEW.md](phases/L8_DOD_REVIEW.md) | whoever asks what is still owed before 1.0.0 |

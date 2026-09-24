@@ -721,4 +721,36 @@ describe("TillScreen — US dollars only (0.10.0)", () => {
     expect(screen.queryByText(/1 USD =/)).not.toBeInTheDocument();
     expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ settlement: "" }));
   });
+
+  it("reads every line in dollars alone — no pounds beside them (the owner's report, 2026-09-24)", async () => {
+    // Go still prices each line in both currencies; a dollars-only till shows the dollars and nothing else.
+    const quote = vi.fn(async () => aQuote({ settlement: "USD", total: "4.88", rounding: "0.00", cashNote: "", totalOther: "73125", otherCurrency: "SYP" }));
+    renderWithProviders(<TillScreen />, {
+      client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote }, fx: { current: async () => aRate({ usdOnly: true }) } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    const line = screen.getByTestId("cart-line-total");
+    expect(line).toHaveTextContent("4.88 USD");
+    expect(line).not.toHaveTextContent("73,125");
+    expect(screen.getByTestId("till-total")).toHaveTextContent("4.88 USD");
+    for (const place of [screen.getByTestId("cart-line"), screen.getByTestId("till-total")]) {
+      expect(place).not.toHaveTextContent(/SYP|pound/i);
+    }
+  });
+
+  it("a shop reading pounds still sees each line in both", async () => {
+    renderWithProviders(<TillScreen />, {
+      client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote: async () => aQuote() } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    const line = screen.getByTestId("cart-line-total");
+    expect(line).toHaveTextContent("73,125 SYP");
+    expect(line).toHaveTextContent("4.88 USD");
+  });
 });

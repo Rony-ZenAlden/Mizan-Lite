@@ -3,6 +3,7 @@ import { useClient } from "@/api/ClientContext";
 import type { ShopState } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
+import { useShop } from "@/shop/ShopProvider";
 import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
 import { Button } from "@/ui/Button";
@@ -33,6 +34,7 @@ export function StoreInfo() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const header = useShop();
   const adopt = useCallback((next: ShopState) => {
     setShop(next);
     setForm({ name: next.name, phone: next.phone, city: next.city, address: next.address });
@@ -50,7 +52,9 @@ export function StoreInfo() {
     setError(null);
     setSaved(false);
     try {
-      adopt(await withOwner(fn));
+      const next = await withOwner(fn);
+      adopt(next);
+      header.adopt(next); // the header shows the new name or logo at once
       setSaved(true);
     } catch (e) {
       if (!(e instanceof OwnerCancelled)) setError(e);

@@ -1,13 +1,20 @@
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { LOCALES, call, checkStructure, enterPin, expectReadable, go, label, readable, reset, setFiles, state, type Locale } from "./lite";
+import { LOCALES, call, checkStructure, enterPin, expectNoPounds, expectReadable, go, label, readable, reset, setFiles, state, type Locale } from "./lite";
 
 // L8 §3.4: each journey drives the real screens as a person would — keyboard and clicks, never Go directly — and ends by asserting
 // what Go recorded, through the bindings. Every journey runs in Arabic and in English.
 
 const MOLASSES = { barcode: "6290001000035", ar: "دبس رمان", en: "Pomegranate molasses" }; // a jar, 45,000 SYP
 const name = (p: { ar: string; en: string }, locale: Locale) => p[locale];
+
+// The furniture demo's catalogue (0.10.1), read from the data the seeder reads — so the journey scans what the shop sells.
+const HOME = JSON.parse(readFileSync(new URL("../../../../internal/lite/demoseed/data/home.json", import.meta.url), "utf8")) as {
+  shop: { name: string };
+  products: { nameAr: string; nameEn: string; barcode: string }[];
+};
+const homeProduct = (nameAr: string) => HOME.products.find((p) => p.nameAr === nameAr)!;
 const receiptDialog = (page: Page) => page.getByRole("dialog").filter({ has: page.getByTestId("receipt") });
 
 async function scan(page: Page, locale: Locale, code: string) {
@@ -485,6 +492,44 @@ for (const locale of LOCALES) {
       await receiptDialog(page).getByRole("button", { name: label(locale, "action.close") }).click();
       const sales = await call<{ sales: { settlement: string }[] }>(page.request, "Sales", "List", "");
       expect(sales.sales.at(-1)!.settlement).toBe("USD");
+    });
+
+    test(`J16 the furniture demo: its own logo heads the screen, and every screen reads dollars alone — ${locale}`, async ({ page }) => {
+      await reset(page, "home", locale);
+      await expect(page.getByTestId("header-logo")).toBeVisible();
+      await expect(page.getByTestId("header-shop-name")).toHaveText(HOME.shop.name);
+      await expect(page.getByTestId("header-usd-only")).toBeVisible();
+
+      // The till: a glass set and a frying pan scanned, each line and the total in dollars alone (the owner's report).
+      await go(page, locale, "nav.till");
+      for (const item of ["طقم كاسات زجاج ٦ قطع", "مقلاة غرانيت ٢٨ سم"]) await scan(page, locale, homeProduct(item).barcode);
+      await expect(page.getByTestId("cart-line")).toHaveCount(2);
+      await expect(page.getByTestId("cart-line-total").first()).toContainText(label(locale, "currency.short.USD"));
+      await page.getByTestId("till-details-toggle").click();
+      await expectNoPounds(page, "the till");
+      await checkStructure(page, locale, "the furniture demo's till");
+      await page.keyboard.press("F9");
+      const receipt = receiptDialog(page);
+      await expect(receipt.getByTestId("receipt")).toBeVisible();
+      await expectNoPounds(page, "the receipt");
+      // The A4 invoice is Go's page, headed by the shop's logo.
+      await receipt.getByRole("tab", { name: label(locale, "print.view_invoice") }).click();
+      await expect(receipt.getByTestId("invoice-preview")).toBeVisible();
+      await receipt.getByRole("button", { name: label(locale, "action.close") }).first().click();
+      await expect(receipt).toBeHidden();
+
+      // Every screen of the shop. The Rates and Settings screens are left out: they are where the currency itself is set.
+      for (const nav of ["nav.sales", "nav.cash", "nav.customers", "nav.suppliers", "nav.products", "nav.stock", "nav.losses", "nav.reports",
+        "nav.notifications", "nav.backups", "nav.owner"]) {
+        await go(page, locale, nav);
+        await expectNoPounds(page, nav);
+      }
+
+      // What the demo is shown for: customers owing, suppliers owed — all of it in dollars.
+      const owing = await call<{ customers: { balances: { currency: string; balance: string }[] }[] }>(page.request, "Customers", "Outstanding");
+      expect(owing.customers.filter((c) => c.balances.some((b) => b.currency === "USD" && !/^-?0(\.0+)?$/.test(b.balance))).length).toBeGreaterThan(5);
+      const book = await call<{ totals: { currency: string; balance: string }[] }>(page.request, "Suppliers", "List", { text: "", includeInactive: false });
+      expect(book.totals.map((t) => t.currency)).toEqual(["USD"]);
     });
 
     test(`J10 the rate by hand, and the language switched mid-session — ${locale}`, async ({ page }) => {

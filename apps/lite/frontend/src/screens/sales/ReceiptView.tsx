@@ -13,6 +13,7 @@ import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { TextField } from "@/ui/Field";
 import { ratePair } from "@/i18n/figures";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { Money, isZero } from "./Money";
 
 /**
@@ -35,6 +36,7 @@ export function ReceiptView({
   const client = useClient();
   const { withOwner } = useOwner();
   const { t, tDynamic, errorText, locale } = useLocale();
+  const { usdOnly } = useCurrencies();
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<unknown>(null);
@@ -169,9 +171,12 @@ export function ReceiptView({
         ) : null}
 
         <footer className="space-y-1 border-t border-dashed border-border pt-2 text-center text-text-muted">
-          <p>
-            {t("receipt.rate", ratePair(sale.rate, sale.localCurrency, locale, tDynamic))}
-          </p>
+          {/* A dollars-only shop's receipt names no rate, as its printed receipt does not (0.10.1). */}
+          {usdOnly ? null : (
+            <p data-testid="receipt-rate">
+              {t("receipt.rate", ratePair(sale.rate, sale.localCurrency, locale, tDynamic))}
+            </p>
+          )}
           <p>{t("receipt.thanks")}</p>
         </footer>
       </article>

@@ -52,12 +52,16 @@ export function DayStatement({ report }: { report: DayReport }) {
       {p.unknownLines > 0 ? (
         <Alert
           tone="danger"
-          title={t("reports.unknown_cost", {
-            count: formatInteger(p.unknownLines, locale),
-            usd: formatDecimal(p.unknownUsd, locale),
-            local: formatDecimal(p.unknownLocal, locale),
-            currency: tDynamic(`currency.short.${cur}`),
-          })}
+          title={
+            usdOnly
+              ? t("reports.unknown_cost_usd", { count: formatInteger(p.unknownLines, locale), usd: formatDecimal(p.unknownUsd, locale) })
+              : t("reports.unknown_cost", {
+                  count: formatInteger(p.unknownLines, locale),
+                  usd: formatDecimal(p.unknownUsd, locale),
+                  local: formatDecimal(p.unknownLocal, locale),
+                  currency: tDynamic(`currency.short.${cur}`),
+                })
+          }
         >
           {t("reports.unknown_cost_hint")}
         </Alert>
@@ -66,12 +70,14 @@ export function DayStatement({ report }: { report: DayReport }) {
       {p.openLines > 0 ? (
         // Not a warning: an open-priced item has no cost by design (2026-09-23). Said, so the day still adds up to the drawer.
         <p className="rounded-md border border-border bg-surface-raised p-3 text-sm" data-testid="open-items">
-          {t("reports.open_items", {
-            count: formatInteger(p.openLines, locale),
-            usd: formatDecimal(p.openUsd, locale),
-            local: formatDecimal(p.openLocal, locale),
-            currency: tDynamic(`currency.short.${cur}`),
-          })}
+          {usdOnly
+            ? t("reports.open_items_usd", { count: formatInteger(p.openLines, locale), usd: formatDecimal(p.openUsd, locale) })
+            : t("reports.open_items", {
+                count: formatInteger(p.openLines, locale),
+                usd: formatDecimal(p.openUsd, locale),
+                local: formatDecimal(p.openLocal, locale),
+                currency: tDynamic(`currency.short.${cur}`),
+              })}
         </p>
       ) : null}
 
@@ -133,9 +139,12 @@ export function DayStatement({ report }: { report: DayReport }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-text-muted">
-        {report.rate ? t("reports.rate_note", { rate: formatDecimal(report.rate, locale) }) : t("reports.rate_note_range")}
-      </p>
+      {/* The note says at what rates the pound column was converted; a dollars-only shop has none (0.10.1). */}
+      {usdOnly ? null : (
+        <p className="text-xs text-text-muted" data-testid="rate-note">
+          {report.rate ? t("reports.rate_note", { rate: formatDecimal(report.rate, locale) }) : t("reports.rate_note_range")}
+        </p>
+      )}
 
       <h3 className="font-semibold">{t("reports.takings")}</h3>
       <div className="grid gap-3 sm:grid-cols-2">

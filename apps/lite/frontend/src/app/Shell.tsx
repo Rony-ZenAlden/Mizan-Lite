@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { Bell } from "@/alerts/Bell";
 import { NotificationProvider } from "@/alerts/NotificationProvider";
@@ -10,6 +10,7 @@ import { formatCountdown } from "@/i18n/numbers";
 import { formatAge } from "@/i18n/time";
 import { useRate } from "@/rates/RateProvider";
 import { useOwner } from "@/owner/OwnerProvider";
+import { ShopProvider, useShop } from "@/shop/ShopProvider";
 import { Button } from "@/ui/Button";
 import { Alert } from "@/ui/Alert";
 import { ratePair } from "@/i18n/figures";
@@ -24,10 +25,12 @@ import { ROUTES } from "./routes";
  */
 export function Shell() {
   return (
-    <NotificationProvider>
-      <Frame />
-      <Toasts />
-    </NotificationProvider>
+    <ShopProvider>
+      <NotificationProvider>
+        <Frame />
+        <Toasts />
+      </NotificationProvider>
+    </ShopProvider>
   );
 }
 
@@ -36,7 +39,8 @@ function Frame() {
   const { t, tDynamic, locale, adoptStored, saveError, errorText } = useLocale();
   const { status, lock } = useOwner();
   const { rate } = useRate();
-  const [shopName, setShopName] = useState("");
+  const { shop } = useShop();
+  const shopName = shop?.name ?? "";
 
   // Proof, in the log, that the packaged webview reached its own backend (L0) — the smoke test waits for this line.
   useEffect(() => {
@@ -52,7 +56,6 @@ function Frame() {
       .then((stored) => {
         if (cancelled) return;
         if (isLocale(stored.locale)) adoptStored(stored.locale);
-        setShopName(stored.shopName);
       })
       .catch(() => {
         // Keep the language already on screen; a settings read failing is not worth a banner here.
@@ -67,9 +70,23 @@ function Frame() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-border bg-surface-raised px-6 py-3">
-        <div>
-          <p className="text-lg font-semibold">{shopName || t("app.name")}</p>
-          {shopName ? <p className="text-xs text-text-muted">{t("app.name")}</p> : null}
+        <div className="flex min-w-0 items-center gap-3">
+          {shop?.logo ? (
+            // The shop's own logo, on a light ground so a dark mark reads in the dark theme too (0.10.1). The name beside it
+            // says what it is, so the picture itself is decorative.
+            <img
+              src={`data:image/png;base64,${shop.logo}`}
+              alt=""
+              data-testid="header-logo"
+              className="h-11 w-auto max-w-40 shrink-0 rounded-md bg-white object-contain p-1 shadow-sm"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="truncate text-lg font-semibold" data-testid="header-shop-name">
+              {shopName || t("app.name")}
+            </p>
+            {shopName ? <p className="text-xs text-text-muted">{t("app.name")}</p> : null}
+          </div>
         </div>
         {rate?.usdOnly ? (
           // A dollars-only shop reads no rate on its screens (0.10.0).

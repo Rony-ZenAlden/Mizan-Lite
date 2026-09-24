@@ -82,6 +82,23 @@ type Line struct {
 	Style   Style
 }
 
+// Scaled is the line set at f times its size: its size and every position together, so it draws as the same text, smaller.
+// Shaping here is unhinted — a line's advances are proportional to its size — so nothing needs shaping again (0.10.1).
+func (l Line) Scaled(f float32) Line {
+	out := l
+	out.Glyphs = make([]Glyph, len(l.Glyphs))
+	for i, g := range l.Glyphs {
+		g.X *= f
+		g.Y *= f
+		out.Glyphs[i] = g
+	}
+	out.Width *= f
+	out.Ascent *= f
+	out.Descent *= f
+	out.Style.Size *= f
+	return out
+}
+
 const (
 	lri = '⁦' // left-to-right isolate
 	pdi = '⁩' // pop directional isolate

@@ -34,12 +34,15 @@ export async function call<T = unknown>(request: APIRequestContext, facade: stri
   return envelope.data;
 }
 
-/** A new shop for the journey: "empty" (a fresh installation) or "seeded" (the demo shop), in the language asked for. */
-export async function reset(page: Page, fixture: "empty" | "seeded", locale: Locale): Promise<{ saveDir: string; dataDir: string }> {
+/**
+ * A new shop for the journey: "empty" (a fresh installation), "seeded" (the pantry demo) or "home" (the furniture demo of
+ * 0.10.1: dollars only, with its logo), in the language asked for.
+ */
+export async function reset(page: Page, fixture: "empty" | "seeded" | "home", locale: Locale): Promise<{ saveDir: string; dataDir: string }> {
   const response = await page.request.post("/__e2e/reset", { data: { fixture } });
   expect(response.ok(), await response.text()).toBeTruthy();
   const info = (await response.json()) as { saveDir: string; dataDir: string };
-  if (fixture === "seeded") await call(page.request, "Settings", "Update", { locale });
+  if (fixture !== "empty") await call(page.request, "Settings", "Update", { locale });
   await page.goto("/");
   return info;
 }
@@ -110,6 +113,31 @@ export async function checkStructure(page: Page, locale: Locale, view: string) {
 /** Saves the view into the visual pack (L8 §3.4) — looked at by a person each release, never compared pixel by pixel. */
 export async function capture(page: Page, name: string) {
   await page.screenshot({ path: fileURLToPath(new URL(`../../../../build/lite-e2e/screens/${name}.png`, import.meta.url)), fullPage: false });
+}
+
+/**
+ * Asserts a dollars-only shop's screen names no pounds (0.10.1, the owner's report of 2026-09-24): no pound figure, no pound
+ * column, no pound currency name — in the page's text or in any control's options. The screen is given a moment to load first,
+ * since a check that nothing is there passes on a screen that has not drawn yet.
+ */
+export async function expectNoPounds(page: Page, view: string) {
+  await page.waitForLoadState("networkidle");
+  await page.waitForTimeout(400);
+  const found = await page.evaluate(() => {
+    const pound = /ل\.س|ليرة|SYP|pound/i;
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = (node.textContent ?? "").trim();
+      if (pound.test(text)) out.push(text.slice(0, 80));
+    }
+    for (const img of Array.from(document.querySelectorAll("img[alt]"))) {
+      const alt = img.getAttribute("alt") ?? "";
+      if (pound.test(alt)) out.push(`alt: ${alt.slice(0, 80)}`);
+    }
+    return out;
+  });
+  expect(found, `pounds on ${view}`).toEqual([]);
 }
 
 /** Waits until a locator's text, as a reader sees it, contains the expected text. */

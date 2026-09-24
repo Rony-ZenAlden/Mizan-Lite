@@ -9,6 +9,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/kernel/locale"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/documents"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 	settingsdomain "github.com/mizan-erp/mizan/internal/lite/settings/domain"
 	"github.com/mizan-erp/mizan/internal/lite/typeset"
 	"github.com/mizan-erp/mizan/internal/platform/i18n"
@@ -52,6 +53,10 @@ func newWords(ctx context.Context, app *bootstrap.App) (words, error) {
 	}
 	return w, nil
 }
+
+// usdOnly reports whether the shop has gone over to dollars only (0.10.0): its documents then carry no pound figure — no
+// rate line, no pound column, no pound reading of a dollar amount (0.10.1).
+func (w words) usdOnly() bool { return moneyfmt.Parse(w.settings.MoneyDisplay) == moneyfmt.USD }
 
 // t translates a key; params are key–value pairs.
 func (w words) t(key string, params ...string) string {

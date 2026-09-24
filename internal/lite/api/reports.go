@@ -306,12 +306,24 @@ func (v reportView) day(d domain.Day, withRate bool) DayReportDTO {
 		dto.Categories = append(dto.Categories, CategoryDTO{Category: c.Category, Amount: v.amount(c.Amount)})
 	}
 	for _, t := range d.Takings {
+		// A dollars-only shop takes no pounds, and a column of pound noughts under "in the drawer" records nothing
+		// (0.10.1). A day that did take pounds — the day the shop went over — still lists them: that is a record.
+		if v.shop.USDOnly() && t.Currency != v.pair.USD.Code && idle(t) {
+			continue
+		}
 		m := func(minor int64) string { return v.money(minor, t.Currency) }
 		dto.Takings = append(dto.Takings, TakingsDTO{Currency: t.Currency, Sales: t.Sales, Charged: m(t.ChargedMinor), CreditSales: t.CreditSales,
 			Credit: m(t.CreditMinor), Discounts: m(t.DiscountMinor), Rounding: m(t.RoundingMinor), Voids: t.Voids, Voided: m(t.VoidedMinor),
 			Collected: m(t.CollectedMinor), Refunded: m(t.RefundedMinor), WrittenOff: m(t.WrittenOffMinor)})
 	}
 	return dto
+}
+
+// idle reports whether a currency's takings for the day are nothing at all.
+func idle(t domain.Takings) bool {
+	return t.Sales == 0 && t.ChargedMinor == 0 && t.CreditSales == 0 && t.CreditMinor == 0 && t.DiscountMinor == 0 &&
+		t.RoundingMinor == 0 && t.Voids == 0 && t.VoidedMinor == 0 && t.CollectedMinor == 0 && t.RefundedMinor == 0 &&
+		t.WrittenOffMinor == 0
 }
 
 // Day is a business day's statement ("" for today). Owner only.

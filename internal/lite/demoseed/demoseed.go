@@ -69,7 +69,7 @@ const CodeReportsInconsistent = "lite.demoseed.reports_inconsistent"
 // directory — a decision for whoever runs this, not something a seeder should do on their behalf.
 const CodeAlreadySetUp = "lite.demoseed.already_set_up"
 
-//go:embed data/catalogue.json data/stock.json data/rates.json data/sales.json data/customers.json
+//go:embed data/catalogue.json data/stock.json data/rates.json data/sales.json data/customers.json data/home.json
 var data embed.FS
 
 type rateLine struct {
@@ -207,6 +207,12 @@ type Options struct {
 	Days  int
 	Clock *clock.Fixed
 	Now   time.Time
+	// Profile is the shop seeded: ProfilePantry, the default the journeys run on, or ProfileHome — the furniture and
+	// home-goods shop of 0.10.1 (home.go).
+	Profile string
+	// Logo is the shop's logo, a PNG or JPEG, set as the owner uploads one. The home profile requires it; the pantry shop
+	// has none.
+	Logo []byte
 }
 
 // Result is what a run produced, for the command to print.
@@ -250,6 +256,12 @@ type Result struct {
 	// Suppliers and Purchases are the payables book (0.10.0).
 	Suppliers int
 	Purchases int
+	// Profile is the shop seeded; Logo, Returns, SupplierPayments and Losses are the home demo's (0.10.1).
+	Profile          string
+	Logo             bool
+	Returns          int
+	SupplierPayments int
+	Losses           int
 }
 
 // NewClock is a clock fixed on now, for the graph the seeder steps through its history: the command wires Lite and imports
@@ -267,6 +279,13 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	}
 	if done {
 		return Result{}, errs.Conflict(CodeAlreadySetUp, "this installation is already set up")
+	}
+	switch opts.Profile {
+	case "", ProfilePantry:
+	case ProfileHome:
+		return runHome(ctx, app, opts)
+	default:
+		return Result{}, errs.Validation(CodeUnknownProfile, "no such demo shop").WithParam("profile", opts.Profile)
 	}
 
 	var cat catalogue
@@ -293,7 +312,7 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 	if opts.Days > 0 && opts.Clock == nil {
 		return Result{}, errs.Internal(CodeReportsInconsistent, "history needs the clock the graph was started with")
 	}
-	res := Result{ShopName: cat.ShopName}
+	res := Result{ShopName: cat.ShopName, Profile: ProfilePantry}
 	start := opts.Now
 	if opts.Days > 0 {
 		now := opts.Now.In(time.Local)

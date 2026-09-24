@@ -17,8 +17,12 @@ import (
 )
 
 // isZeroFigure is a figure Go formatted that is zero ("0", "0.00", "-0") or absent: a comparison of text, deciding whether a line
-// is printed — never arithmetic.
+// is printed — never arithmetic. A dual reading is zero when its new figure is: until 0.10.1 "0 (0)" read as a figure, and an
+// invoice or a receipt of a shop reading both pounds printed a discount of "(0) 0" (found 2026-09-24).
 func isZeroFigure(s string) bool {
+	if fresh, _, dual := moneyfmt.SplitDual(s); dual {
+		s = fresh
+	}
 	for _, r := range s {
 		if r != '0' && r != '.' && r != '-' {
 			return false
@@ -178,8 +182,10 @@ func invoicePartyOf(ctx context.Context, app *bootstrap.App, sale SaleDTO) (invo
 }
 
 // invoiceColumns are the model invoice's columns, start edge first (2026-09-24): the line's total, the item, how many,
-// the unit, the cartons, a note, the price. Widths are relative.
-var invoiceColumns = []int{14, 28, 9, 9, 7, 12, 15}
+// the unit, the cartons, a note, the price. Widths are relative. The total and the price are the widest figures on the
+// page — a pound total runs to seven digits, a dual reading to twice that — so they have the room (0.10.1): a figure
+// that still does not fit breaks at its bracket or is set smaller, and never crosses into the next column.
+var invoiceColumns = []int{16, 25, 9, 9, 7, 11, 17}
 
 // invoiceDocument is a sale's A4 invoice, laid out as the owner's model invoice (2026-09-24): the shop at the head —
 // its logo, or its name in type — the customer and the date, a ruled table of the lines, and under it the cartons, the
@@ -340,7 +346,7 @@ func (w words) testDocument(printer string) documents.Document {
 
 // rateLine is a printout's exchange-rate line — none in a dollars-only shop, which prints no rate (0.10.0).
 func (w words) rateLine(rate, local string, center bool) []documents.Block {
-	if moneyfmt.Parse(w.settings.MoneyDisplay) == moneyfmt.USD {
+	if w.usdOnly() {
 		return nil
 	}
 	return []documents.Block{documents.Paragraph{Text: w.rate(rate, local), Small: true, Center: center}}
@@ -396,18 +402,30 @@ func (w words) zReportDocument(day DayReportDTO, shopName string) documents.Docu
 	blocks := w.header(shopName, 1, w.t("zreport.title"))
 	blocks = append(blocks, documents.Pairs{Rows: []documents.Pair{
 		{Label: w.t("doc.date"), Value: documents.T(w.fig(day.Date))},
-		{Label: w.t("zreport.printed"), Value: documents.T(w.now())},
+		{Label: w.t("zreport.printed_at"), Value: documents.T(w.now())},
 	}}, documents.Rule{})
 
-	local := func(a AmountDTO) documents.Cell { return documents.T(w.money(a.Local, day.LocalCurrency)) }
+	// The day is read in the pounds the shop counts, at each sale's rate — or, in a dollars-only shop, in dollars: a Z report
+	// printed after going over read its revenue, profit and net in pounds until 0.10.1 (found 2026-09-24).
+	cur := day.LocalCurrency
+	reading := func(usd, local string) string { return w.money(local, cur) }
+	if w.usdOnly() {
+		cur = "USD"
+		reading = func(usd, local string) string { return w.money(usd, cur) }
+	}
+	local := func(a AmountDTO) documents.Cell { return documents.T(reading(a.USD, a.Local)) }
+	zero := func(a AmountDTO) bool { return isZeroFigure(a.Local) }
+	if w.usdOnly() {
+		zero = func(a AmountDTO) bool { return isZeroFigure(a.USD) }
+	}
 
 	blocks = append(blocks,
 		documents.Heading{Text: w.t("zreport.sales")},
 		documents.Pairs{Rows: []documents.Pair{
-			{Label: w.t("reports.sales_count"), Value: documents.T(w.fig(strconv.Itoa(day.Profit.Sales)))},
-			{Label: w.t("reports.revenue"), Value: documents.T(w.money(day.Profit.RevenueLocal, day.LocalCurrency))},
-			{Label: w.t("reports.cost"), Value: documents.T(w.money(day.Profit.CostLocal, day.LocalCurrency))},
-			{Label: w.t("reports.profit"), Value: documents.T(w.money(day.Profit.ProfitLocal, day.LocalCurrency)), Bold: true},
+			{Label: w.t("zreport.sales_count"), Value: documents.T(w.fig(strconv.Itoa(day.Profit.Sales)))},
+			{Label: w.t("reports.revenue"), Value: documents.T(reading(day.Profit.RevenueUSD, day.Profit.RevenueLocal))},
+			{Label: w.t("reports.cost"), Value: documents.T(reading(day.Profit.CostUSD, day.Profit.CostLocal))},
+			{Label: w.t("reports.profit"), Value: documents.T(reading(day.Profit.ProfitUSD, day.Profit.ProfitLocal)), Bold: true},
 		}})
 
 	// Returns, where any came back — a line that is absent on a day nothing was returned rather than a printed zero.
@@ -422,10 +440,10 @@ func (w words) zReportDocument(day DayReportDTO, shopName string) documents.Docu
 	}
 
 	rows := []documents.Pair{}
-	if !isZeroFigure(day.DailyExpenses.Local) {
+	if !zero(day.DailyExpenses) {
 		rows = append(rows, documents.Pair{Label: w.t("zreport.expenses_daily"), Value: local(day.DailyExpenses)})
 	}
-	if !isZeroFigure(day.PeriodicExpenses.Local) {
+	if !zero(day.PeriodicExpenses) {
 		rows = append(rows, documents.Pair{Label: w.t("zreport.expenses_periodic"), Value: local(day.PeriodicExpenses)})
 	}
 	if len(rows) > 0 {
@@ -434,7 +452,7 @@ func (w words) zReportDocument(day DayReportDTO, shopName string) documents.Docu
 			documents.Heading{Text: w.t("zreport.expenses")}, documents.Pairs{Rows: rows})
 	}
 
-	if !isZeroFigure(day.Losses.Out.Local) || !isZeroFigure(day.BadDebts.Local) {
+	if !zero(day.Losses.Out) || !zero(day.BadDebts) {
 		blocks = append(blocks, documents.Rule{Dashed: true}, documents.Pairs{Rows: []documents.Pair{
 			{Label: w.t("reports.losses"), Value: local(day.Losses.Out)},
 			{Label: w.t("reports.bad_debts"), Value: local(day.BadDebts)},
@@ -442,7 +460,7 @@ func (w words) zReportDocument(day DayReportDTO, shopName string) documents.Docu
 	}
 
 	blocks = append(blocks, documents.Rule{}, documents.Pairs{Rows: []documents.Pair{
-		{Label: w.t("reports.net"), Value: documents.T(w.money(day.NetLocal, day.LocalCurrency)), Bold: true},
+		{Label: w.t("reports.net"), Value: documents.T(reading(day.NetUSD, day.NetLocal)), Bold: true},
 	}})
 
 	// What is in the drawer, per currency, which is what the person closing up is actually counting against.

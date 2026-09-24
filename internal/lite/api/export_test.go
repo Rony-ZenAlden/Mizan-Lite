@@ -6,6 +6,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/api/envelope"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/documents"
+	"github.com/mizan-erp/mizan/internal/lite/sheets"
 )
 
 // CallForTest runs fn through the same guard every binding uses.
@@ -38,6 +39,20 @@ func ExportDocument(set *Set, kind string, in any) (documents.Document, error) {
 	}
 	// The same heading render() puts on the PDF, so a test reads what a shop would print.
 	return documents.Document{Direction: w.dir, Running: w.settings.ShopName, Blocks: append(w.paperHeader(x), x.blocks...)}, err
+}
+
+// ExportSheets is a report's workbook, as an Excel export would write it.
+func ExportSheets(set *Set, in ExportReportInput) ([]sheets.Sheet, error) {
+	ctx, app, err := set.core.ready()
+	if err != nil {
+		return nil, err
+	}
+	w, err := newWords(ctx, app)
+	if err != nil {
+		return nil, err
+	}
+	x, err := reportContent(ctx, app, w, in)
+	return x.sheets, err
 }
 
 // PrintDocument is the document a print would render.

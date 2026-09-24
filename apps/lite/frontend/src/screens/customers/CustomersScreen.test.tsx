@@ -1,7 +1,7 @@
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { aCustomer, anEntry, aSale, aStatement, fakeClient, renderWithProviders } from "@/api/testing";
+import { aCustomer, anEntry, aRate, aSale, aStatement, fakeClient, renderWithProviders } from "@/api/testing";
 import { BindingError } from "@/api/envelope";
 import type { DebtAmountInput, Entry, PaymentInput, PaymentQuote, ReverseEntryInput, Statement } from "@/api/client";
 import { isNegative, unsigned } from "./Balances";
@@ -153,6 +153,25 @@ describe("CustomersScreen — payments", () => {
     // Its voucher follows, and prints itself: the shop prints payments automatically (Q-L7.2).
     const voucher = await screen.findByRole("dialog", { name: "Voucher — Payment" });
     expect(await within(voucher).findByText("Sent to Xprinter XP-80")).toBeInTheDocument();
+  });
+
+  it("in a dollars-only shop a payment is taken in dollars and names no rate (0.10.1)", async () => {
+    const quotePayment = vi.fn(async (input: PaymentInput): Promise<PaymentQuote> => ({
+      currency: "USD", tenderCurrency: "USD", tendered: "5.00", changeCurrency: "USD", change: "0.00",
+      settled: "5.00", balanceBefore: "9.58", balanceAfter: "4.58", all: input.all, rate: "15000", token: "part",
+    }));
+    const dollarsOnly = aCustomer({ balances: [{ currency: "USD", balance: "9.58", owedSince: "2026-09-12", lastPayment: "", reference: "", referenceCurrency: "" }] });
+    const dialog = await openStatement(fakeClient({
+      customers: { quotePayment, search: async () => [dollarsOnly], statement: async () => aStatement({ currency: "USD" }) },
+      fx: { current: async () => aRate({ usdOnly: true }) },
+    }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Take payment" }));
+    const pay = await screen.findByRole("dialog", { name: "Payment — أبو محمد (US dollar)" });
+    await userEvent.type(within(pay).getByLabelText("Amount handed over"), "5");
+    await settle();
+    expect(within(pay).getByTestId("payment-quote")).toHaveTextContent("Settles5.00 USD");
+    expect(within(pay).queryByTestId("payment-rate")).not.toBeInTheDocument();
+    expect(pay).not.toHaveTextContent(/SYP|pound/i);
   });
 
   it("a payment gone stale is quoted again and must be recorded again", async () => {

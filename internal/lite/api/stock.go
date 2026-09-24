@@ -175,6 +175,8 @@ func (s *Stock) Valuation() envelope.Result[ValuationDTO] {
 		if err != nil {
 			return ValuationDTO{}, err
 		}
+		// A dollars-only shop values its stock in dollars alone (0.10.1): no pound column, as with no rate.
+		hasRate = hasRate && !shop.USDOnly()
 		var totalLocal int64
 		for _, l := range v.Lines {
 			line := ValuationLineDTO{

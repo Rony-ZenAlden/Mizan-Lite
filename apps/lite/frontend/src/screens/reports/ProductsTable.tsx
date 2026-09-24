@@ -95,7 +95,8 @@ export function ProductsTable({ report }: { report: ProductsReport }) {
             ))}
             <tr data-testid="reconciling" className="border-t border-border text-text-muted">
               <td className="p-2" colSpan={2}>
-                {t("reports.reconciling")}
+                {/* A dollars-only shop has no pound rounding to reconcile (0.10.1). */}
+                {usdOnly ? t("reports.reconciling_usd") : t("reports.reconciling")}
               </td>
               <td className="p-2">
                 <Money value={report.discountUsd} currency="USD" />

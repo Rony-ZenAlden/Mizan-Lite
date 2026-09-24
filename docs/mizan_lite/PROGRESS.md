@@ -1,7 +1,10 @@
 # Mizan Lite — progress
 
 > **The resume point.** Read this first when picking Lite back up.
-> **Last updated:** 2026-09-17 (0.9.1 shipped; 0.9.2 adds the cost price. The stocktake is designed, not built). **Branch:** `lite/l0-skeleton`.
+> **Last updated:** 2026-09-25 (0.10.1: dollars only everywhere, figures that stay in their cells, the shop's logo on screen,
+> the furniture demo — [DECISIONS.md](DECISIONS.md) D-0101, [DEMO.md](DEMO.md)). Releases 0.9.3 to 0.10.1 are recorded release
+> by release in [DECISIONS.md](DECISIONS.md) and listed in [README.md](README.md). The stocktake is designed, not built.
+> **Branch:** `lite/l0-skeleton`.
 
 ---
 

@@ -90,6 +90,18 @@ func (v reportView) losses(report domain.LossReport) LossReportDTO {
 	for _, t := range report.ByReason {
 		dto.ByReason = append(dto.ByReason, LossTotalDTO{Reason: t.Reason, Lines: t.Lines, Value: v.amount(t.Value)})
 	}
+	if v.shop.USDOnly() {
+		// A dollars-only shop reads its losses in dollars (0.10.1). Without the local currency the screen has no pound
+		// column to draw, and the pound figures are not sent at all.
+		dto.LocalCurrency = ""
+		dto.Total.Local = ""
+		for i := range dto.Lines {
+			dto.Lines[i].Value.Local = ""
+		}
+		for i := range dto.ByReason {
+			dto.ByReason[i].Value.Local = ""
+		}
+	}
 	for _, a := range report.Arrival {
 		dto.Arrival = append(dto.Arrival, ArrivalDamageDTO{BusinessDate: a.BusinessDate, PurchaseNo: a.PurchaseNo,
 			SupplierName: a.SupplierName, ProductID: a.ProductID.String(), NameAR: a.NameAR, NameEN: a.NameEN, UnitCode: a.UnitCode,

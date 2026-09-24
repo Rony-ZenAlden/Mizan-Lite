@@ -414,6 +414,29 @@ func TestTheDrawerSumsMoneyInTheCurrencyItMovedIn(t *testing.T) {
 	}
 }
 
+// TestMoneyPaidToSuppliersLeavesTheDrawer (0.10.0): paid out of the drawer in the currency it was paid in, a supplier's
+// refund back into it, and each reversal counted against what it undoes.
+func TestMoneyPaidToSuppliersLeavesTheDrawer(t *testing.T) {
+	date := "2026-09-24"
+	suppliers := []domain.SupplierCash{
+		{BusinessDate: date, Currency: "SYP", PaidOutMinor: 400_000},
+		{BusinessDate: date, Currency: "USD", PaidOutMinor: 5_000},
+		{BusinessDate: date, Currency: "USD", RefundInMinor: 1_800},
+		{BusinessDate: date, Currency: "USD", PaidOutMinor: -5_000}, // the dollar payment, reversed
+		{BusinessDate: "2026-09-23", Currency: "SYP", PaidOutMinor: 999_000},
+	}
+	cash := []domain.CashEntry{{BusinessDate: date, Kind: domain.CashDeposit, Currency: "SYP", AmountMinor: 500_000}}
+	d := domain.DrawerOf(domain.DrawerFacts{Pair: pair, Cash: cash, Suppliers: suppliers,
+		LastCounts: map[string]domain.CashEntry{"SYP": {BusinessDate: "2026-09-23", Kind: domain.CashCount, Currency: "SYP", AmountMinor: 0}}}, date)
+	usd, syp := d.Currencies[0], d.Currencies[1]
+	if usd.SuppliersOut != 0 || usd.SuppliersIn != 1_800 || usd.Expected != 1_800 {
+		t.Fatalf("dollars %+v", usd)
+	}
+	if syp.SuppliersOut != 400_000 || syp.Opening != 0 || syp.Expected != 100_000 {
+		t.Fatalf("pounds %+v — the payment of the 23rd was counted before that day's count closed it", syp)
+	}
+}
+
 func TestAVoidReturnsWhatTheReceiptSaysWasPaid(t *testing.T) {
 	credit := domain.Sale{BusinessDate: "2026-09-13", Credit: true, SettlementCurrency: "SYP", TotalMinor: 76_000, CreditMinor: 56_000,
 		TenderedCurrency: "USD", TenderedMinor: 200, ChangeCurrency: "SYP", Voided: true, VoidBusinessDate: "2026-09-14",

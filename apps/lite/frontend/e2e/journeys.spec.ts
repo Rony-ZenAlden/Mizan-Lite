@@ -354,6 +354,65 @@ for (const locale of LOCALES) {
       await expect(page.getByTestId("alerts-stale")).toHaveCount(0);
     });
 
+    // 0.10.0 (2026-09-24): the suppliers' book, apart from the customers' debts — a supplier, a delivery on credit with
+    // damaged jars and a discount, the good jars into stock at what they really cost, and money paid from the drawer.
+    test(`J13 a supplier, a purchase on credit with damage and a discount, and a payment from the drawer — ${locale}`, async ({ page }) => {
+      await reset(page, "seeded", locale);
+      const products = await call<{ id: string; barcode: string }[]>(page.request, "Catalog", "Products", { text: "", includeInactive: true });
+      const molassesId = products.find((p) => p.barcode === MOLASSES.barcode)!.id;
+      const onHand = async () => (await call<{ productId: string; onHand: string }[]>(page.request, "Stock", "Levels")).find((l) => l.productId === molassesId)?.onHand ?? "0";
+      const before = Number(await onHand());
+
+      await go(page, locale, "nav.suppliers");
+      await page.getByRole("button", { name: label(locale, "suppliers.new") }).click();
+      const form = page.getByRole("dialog", { name: label(locale, "suppliers.new_title") });
+      await form.getByLabel(label(locale, "suppliers.name")).fill("المروى");
+      await form.getByLabel(label(locale, "suppliers.city")).fill("حلب");
+      await checkStructure(page, locale, "a new supplier");
+      await form.getByRole("button", { name: label(locale, "action.save") }).click();
+
+      // The new supplier's account opens; the purchase starts from it. Twelve jars at $2.50, two broken, 10% off.
+      const account = page.getByRole("dialog", { name: label(locale, "suppliers.account_title", { name: "المروى" }) });
+      await account.getByRole("button", { name: label(locale, "suppliers.new_purchase") }).click();
+      const purchase = page.getByRole("dialog", { name: label(locale, "purchase.title") });
+      const find = purchase.getByLabel(label(locale, "purchase.add_item"));
+      await find.fill(MOLASSES.barcode);
+      await find.press("Enter");
+      const item = name(MOLASSES, locale);
+      await purchase.getByLabel(label(locale, "purchase.quantity_of", { name: item }), { exact: true }).fill("12");
+      await purchase.getByLabel(label(locale, "purchase.damaged_of", { name: item }), { exact: true }).fill("2");
+      await purchase.getByLabel(label(locale, "purchase.unit_cost_of", { name: item }), { exact: true }).fill("2.50");
+      await purchase.getByLabel(label(locale, "purchase.discount_of", { name: item }), { exact: true }).fill("10");
+      // Go's quote: ten good jars at $2.50 less 10% — $22.50, $2.25 a jar — all of it on the supplier's account.
+      await expectReadable(purchase.getByTestId("line-due"), "22.50");
+      await expectReadable(purchase.getByTestId("line-net-cost"), "2.25");
+      await checkStructure(page, locale, "a purchase");
+      await purchase.getByRole("button", { name: label(locale, "purchase.record") }).click();
+      await expect(page.getByTestId("purchase-view").getByTestId("purchase-line")).toHaveCount(1);
+      await checkStructure(page, locale, "a recorded purchase");
+      await page.getByTestId("purchase-view-back").click();
+      await expect(page.getByTestId("purchase-view")).toHaveCount(0);
+
+      // Only the good jars went into stock.
+      expect(Number(await onHand())).toBe(before + 10);
+
+      // Ten dollars paid from the drawer.
+      await account.getByRole("button", { name: label(locale, "suppliers.pay") }).click();
+      const pay = page.getByRole("dialog", { name: label(locale, "suppliers.pay_title", { name: "المروى" }) });
+      await pay.getByLabel(label(locale, "suppliers.currency")).selectOption("USD");
+      await pay.getByLabel(label(locale, "suppliers.amount", { currency: label(locale, "currency.USD") })).fill("10");
+      await checkStructure(page, locale, "paying a supplier");
+      await pay.getByRole("button", { name: label(locale, "action.save") }).click();
+      await expect(pay).toBeHidden();
+      await expectReadable(account.getByTestId("supplier-balance"), "12.50");
+
+      // What Go recorded: $12.50 still owed, and the drawer expecting $10.00 less than it would have.
+      const list = await call<{ totals: { currency: string; balance: string }[] }>(page.request, "Suppliers", "List", { text: "", includeInactive: false });
+      expect(list.totals).toEqual([{ currency: "USD", balance: "12.50" }]);
+      const drawer = await call<{ currencies: { currency: string; suppliersOut: string }[] }>(page.request, "Cash", "Drawer", "");
+      expect(drawer.currencies.find((c) => c.currency === "USD")!.suppliersOut).toBe("10.00");
+    });
+
     test(`J10 the rate by hand, and the language switched mid-session — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
       await go(page, locale, "nav.rates");

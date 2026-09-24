@@ -150,6 +150,16 @@ type Snapshot struct {
 	CashLocalMinor int64
 	OwedUSDMinor   int64
 	OwedLocalMinor int64
+	// PayableUSDMinor and PayableLocalMinor are what the shop owes its suppliers, net (0.10.0): a debt of the shop's is
+	// worth taken off what it holds, or a delivery bought on credit would look like the shop growing richer.
+	PayableUSDMinor   int64
+	PayableLocalMinor int64
+}
+
+// NetLocalMinor is the pounds the shop holds net of the pounds it owes: in the drawer and owed to it, less what it owes
+// its suppliers. A fall in the pound costs the shop what it holds and saves it what it owes.
+func (s Snapshot) NetLocalMinor() int64 {
+	return s.CashLocalMinor + s.OwedLocalMinor - s.PayableLocalMinor
 }
 
 // LocalToUSD converts local minor units to dollar minor units at a rate, half up.
@@ -163,11 +173,11 @@ func LocalToUSD(localMinor, rateNano int64, localDecimals, usdDecimals int) int6
 	return roundDiv(num, den)
 }
 
-// TotalUSDMinor is the snapshot in dollars: the stock (already dollars) and each currency's cash and debts, the local
-// parts at the snapshot's own rate.
+// TotalUSDMinor is the snapshot in dollars: the stock (already dollars) and each currency's cash and debts, less what is
+// owed to suppliers, the local parts at the snapshot's own rate.
 func (s Snapshot) TotalUSDMinor(localDecimals, usdDecimals int) int64 {
-	local := s.CashLocalMinor + s.OwedLocalMinor
-	return s.StockUSDMinor + s.CashUSDMinor + s.OwedUSDMinor + LocalToUSD(local, s.RateNano, localDecimals, usdDecimals)
+	return s.StockUSDMinor + s.CashUSDMinor + s.OwedUSDMinor - s.PayableUSDMinor +
+		LocalToUSD(s.NetLocalMinor(), s.RateNano, localDecimals, usdDecimals)
 }
 
 // Capital compares the shop's worth now with its worth at an earlier snapshot.
@@ -178,8 +188,9 @@ type Capital struct {
 	ThenUSD, NowUSD int64
 	ChangeMicro     int64
 	RateShiftMicro  int64
-	// DepreciationUSD is what the pounds the shop held on the earlier day — in the drawer and owed to it — lost in dollar
-	// value to the rate alone. It separates "the pound fell" from "the shop did badly", which a total cannot.
+	// DepreciationUSD is what the pounds the shop held on the earlier day — in the drawer and owed to it, less those it
+	// owed its suppliers — lost in dollar value to the rate alone. It separates "the pound fell" from "the shop did
+	// badly", which a total cannot. Below nought when the shop owed more pounds than it held: the fall was its gain.
 	DepreciationUSD int64
 	// Notify is whether the shift is large enough to be worth a notification.
 	Notify bool
@@ -212,7 +223,7 @@ func CompareCapital(then, now Snapshot, localDecimals, usdDecimals int) Capital 
 	if then.RateNano > 0 {
 		c.RateShiftMicro = roundDiv(new(big.Int).Mul(big.NewInt(now.RateNano-then.RateNano), big.NewInt(100_000_000)), big.NewInt(then.RateNano))
 	}
-	heldLocal := then.CashLocalMinor + then.OwedLocalMinor
+	heldLocal := then.NetLocalMinor()
 	c.DepreciationUSD = LocalToUSD(heldLocal, then.RateNano, localDecimals, usdDecimals) -
 		LocalToUSD(heldLocal, now.RateNano, localDecimals, usdDecimals)
 	threshold := int64(CapitalThresholdPercent) * 1_000_000

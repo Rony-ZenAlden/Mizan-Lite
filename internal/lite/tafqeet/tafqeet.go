@@ -211,10 +211,10 @@ var scales = []scale{
 // counted is v of a scale word. construct is set when the currency follows it directly, which drops the dual's nun and
 // the accusative's tanween: ألفا دولار، أحد عشر ألف دولار.
 func (s scale) counted(v uint64, construct bool) string {
-	switch {
-	case v == 1:
+	switch v {
+	case 1:
 		return s.one
-	case v == 2:
+	case 2:
 		if construct {
 			return s.twoConstruct
 		}

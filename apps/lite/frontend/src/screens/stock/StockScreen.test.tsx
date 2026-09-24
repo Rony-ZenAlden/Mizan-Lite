@@ -60,7 +60,7 @@ describe("StockScreen — quantities", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await settle();
 
-    expect(opening).toHaveBeenCalledWith({ productId: aProduct().id, quantity: "40", costMode: "total", cost: "48", currency: "USD", rate: "", note: "" });
+    expect(opening).toHaveBeenCalledWith({ productId: aProduct().id, quantity: "40", costMode: "total", cost: "48", currency: "USD", rate: "", note: "", discountPercent: "" });
     expect(receive).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -80,7 +80,7 @@ describe("StockScreen — receiving", () => {
     await userEvent.type(within(dialog).getByLabelText("Note (optional)"), "Abu Khalil");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await settle();
-    expect(receive).toHaveBeenLastCalledWith({ productId: aProduct().id, quantity: "٢٥", costMode: "total", cost: "63.10", currency: "USD", rate: "", note: "Abu Khalil" });
+    expect(receive).toHaveBeenLastCalledWith({ productId: aProduct().id, quantity: "٢٥", costMode: "total", cost: "63.10", currency: "USD", rate: "", note: "Abu Khalil", discountPercent: "" });
 
     dialog = await openDialog("Receive", "Receive stock — Olive oil");
     await userEvent.selectOptions(within(dialog).getByLabelText("Cost entered as"), "unit");
@@ -89,6 +89,15 @@ describe("StockScreen — receiving", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await settle();
     expect(receive).toHaveBeenLastCalledWith(expect.objectContaining({ costMode: "unit", cost: "1.262", quantity: "5" }));
+
+    // A supplier's discount travels as typed; Go costs the delivery at what was really paid (0.10.0).
+    dialog = await openDialog("Receive", "Receive stock — Olive oil");
+    await userEvent.type(within(dialog).getByLabelText("Quantity (Litre)"), "10");
+    await userEvent.type(within(dialog).getByLabelText("Total cost"), "20");
+    await userEvent.type(within(dialog).getByLabelText("Supplier's discount, %"), "5");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await settle();
+    expect(receive).toHaveBeenLastCalledWith(expect.objectContaining({ cost: "20", discountPercent: "5" }));
   });
 
   it("a delivery in pounds asks for the rate it was paid at, and cannot be saved without it", async () => {
@@ -111,7 +120,7 @@ describe("StockScreen — receiving", () => {
     await userEvent.type(rateField, "15000");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     await settle();
-    expect(receive).toHaveBeenCalledWith({ productId: aProduct().id, quantity: "25", costMode: "total", cost: "450000", currency: "SYP", rate: "15000", note: "" });
+    expect(receive).toHaveBeenCalledWith({ productId: aProduct().id, quantity: "25", costMode: "total", cost: "450000", currency: "SYP", rate: "15000", note: "", discountPercent: "" });
   });
 
   it("a quantity with more decimals than its unit takes is named as it is typed", async () => {

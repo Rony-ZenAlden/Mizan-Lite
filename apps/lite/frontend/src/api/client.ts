@@ -21,6 +21,7 @@ import * as Reports from "../../wailsjs/go/api/Reports";
 import * as Sales from "../../wailsjs/go/api/Sales";
 import * as Settings from "../../wailsjs/go/api/Settings";
 import * as Stock from "../../wailsjs/go/api/Stock";
+import * as Suppliers from "../../wailsjs/go/api/Suppliers";
 import * as Till from "../../wailsjs/go/api/Till";
 import { api } from "../../wailsjs/go/models";
 import { unwrap, type Plain } from "./envelope";
@@ -138,6 +139,23 @@ export type BackupStatus = Plain<api.BackupStatusDTO>;
 export type BackupEvery = "daily" | "weekly" | "monthly" | "manual";
 export type Loss = Plain<api.LossDTO>;
 export type RestoreResult = Plain<api.RestoreDTO>;
+export type Supplier = Plain<api.SupplierDTO>;
+export type SupplierBalance = Plain<api.SupplierBalanceDTO>;
+export type SupplierList = Plain<api.SupplierListDTO>;
+export type SupplierQuery = Plain<api.SupplierQueryDTO>;
+export type SupplierInput = Plain<api.SupplierInput>;
+export type UpdateSupplierInput = Plain<api.UpdateSupplierInput>;
+export type SupplierStatement = Plain<api.SupplierStatementDTO>;
+export type SupplierEntry = Plain<api.SupplierEntryDTO>;
+export type SupplierMoneyInput = Plain<api.SupplierMoneyInput>;
+export type Purchase = Plain<api.PurchaseDTO>;
+export type PurchaseLine = Plain<api.PurchaseLineDTO>;
+export type PurchaseInput = Plain<api.PurchaseInput>;
+export type PurchaseLineInput = Plain<api.PurchaseLineInput>;
+export type PurchaseQuote = Plain<api.PurchaseQuoteDTO>;
+export type PurchaseQuery = Plain<api.PurchaseQueryDTO>;
+/** Where money paid to a supplier came from, or a supplier's refund went (0.10.0). */
+export type CashSource = "drawer" | "owner";
 
 export function createClient() {
   return {
@@ -242,6 +260,29 @@ export function createClient() {
       writeOff: (input: DebtAmountInput) => unwrap(() => Customers.WriteOff(api.DebtAmountInput.createFrom(input))),
       refund: (input: RefundInput) => unwrap(() => Customers.Refund(api.RefundInput.createFrom(input))),
       reverse: (input: ReverseEntryInput) => unwrap(() => Customers.Reverse(api.ReverseEntryInput.createFrom(input))),
+    },
+    // The payables book (0.10.0). With the PIN switch on, every call is the owner's: a read outside owner mode answers
+    // lite.owner.required, which withOwner turns into the PIN dialog.
+    suppliers: {
+      list: (query: SupplierQuery) => unwrap(() => Suppliers.List(api.SupplierQueryDTO.createFrom(query))),
+      create: (input: SupplierInput) => unwrap(() => Suppliers.Create(api.SupplierInput.createFrom(input))),
+      update: (input: UpdateSupplierInput) => unwrap(() => Suppliers.Update(api.UpdateSupplierInput.createFrom(input))),
+      setActive: (id: string, rowVersion: number, active: boolean) =>
+        unwrap(() => Suppliers.SetActive(api.SetSupplierActiveInput.createFrom({ id, rowVersion, active }))),
+      statement: (supplierId: string, currency: string) =>
+        unwrap(() => Suppliers.Statement(api.SupplierStatementQueryDTO.createFrom({ supplierId, currency }))),
+      // A quote records nothing: the purchase form's figures, worked out by Go as it is typed.
+      quotePurchase: (input: PurchaseInput) => unwrap(() => Suppliers.QuotePurchase(api.PurchaseInput.createFrom(input))),
+      recordPurchase: (input: PurchaseInput) => unwrap(() => Suppliers.RecordPurchase(api.PurchaseInput.createFrom(input))),
+      voidPurchase: (purchaseId: string, reason: string) =>
+        unwrap(() => Suppliers.VoidPurchase(api.VoidPurchaseInput.createFrom({ purchaseId, reason }))),
+      purchase: (purchaseId: string) => unwrap(() => Suppliers.Purchase(purchaseId)),
+      purchases: (query: PurchaseQuery) => unwrap(() => Suppliers.Purchases(api.PurchaseQueryDTO.createFrom(query))),
+      pay: (input: SupplierMoneyInput) => unwrap(() => Suppliers.Pay(api.SupplierMoneyInput.createFrom(input))),
+      refund: (input: SupplierMoneyInput) => unwrap(() => Suppliers.Refund(api.SupplierMoneyInput.createFrom(input))),
+      opening: (input: SupplierMoneyInput) => unwrap(() => Suppliers.Opening(api.SupplierMoneyInput.createFrom(input))),
+      reverse: (entryId: string, reason: string) =>
+        unwrap(() => Suppliers.Reverse(api.SupplierReverseInput.createFrom({ entryId, reason }))),
     },
     reports: {
       day: (date: string) => unwrap(() => Reports.Day(date)),

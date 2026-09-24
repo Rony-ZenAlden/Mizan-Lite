@@ -53,6 +53,9 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
 	stockdb "github.com/mizan-erp/mizan/internal/lite/stock/infra/sqlite"
+	"github.com/mizan-erp/mizan/internal/lite/suppliers"
+	suppliersdomain "github.com/mizan-erp/mizan/internal/lite/suppliers/domain"
+	suppliersdb "github.com/mizan-erp/mizan/internal/lite/suppliers/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/platform/backup"
 	"github.com/mizan-erp/mizan/internal/platform/crypto"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -170,6 +173,8 @@ type App struct {
 	Safety *backups.Service
 	// Alerts is the notification engine: toasts, the bell and the notification centre read one list (2026-09-23).
 	Alerts *alerts.Service
+	// Suppliers is the payables book: suppliers, purchases on cash or credit, and what the shop pays them (0.10.0).
+	Suppliers *suppliers.Service
 	// Restored is the restore applied at this start, or nil.
 	Restored *backup.Intent
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
@@ -260,6 +265,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		reportsRates{fx: app.FX}, reportsCatalogue{catalog: app.Catalog}, reportsCash{cashbook: app.Cashbook}, reportsGate{owner: app.Owner},
 		opts.Clock, opts.Location)
 	app.Reports.UseReturns(reportsReturns{sales: app.Sales})
+	// The payables book receives its deliveries through the stock book, and the drawer reads the money it pays out (0.10.0).
+	app.Suppliers = suppliers.NewService(db, suppliersdb.NewStore(db, opts.Clock), suppliers.Ports{
+		Stock: suppliersStock{stock: app.Stock}, Catalogue: suppliersCatalogue{catalog: app.Catalog},
+		Money: suppliersMoney{settings: app.Settings}, Gate: suppliersGate{owner: app.Owner},
+	}, opts.Clock, opts.Location)
+	app.Reports.UsePayables(reportsPayables{suppliers: app.Suppliers})
 
 	app.Printing = printing.NewService(db, printingdb.NewStore(db), opts.Clock)
 	app.Customers.SetVouchers(app.Printing)
@@ -289,7 +300,8 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		Catalogue: alertsCatalogue{catalog: app.Catalog}, Stock: alertsStock{stock: app.Stock},
 		Prices: alertsPrices{catalog: app.Catalog}, Money: alertsMoney{fx: app.FX, catalog: app.Catalog},
 		Drawer: alertsDrawer{reports: app.Reports}, Receivables: alertsReceivables{customers: app.Customers},
-		Backups: alertsBackups{safety: app.Safety}, Gate: alertsGate{owner: app.Owner},
+		Payables: alertsPayables{suppliers: app.Suppliers},
+		Backups:  alertsBackups{safety: app.Safety}, Gate: alertsGate{owner: app.Owner},
 	}, opts.Clock, opts.Location)
 	if err = app.registerBackupJob(); err != nil {
 		_ = db.Close()
@@ -764,6 +776,25 @@ func (a alertsReceivables) Owed(ctx context.Context) (int64, int64, error) {
 			} else {
 				local += sum.BalanceMinor
 			}
+		}
+	}
+	return usd, local, nil
+}
+
+// alertsPayables satisfies the engine's Payables port: what the shop owes its suppliers, net, per currency.
+type alertsPayables struct{ suppliers *suppliers.Service }
+
+func (a alertsPayables) Owing(ctx context.Context) (int64, int64, error) {
+	byCurrency, err := a.suppliers.Payables(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	var usd, local int64
+	for code, minor := range byCurrency {
+		if code == fxdomain.USD {
+			usd += minor
+		} else {
+			local += minor
 		}
 	}
 	return usd, local, nil
@@ -1308,4 +1339,89 @@ func (a backupActivity) Since(ctx context.Context, at time.Time) (backups.Loss, 
 		}
 	}
 	return loss, nil
+}
+
+// ─── The payables book's ports (0.10.0) ──────────────────────────────────────────────────────────────────────────
+
+// suppliersStock satisfies the payables book's Stock port: a purchase line's good units are the stock book's own receipt,
+// costed at their total after every discount — so the average cost the margins read is what the goods really cost.
+type suppliersStock struct{ stock *stock.Service }
+
+func (s suppliersStock) Receive(ctx context.Context, r suppliers.Receipt) (id.ID, error) {
+	m, err := s.stock.Receive(ctx, stock.ReceiveInput{ProductID: r.ProductID, Quantity: r.Quantity, Note: r.Note,
+		Cost: stockdomain.CostInput{Mode: stockdomain.CostTotal, Amount: r.Total, Currency: r.Currency, Rate: r.Rate}})
+	return m.ID, err
+}
+
+func (s suppliersStock) ReverseReceipt(ctx context.Context, ledgerID id.ID, note string) error {
+	_, err := s.stock.ReverseReceipt(ctx, ledgerID, note)
+	return err
+}
+
+// suppliersCatalogue satisfies the payables book's Catalogue port.
+type suppliersCatalogue struct{ catalog *catalog.Service }
+
+func (c suppliersCatalogue) Products(ctx context.Context, ids []id.ID) (map[id.ID]suppliersdomain.Product, error) {
+	ref, err := c.catalog.Reference(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[id.ID]suppliersdomain.Product, len(ids))
+	for _, productID := range ids {
+		if _, seen := out[productID]; seen {
+			continue
+		}
+		p, getErr := c.catalog.Get(ctx, productID)
+		if errs.CategoryOf(getErr) == errs.CategoryNotFound {
+			continue // the purchase refuses an unknown product with its own code, naming the line
+		}
+		if getErr != nil {
+			return nil, getErr
+		}
+		out[productID] = suppliersdomain.Product{ID: p.ID, NameAR: p.NameAR, NameEN: p.NameEN, UnitCode: p.UnitCode,
+			UnitDecimals: ref.Units[p.UnitCode].InputDecimals, OpenPrice: p.OpenPrice, Active: p.Active}
+	}
+	return out, nil
+}
+
+func (c suppliersCatalogue) Currencies(ctx context.Context) ([]suppliersdomain.Currency, error) {
+	currencies, err := c.catalog.Currencies(ctx)
+	out := make([]suppliersdomain.Currency, 0, len(currencies))
+	for _, cur := range currencies {
+		out = append(out, suppliersdomain.Currency{Code: cur.Code, Decimals: cur.Decimals})
+	}
+	return out, err
+}
+
+// suppliersMoney satisfies the payables book's Money port with the settings.
+type suppliersMoney struct{ settings *settings.Service }
+
+func (m suppliersMoney) LocalCurrency(ctx context.Context) (string, error) {
+	current, err := m.settings.Get(ctx)
+	return current.LocalCurrency, err
+}
+
+// suppliersGate satisfies the payables book's OwnerGate port with the owner service.
+type suppliersGate struct{ owner *owner.Service }
+
+func (g suppliersGate) Require(ctx context.Context, act suppliers.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After})
+}
+
+func (g suppliersGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
+
+// reportsPayables satisfies the reports' Payables port: the payables book's money in the drawer.
+type reportsPayables struct{ suppliers *suppliers.Service }
+
+func (r reportsPayables) SupplierCashBetween(ctx context.Context, from, to string) ([]reportsdomain.SupplierCash, error) {
+	moves, err := r.suppliers.DrawerBetween(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.SupplierCash, 0, len(moves))
+	for _, m := range moves {
+		out = append(out, reportsdomain.SupplierCash{BusinessDate: m.BusinessDate, Currency: m.Currency,
+			PaidOutMinor: m.PaidOutMinor, RefundInMinor: m.RefundInMinor})
+	}
+	return out, nil
 }

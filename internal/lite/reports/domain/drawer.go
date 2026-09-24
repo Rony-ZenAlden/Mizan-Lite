@@ -21,6 +21,10 @@ type DrawerTerms struct {
 	ReturnsOut    int64
 	ExpensesOut   int64
 	WithdrawalOut int64
+	// SuppliersOut is money paid to suppliers out of the drawer, and SuppliersIn their refunds into it (0.10.0). Money the
+	// owner paid a supplier from their own pocket never was in the drawer and is in neither.
+	SuppliersOut int64
+	SuppliersIn  int64
 
 	Expected int64
 	// Count is the day's count — the newest not reversed — or nil.
@@ -29,8 +33,8 @@ type DrawerTerms struct {
 
 // Moved is what the day's terms add to the opening.
 func (t DrawerTerms) Moved() int64 {
-	return t.CashSalesIn + t.CreditPaidIn + t.RepaymentsIn + t.DepositsIn -
-		t.ChangeOut - t.RefundsOut - t.VoidReturns - t.ReturnsOut - t.ExpensesOut - t.WithdrawalOut
+	return t.CashSalesIn + t.CreditPaidIn + t.RepaymentsIn + t.DepositsIn + t.SuppliersIn -
+		t.ChangeOut - t.RefundsOut - t.VoidReturns - t.ReturnsOut - t.ExpensesOut - t.WithdrawalOut - t.SuppliersOut
 }
 
 // Difference is the day's count less what it was expected to hold when counted: below zero is a shortage.
@@ -48,6 +52,8 @@ type DrawerFacts struct {
 	Debts   []DebtEntry
 	Cash    []CashEntry
 	Returns []Return
+	// Suppliers is the payables book's money in the drawer (0.10.0).
+	Suppliers []SupplierCash
 	// LastCounts is, per currency, the newest count not reversed on a day before the date.
 	LastCounts map[string]CashEntry
 }
@@ -96,6 +102,12 @@ func cashMoves(t *DrawerTerms, f DrawerFacts, from, to string) {
 			t.ChangeOut += sign * in(cash.ChangeCurrency, c, cash.ChangeMinor)
 		case DebtRefund:
 			t.RefundsOut += sign * (in(cash.TenderedCurrency, c, cash.TenderedMinor) - in(cash.ChangeCurrency, c, cash.ChangeMinor))
+		}
+	}
+	for _, m := range f.Suppliers {
+		if within(m.BusinessDate) {
+			t.SuppliersOut += in(m.Currency, c, m.PaidOutMinor)
+			t.SuppliersIn += in(m.Currency, c, m.RefundInMinor)
 		}
 	}
 	for _, e := range f.Cash {

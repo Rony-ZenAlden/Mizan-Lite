@@ -1,7 +1,8 @@
 import { act, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderWithProviders } from "@/api/testing";
-import { Money } from "./Money";
+import { unsigned } from "@/screens/customers/Balances";
+import { Money, isZero } from "./Money";
 
 async function settle() {
   await act(async () => {
@@ -26,5 +27,20 @@ describe("Money — both readings at once (L10, 2026-09-17)", () => {
     await settle();
     expect(screen.queryByTestId("money-dual")).not.toBeInTheDocument();
     expect(screen.getByText(/15,000/)).toBeInTheDocument();
+  });
+});
+
+describe("reading a dual figure as text (0.10.0)", () => {
+  it("knows a dual zero is zero, and a dual figure is not", () => {
+    expect(isZero("0 (0)")).toBe(true);
+    expect(isZero("-0.00 (-0)")).toBe(true);
+    expect(isZero("0.5 (50)")).toBe(false);
+    expect(isZero("0")).toBe(true);
+  });
+
+  it("takes the sign off both readings", () => {
+    expect(unsigned("-150 (-15000)")).toBe("150 (15000)");
+    expect(unsigned("-10.00")).toBe("10.00");
+    expect(unsigned("150 (15000)")).toBe("150 (15000)");
   });
 });

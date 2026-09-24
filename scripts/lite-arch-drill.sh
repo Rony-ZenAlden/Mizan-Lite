@@ -366,6 +366,18 @@ drill lite-backups-isolated "backups may not import another Lite module" \
   internal/lite/backups/zz_drill.go "package backups
 import _ \"$M/internal/lite/settings\""
 
+drill lite-suppliers-isolated "suppliers may not import another Lite module" \
+  internal/lite/suppliers/zz_drill.go "package suppliers
+import _ \"$M/internal/lite/stock\""
+
+drill lite-suppliers-isolated-from-customers "suppliers may not import another Lite module" \
+  internal/lite/suppliers/infra/sqlite/zz_drill.go "package sqlite
+import _ \"$M/internal/lite/customers/domain\""
+
+drill lite-reports-forbids-suppliers "reports may not import another Lite module" \
+  internal/lite/reports/zz_drill.go "package reports
+import _ \"$M/internal/lite/suppliers\""
+
 drill lite-typeset-only "only internal/lite/typeset may import go-text" \
   internal/lite/documents/zz_drill.go "package documents
 import _ \"github.com/go-text/typesetting/shaping\""

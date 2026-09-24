@@ -248,7 +248,9 @@ type CreateProductInput struct {
 	PriceCurrency string `json:"priceCurrency"`
 	Price         string `json:"price"`
 	// CostPrice, and a margin that works the price out of it instead of taking Price as typed (L9). At most one margin.
-	CostPrice     string `json:"costPrice"`
+	CostPrice string `json:"costPrice"`
+	// CostDiscount is a supplier's discount, a percentage taken off CostPrice before the margin is worked out (0.10.0).
+	CostDiscount  string `json:"costDiscount"`
 	MarginPercent string `json:"marginPercent"`
 	MarginAmount  string `json:"marginAmount"`
 	// OpenPrice creates an item sold at a price typed at the till, never counted in stock (2026-09-23). It then takes no
@@ -272,6 +274,7 @@ func (c *Catalog) CreateProduct(in CreateProductInput) envelope.Result[ProductDT
 			Price: shop.Base(in.Price, in.PriceCurrency),
 			Cost:  shop.Base(in.CostPrice, in.PriceCurrency),
 			// A percentage is not money: 25% is 25% whichever way the shop reads its pounds.
+			CostDiscount:  in.CostDiscount,
 			MarginPercent: in.MarginPercent,
 			MarginAmount:  shop.Base(in.MarginAmount, in.PriceCurrency),
 
@@ -311,7 +314,9 @@ type SetPriceInput struct {
 	PriceCurrency string `json:"priceCurrency"`
 	Price         string `json:"price"`
 	// CostPrice is the cost to record: "" leaves it as it is, "-" takes it off (catalog.ClearCost).
-	CostPrice     string `json:"costPrice"`
+	CostPrice string `json:"costPrice"`
+	// CostDiscount is a supplier's discount off the CostPrice typed with it, a percentage (0.10.0).
+	CostDiscount  string `json:"costDiscount"`
 	MarginPercent string `json:"marginPercent"`
 	MarginAmount  string `json:"marginAmount"`
 }
@@ -335,7 +340,7 @@ func (c *Catalog) SetPrice(in SetPriceInput) envelope.Result[ProductDTO] {
 		return app.Catalog.SetPrice(ctx, catalog.SetPriceInput{
 			ID: parsed, RowVersion: in.RowVersion, Currency: in.PriceCurrency,
 			Price: shop.Base(in.Price, in.PriceCurrency),
-			Cost:  cost, MarginPercent: in.MarginPercent,
+			Cost:  cost, CostDiscount: in.CostDiscount, MarginPercent: in.MarginPercent,
 			MarginAmount: shop.Base(in.MarginAmount, in.PriceCurrency),
 		})
 	})

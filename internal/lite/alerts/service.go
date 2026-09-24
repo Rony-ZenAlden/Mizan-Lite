@@ -71,6 +71,11 @@ type Receivables interface {
 	Owed(ctx context.Context) (usdMinor, localMinor int64, err error)
 }
 
+// Payables is what the shop owes its suppliers, net, per currency (0.10.0).
+type Payables interface {
+	Owing(ctx context.Context) (usdMinor, localMinor int64, err error)
+}
+
 // Backups is when the newest of the shop's own backups was taken.
 type Backups interface {
 	Newest(ctx context.Context) (at time.Time, found bool, err error)
@@ -89,6 +94,7 @@ type Ports struct {
 	Money       Money
 	Drawer      Drawer
 	Receivables Receivables
+	Payables    Payables
 	Backups     Backups
 	Gate        Gate
 }
@@ -245,7 +251,10 @@ func (s *Service) snapshot(ctx context.Context, today string, rate int64, local 
 	if snap.CashUSDMinor, snap.CashLocalMinor, err = p.Drawer.Expected(ctx, today); err != nil {
 		return snap, err
 	}
-	snap.OwedUSDMinor, snap.OwedLocalMinor, err = p.Receivables.Owed(ctx)
+	if snap.OwedUSDMinor, snap.OwedLocalMinor, err = p.Receivables.Owed(ctx); err != nil {
+		return snap, err
+	}
+	snap.PayableUSDMinor, snap.PayableLocalMinor, err = p.Payables.Owing(ctx)
 	return snap, err
 }
 

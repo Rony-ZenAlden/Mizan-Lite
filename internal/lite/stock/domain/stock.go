@@ -47,6 +47,9 @@ const (
 	CodeInactiveContent   = "lite.stock.inactive_content"
 	CodeMovementNotFound  = "lite.stock.movement_not_found"
 	CodeWholePackagesOnly = "lite.stock.whole_packages_only"
+	// CodeDiscountInvalid refuses a supplier's discount on a delivery that is not a percentage above nothing and below a
+	// hundred (0.10.0).
+	CodeDiscountInvalid = "lite.stock.discount_invalid"
 )
 
 // codeStale is platform/database's optimistic-concurrency code, reused so a level that moved on reads the same
@@ -63,6 +66,7 @@ const (
 	FieldReason   = "reason"
 	FieldNote     = "note"
 	FieldPackages = "packages"
+	FieldDiscount = "discountPercent"
 )
 
 // CostCurrency is the currency every cost is held in (DESIGN §4.2).

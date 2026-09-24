@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState } from "./client";
+import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, Purchase, PurchaseLine, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState, Supplier, SupplierEntry, SupplierList, SupplierStatement } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -545,6 +545,9 @@ export function aDrawer(overrides: Partial<Drawer> = {}): Drawer {
     voidReturns: zero(c),
     expensesOut: zero(c),
     withdrawalsOut: zero(c),
+    returnsOut: zero(c),
+    suppliersOut: zero(c),
+    suppliersIn: zero(c),
     expected: c === "USD" ? "0.00" : "97500",
     counted: false,
     count: "",
@@ -559,6 +562,113 @@ export function aDrawer(overrides: Partial<Drawer> = {}): Drawer {
     currencies: [currency("USD"), currency("SYP")],
     entries: [],
     categories: ["rent", "electricity", "wages", "transport", "supplies", "other"],
+    ...overrides,
+  };
+}
+
+/** A supplier as Go lists one: المروى of Aleppo, owed $22.00, with any field replaceable. */
+export function aSupplier(overrides: Partial<Supplier> = {}): Supplier {
+  return {
+    id: "sup-1",
+    name: "المروى",
+    phone: "0988 703 785",
+    city: "حلب",
+    note: "",
+    active: true,
+    rowVersion: 1,
+    balances: [{ currency: "USD", balance: "22.00" }],
+    ...overrides,
+  };
+}
+
+/** The suppliers screen's list: one supplier, the shop owing $22.00 in all, the rate 15,000. */
+export function aSupplierList(overrides: Partial<SupplierList> = {}): SupplierList {
+  return { suppliers: [aSupplier()], totals: [{ currency: "USD", balance: "22.00" }], localCurrency: "SYP", rate: "15000", ...overrides };
+}
+
+/** A line of a supplier's book: purchase 7, $72.00, with any field replaceable. */
+export function aSupplierEntry(overrides: Partial<SupplierEntry> = {}): SupplierEntry {
+  return {
+    id: "sen-1",
+    seq: 1,
+    businessDate: "2026-09-24",
+    occurredAt: "2026-09-24T09:00:00.000Z",
+    kind: "purchase",
+    currency: "USD",
+    amount: "72.00",
+    balanceAfter: "72.00",
+    source: "",
+    purchaseId: "pur-7",
+    purchaseNo: 7,
+    supplierRef: "2970",
+    reversesId: "",
+    note: "",
+    reversed: false,
+    reversible: false,
+    ...overrides,
+  };
+}
+
+/** A supplier's dollar book: purchase 7 and $50.00 paid from the drawer, $22.00 still owed. */
+export function aSupplierStatement(overrides: Partial<SupplierStatement> = {}): SupplierStatement {
+  return {
+    supplier: aSupplier(),
+    currency: "USD",
+    balance: "22.00",
+    entries: [
+      aSupplierEntry({ id: "sen-2", seq: 2, kind: "payment", amount: "-50.00", balanceAfter: "22.00", source: "drawer", reversible: true }),
+      aSupplierEntry(),
+    ],
+    ...overrides,
+  };
+}
+
+/** A purchase line: ten litres of olive oil at $2.00, two broken, 10% off — eight received at $1.75. */
+export function aPurchaseLine(overrides: Partial<PurchaseLine> = {}): PurchaseLine {
+  return {
+    lineNo: 1,
+    productId: "p-oil",
+    nameAr: "زيت زيتون",
+    nameEn: "Olive oil",
+    unitCode: "l",
+    quantity: "10.000",
+    damaged: "2.000",
+    good: "8.000",
+    unitCost: "2.00",
+    discountPercent: "10",
+    gross: "16.00",
+    lineDiscount: "1.60",
+    invoiceShare: "0.40",
+    due: "14.00",
+    netUnitCost: "1.75",
+    ...overrides,
+  };
+}
+
+/** Purchase 7 from المروى: $14.00 after every discount, $5.00 paid from the drawer. */
+export function aPurchase(overrides: Partial<Purchase> = {}): Purchase {
+  return {
+    id: "pur-7",
+    purchaseNo: 7,
+    supplierId: "sup-1",
+    supplierName: "المروى",
+    businessDate: "2026-09-24",
+    occurredAt: "2026-09-24T09:00:00.000Z",
+    currency: "USD",
+    rate: "",
+    supplierRef: "2970",
+    lines: [aPurchaseLine()],
+    gross: "16.00",
+    lineDiscount: "1.60",
+    invoiceDiscount: "0.40",
+    due: "14.00",
+    paidNow: "5.00",
+    paidFrom: "drawer",
+    status: "posted",
+    voidedAt: "",
+    voidReason: "",
+    note: "",
+    damagedLines: 1,
     ...overrides,
   };
 }
@@ -756,6 +866,22 @@ export function fakeClient(overrides: Overrides = {}): Client {
       refund: async (input) => anEntry({ kind: "refund", note: input.reason }),
       reverse: async (input) => anEntry({ kind: "reversal", reversesId: input.entryId, note: input.reason }),
     },
+    suppliers: {
+      list: async () => aSupplierList(),
+      create: async (input) => aSupplier({ id: "sup-new", name: input.name, phone: input.phone, city: input.city, note: input.note, balances: [] }),
+      update: async (input) => aSupplier({ id: input.id, name: input.name, phone: input.phone, city: input.city, note: input.note, rowVersion: input.rowVersion + 1 }),
+      setActive: async (id, rowVersion, active) => aSupplier({ id, active, rowVersion: rowVersion + 1 }),
+      statement: async (_supplierId, currency) => aSupplierStatement({ currency }),
+      quotePurchase: async () => ({ purchase: aPurchase({ id: "", purchaseNo: 0, status: "" }), balanceBefore: "22.00", balanceAfter: "31.00" }),
+      recordPurchase: async () => aPurchase(),
+      voidPurchase: async (purchaseId, reason) => aPurchase({ id: purchaseId, status: "voided", voidReason: reason, voidedAt: "2026-09-24T10:00:00.000Z" }),
+      purchase: async (purchaseId) => aPurchase({ id: purchaseId }),
+      purchases: async () => [aPurchase()],
+      pay: async (input) => aSupplierEntry({ id: "sen-pay", kind: "payment", amount: `-${input.amount}`, currency: input.currency, source: input.source, reversible: true }),
+      refund: async (input) => aSupplierEntry({ id: "sen-refund", kind: "refund", amount: input.amount, currency: input.currency, source: input.source, reversible: true }),
+      opening: async (input) => aSupplierEntry({ id: "sen-open", kind: "opening", amount: input.inShopsFavour ? `-${input.amount}` : input.amount, currency: input.currency }),
+      reverse: async (entryId, reason) => aSupplierEntry({ id: "sen-rev", kind: "reversal", reversesId: entryId, note: reason }),
+    },
     reports: {
       day: async (date) => aDayReport({ date: date || "2026-09-14" }),
       month: async (month) => ({
@@ -870,6 +996,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
     till: { ...base.till, ...overrides.till },
     sales: { ...base.sales, ...overrides.sales },
     customers: { ...base.customers, ...overrides.customers },
+    suppliers: { ...base.suppliers, ...overrides.suppliers },
     reports: { ...base.reports, ...overrides.reports },
     cash: { ...base.cash, ...overrides.cash },
     exports: { ...base.exports, ...overrides.exports },

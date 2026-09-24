@@ -79,7 +79,8 @@ func StoreContract(t *testing.T, newStore func(t *testing.T) alerts.Store) {
 	at := time.Date(2026, 9, 23, 9, 0, 0, 0, time.UTC)
 	day := func(date string, stock int64) domain.Snapshot {
 		return domain.Snapshot{BusinessDate: date, RateNano: 15_000_000_000_000, LocalCurrency: "SYP", StockUSDMinor: stock,
-			CashUSDMinor: 1_000, CashLocalMinor: -500, OwedUSDMinor: 250, OwedLocalMinor: 75_000}
+			CashUSDMinor: 1_000, CashLocalMinor: -500, OwedUSDMinor: 250, OwedLocalMinor: 75_000,
+			PayableUSDMinor: 4_200, PayableLocalMinor: -30_000}
 	}
 
 	t.Run("a day reads back exactly, with when it was taken", func(t *testing.T) {

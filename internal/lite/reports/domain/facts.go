@@ -185,6 +185,15 @@ type CashEntry struct {
 	Reverses *CashEntry
 }
 
+// SupplierCash is one move the payables book made in the drawer (0.10.0): money paid to a supplier out of it, or a
+// supplier's refund into it. A reversal is the kind it undoes below nought, on the reversal's own day.
+type SupplierCash struct {
+	BusinessDate  string
+	Currency      string
+	PaidOutMinor  int64
+	RefundInMinor int64
+}
+
 // Product is a product as the reports name and price it.
 type Product struct {
 	ID            id.ID

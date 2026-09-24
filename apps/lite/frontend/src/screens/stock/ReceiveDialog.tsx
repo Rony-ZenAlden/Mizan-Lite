@@ -45,6 +45,8 @@ export function ReceiveDialog({
   const [cost, setCost] = useState("");
   const [currency, setCurrency] = useState(COST_CURRENCY);
   const [rate, setRate] = useState("");
+  // A supplier's discount off the cost typed, as a percentage (0.10.0): Go costs the delivery at what was really paid.
+  const [discount, setDiscount] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -63,7 +65,7 @@ export function ReceiveDialog({
     setBusy(true);
     setError(null);
     try {
-      const input = { productId: product.id, quantity, costMode, cost, currency, rate: needsRate ? rate : "", note };
+      const input = { productId: product.id, quantity, costMode, cost, currency, rate: needsRate ? rate : "", note, discountPercent: discount.trim() };
       onDone(await (kind === "opening" ? client.stock.opening(input) : client.stock.receive(input)));
     } catch (e) {
       setError(e);
@@ -121,6 +123,16 @@ export function ReceiveDialog({
           inputMode="decimal"
           dir="ltr"
           required
+        />
+        <TextField
+          label={t("stock.discount")}
+          value={discount}
+          onChange={(e) => setDiscount(e.target.value)}
+          error={errors.field("discountPercent")}
+          hint={t("stock.discount_hint")}
+          inputMode="decimal"
+          dir="ltr"
+          autoComplete="off"
         />
         {needsRate ? (
           <TextField

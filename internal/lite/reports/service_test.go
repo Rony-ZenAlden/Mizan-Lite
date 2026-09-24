@@ -22,7 +22,9 @@ func newService() (*reports.Service, *reportstest.Facts, *reportstest.Gate) {
 	f := &reportstest.Facts{Local: "SYP", RateList: []domain.Rate{{Seq: 1, Nano: 15_000_000_000_000, BusinessDate: "2026-09-01"}}}
 	g := &reportstest.Gate{}
 	clk := clock.NewFixed(time.Date(2026, 9, 14, 22, 0, 0, 0, time.UTC)) // the 15th in Damascus
-	return reports.NewService(f, f, f, f, f, reportstest.Cash{F: f}, g, clk, time.FixedZone("Damascus", 3*3600)), f, g
+	svc := reports.NewService(f, f, f, f, f, reportstest.Cash{F: f}, g, clk, time.FixedZone("Damascus", 3*3600))
+	svc.UsePayables(f)
+	return svc, f, g
 }
 
 func TestReportsAreTheOwners(t *testing.T) {
@@ -99,6 +101,14 @@ func TestTheDrawerIsTheCountersWithoutTheOwnersDetails(t *testing.T) {
 	}
 	if got, _ := svc.ExpectedCash(ctx, "2026-09-15", "USD"); got != 0 {
 		t.Fatalf("expected dollars %d", got)
+	}
+	// A supplier paid out of the drawer after the count (0.10.0): the counter sees it as they see a withdrawal, as a figure.
+	f.SupplierList = []domain.SupplierCash{{BusinessDate: "2026-09-16", Currency: "SYP", PaidOutMinor: 45_000}}
+	if got, _ := svc.ExpectedCash(ctx, "2026-09-16", "SYP"); got != 5_000 {
+		t.Fatalf("expected cash after paying a supplier %d", got)
+	}
+	if next, _ := svc.Drawer(ctx, "2026-09-16"); next.Currencies[1].SuppliersOut != 45_000 {
+		t.Fatalf("the supplier's line %+v", next.Currencies[1])
 	}
 	// The count of the 14th closed that day: the sale of the 13th is not read again.
 	f.Asked = nil

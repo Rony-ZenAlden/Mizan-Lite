@@ -23,18 +23,19 @@ type Store struct{ db database.DB }
 func NewStore(db database.DB) *Store { return &Store{db: db} }
 
 const columns = `business_date, taken_at, local_currency, local_per_usd_nano, stock_usd_minor, cash_usd_minor,
-	cash_local_minor, owed_usd_minor, owed_local_minor`
+	cash_local_minor, owed_usd_minor, owed_local_minor, payable_usd_minor, payable_local_minor`
 
 // Put writes a day's snapshot, replacing the day's earlier one.
 func (s *Store) Put(ctx context.Context, snap domain.Snapshot, takenAt time.Time) error {
 	_, err := s.db.Writer(ctx).ExecContext(ctx, `INSERT INTO capital_snapshots (`+columns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (business_date) DO UPDATE SET taken_at = excluded.taken_at, local_currency = excluded.local_currency,
 			local_per_usd_nano = excluded.local_per_usd_nano, stock_usd_minor = excluded.stock_usd_minor,
 			cash_usd_minor = excluded.cash_usd_minor, cash_local_minor = excluded.cash_local_minor,
-			owed_usd_minor = excluded.owed_usd_minor, owed_local_minor = excluded.owed_local_minor`,
+			owed_usd_minor = excluded.owed_usd_minor, owed_local_minor = excluded.owed_local_minor,
+			payable_usd_minor = excluded.payable_usd_minor, payable_local_minor = excluded.payable_local_minor`,
 		snap.BusinessDate, clock.Format(takenAt), snap.LocalCurrency, snap.RateNano, snap.StockUSDMinor,
-		snap.CashUSDMinor, snap.CashLocalMinor, snap.OwedUSDMinor, snap.OwedLocalMinor)
+		snap.CashUSDMinor, snap.CashLocalMinor, snap.OwedUSDMinor, snap.OwedLocalMinor, snap.PayableUSDMinor, snap.PayableLocalMinor)
 	return s.db.Dialect().TranslateError(err)
 }
 
@@ -60,7 +61,7 @@ func (s *Store) one(ctx context.Context, where string, args ...any) (domain.Snap
 	var taken string
 	err := s.db.Reader(ctx).QueryRowContext(ctx, `SELECT `+columns+` FROM capital_snapshots `+where, args...).Scan(
 		&snap.BusinessDate, &taken, &snap.LocalCurrency, &snap.RateNano, &snap.StockUSDMinor, &snap.CashUSDMinor,
-		&snap.CashLocalMinor, &snap.OwedUSDMinor, &snap.OwedLocalMinor)
+		&snap.CashLocalMinor, &snap.OwedUSDMinor, &snap.OwedLocalMinor, &snap.PayableUSDMinor, &snap.PayableLocalMinor)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Snapshot{}, time.Time{}, false, nil
 	}

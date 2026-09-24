@@ -135,6 +135,8 @@ type Draft struct {
 	Price         string
 	// Cost is what one unit costs the shop, in PriceCurrency (L9). Empty when the shop has not said.
 	Cost string
+	// CostDiscount is a supplier's discount, a percentage taken off Cost before anything is worked out from it (0.10.0).
+	CostDiscount string
 	// MarginPercent or MarginAmount works Price out of Cost instead of taking it as typed; at most one of the two.
 	MarginPercent string
 	MarginAmount  string
@@ -167,7 +169,7 @@ func NewProduct(productID id.ID, d Draft, ref Reference) (Product, error) {
 	if d.OpenPrice {
 		// Its price is typed at the till, every time. A stored price, a cost or a margin would be figures the product
 		// never uses, and a shop reading them would take them for the truth.
-		if d.Price != "" && d.Price != "0" || d.Cost != "" || d.MarginPercent != "" || d.MarginAmount != "" {
+		if d.Price != "" && d.Price != "0" || d.Cost != "" || d.CostDiscount != "" || d.MarginPercent != "" || d.MarginAmount != "" {
 			return Product{}, errs.Validation(CodeOpenPriceHasNoPrice, "an open-priced product takes its price at the till").
 				WithField(FieldPrice, CodeOpenPriceHasNoPrice, "no price of its own")
 		}
@@ -185,6 +187,9 @@ func NewProduct(productID id.ID, d Draft, ref Reference) (Product, error) {
 		if p, err = p.SetCost(d.Cost, ref); err != nil {
 			return Product{}, err
 		}
+	}
+	if p, err = p.DiscountCost(d.CostDiscount, ref); err != nil {
+		return Product{}, err
 	}
 	switch {
 	case d.MarginPercent != "" && d.MarginAmount != "":

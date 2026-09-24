@@ -19,7 +19,7 @@ import (
 
 // plain is a document's text as a reader sees it: the invisible isolates taken out.
 func plain(s string) string {
-	return strings.NewReplacer("⁦", "", "⁧", "", "⁨", "", "⁩", "").Replace(s)
+	return strings.NewReplacer("\u2066", "", "\u2067", "", "\u2068", "", "\u2069", "").Replace(s)
 }
 
 // aLogo writes a PNG the owner might upload: a dark mark on a clear ground.

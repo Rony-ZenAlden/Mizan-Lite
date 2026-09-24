@@ -160,3 +160,38 @@ func TestAMarginOnALargePoundPriceDoesNotOverflow(t *testing.T) {
 		t.Fatalf("the margin on a large price reads back as %d", percent)
 	}
 }
+
+// TestASuppliersDiscountComesOffTheCostBeforeTheMargin (0.10.0): "I buy at 2.00 and they give me 10%" is a cost of 1.80,
+// and a 25% margin on it is a price of 2.25 — held to the currency's decimals like a cost typed.
+func TestASuppliersDiscountComesOffTheCostBeforeTheMargin(t *testing.T) {
+	pid, _ := id.New()
+	p, err := domain.NewProduct(pid, domain.Draft{NameAR: "زيت", UnitCode: "l", PriceCurrency: "USD", Price: "3",
+		Cost: "2.00", CostDiscount: "10", MarginPercent: "25"}, costRef())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.CostMicro != 1_800_000 || p.PriceMicro != 2_250_000 {
+		t.Fatalf("cost %d, price %d — want 1.80 and 2.25", p.CostMicro, p.PriceMicro)
+	}
+	// 1,999 pounds less 7% is 1,859.07 — held to whole pounds, half up.
+	pounds := priced(t, "SYP", "2500")
+	pounds, err = pounds.SetCost("1999", costRef())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pounds, err = pounds.DiscountCost("٧", costRef()); err != nil || pounds.CostMicro != 1_859_000_000 {
+		t.Fatalf("DiscountCost = %d, %v", pounds.CostMicro, err)
+	}
+	for _, bad := range []string{"0", "100", "120", "-5", "7.12345", "x"} {
+		withCost, _ := priced(t, "USD", "3").SetCost("2", costRef())
+		if _, err := withCost.DiscountCost(bad, costRef()); err == nil {
+			t.Errorf("a discount of %q was taken", bad)
+		}
+	}
+	if _, err := priced(t, "USD", "3").DiscountCost("10", costRef()); errs.CodeOf(err) != domain.CodeCostDiscountInvalid {
+		t.Fatalf("a discount with no cost to come off: %v", err)
+	}
+	if _, err := domain.NewProduct(pid, domain.Draft{NameAR: "متفرقات", UnitCode: "l", PriceCurrency: "USD", OpenPrice: true, CostDiscount: "5"}, costRef()); err == nil {
+		t.Fatal("an open-priced item took a supplier's discount")
+	}
+}

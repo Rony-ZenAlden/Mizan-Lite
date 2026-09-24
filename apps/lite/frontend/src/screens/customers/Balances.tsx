@@ -1,6 +1,6 @@
 import type { Balance } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { formatDecimal } from "@/i18n/numbers";
+import { DUAL_CLOSE, DUAL_OPEN, formatDecimal, splitDual } from "@/i18n/numbers";
 import { Money, isZero } from "@/screens/sales/Money";
 
 /** True when a figure Go formatted is below zero. A reading of text, not arithmetic (DESIGN D9). */
@@ -8,8 +8,10 @@ export function isNegative(value: string): boolean {
   return value.startsWith("-") && !isZero(value);
 }
 
-/** A figure Go formatted, without its sign: "-10.00" → "10.00". Text only. */
+/** A figure Go formatted, without its sign: "-10.00" → "10.00", and both readings of a dual one. Text only. */
 export function unsigned(value: string): string {
+  const dual = splitDual(value);
+  if (dual) return `${dual[0].trim().replace(/^-/, "")}${DUAL_OPEN}${dual[1].trim().replace(/^-/, "")}${DUAL_CLOSE}`;
   return value.startsWith("-") ? value.slice(1) : value;
 }
 

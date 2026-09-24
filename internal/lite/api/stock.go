@@ -92,6 +92,8 @@ type ReceiveInput struct {
 	Currency  string `json:"currency"`
 	Rate      string `json:"rate"`
 	Note      string `json:"note"`
+	// DiscountPercent is a supplier's discount off the cost, a percentage; "" for none (0.10.0).
+	DiscountPercent string `json:"discountPercent"`
 }
 
 // CountInput is what is on the shelf.
@@ -248,7 +250,7 @@ func (in ReceiveInput) toService(shop moneyfmt.Shop) (stock.ReceiveInput, error)
 	return stock.ReceiveInput{
 		ProductID: productID, Quantity: in.Quantity, Note: in.Note,
 		Cost: domain.CostInput{Mode: domain.CostMode(in.CostMode), Amount: shop.Base(in.Cost, in.Currency),
-			Currency: in.Currency, Rate: shop.Base(in.Rate, shop.Local)},
+			Currency: in.Currency, Rate: shop.Base(in.Rate, shop.Local), DiscountPercent: in.DiscountPercent},
 	}, err
 }
 

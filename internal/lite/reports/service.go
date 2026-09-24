@@ -30,6 +30,12 @@ type Returns interface {
 	ReturnsBetween(ctx context.Context, from, to string) ([]domain.Return, error)
 }
 
+// Payables is where the drawer's supplier money comes from (0.10.0): payments to suppliers out of the drawer and their
+// refunds into it. Wired after construction (UsePayables); nil reads as none, which is every shop before 0.10.0.
+type Payables interface {
+	SupplierCashBetween(ctx context.Context, from, to string) ([]domain.SupplierCash, error)
+}
+
 // Stock supplies ledger rows.
 type Stock interface {
 	// Between returns the rows of business dates from..to, by product and place.
@@ -74,6 +80,7 @@ type Service struct {
 	catalogue Catalogue
 	cash      CashBook
 	returns   Returns
+	payables  Payables
 	gate      OwnerGate
 	clk       clock.Clock
 	loc       *time.Location
@@ -147,6 +154,9 @@ func (s *Service) facts(ctx context.Context, from, to string) (domain.Facts, err
 
 // UseReturns gives the reports the returns of a period. The composition root calls it once.
 func (s *Service) UseReturns(r Returns) { s.returns = r }
+
+// UsePayables gives the drawer the payables book's money. The composition root calls it once.
+func (s *Service) UsePayables(p Payables) { s.payables = p }
 
 // Day is a business day's statement — today when empty. Owner only (Q-L6.7).
 func (s *Service) Day(ctx context.Context, date string) (domain.Day, error) {
@@ -379,6 +389,12 @@ func (s *Service) drawer(ctx context.Context, date string) (domain.Drawer, error
 	// it from the return itself, so it must be read here or the drawer is over by every refund.
 	if s.returns != nil {
 		if f.Returns, err = s.returns.ReturnsBetween(ctx, from, date); err != nil {
+			return domain.Drawer{}, err
+		}
+	}
+	// Money paid to a supplier out of the drawer is gone from it as surely as an expense (0.10.0).
+	if s.payables != nil {
+		if f.Suppliers, err = s.payables.SupplierCashBetween(ctx, from, date); err != nil {
 			return domain.Drawer{}, err
 		}
 	}

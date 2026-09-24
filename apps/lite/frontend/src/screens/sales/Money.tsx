@@ -29,9 +29,11 @@ export function Money({ value, currency, className }: { value: string; currency:
 }
 
 /**
- * True when a figure Go formatted is zero ("0", "0.00", "-0"). A comparison of text, not arithmetic: the screen only
- * decides whether to show a row (DESIGN D9).
+ * True when a figure Go formatted is zero ("0", "0.00", "-0", and in a dual reading "0 (0)"). A comparison of text, not
+ * arithmetic: the screen only decides whether to show a row (DESIGN D9). Until 0.10.0 a dual zero read as a figure, and a
+ * settled balance showed "0 (0)" in a shop reading both pounds.
  */
 export function isZero(value: string): boolean {
-  return /^-?0(\.0+)?$/.test(value);
+  const figure = splitDual(value)?.[0] ?? value;
+  return /^-?0(\.0+)?$/.test(figure.trim());
 }

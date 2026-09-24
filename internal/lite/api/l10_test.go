@@ -168,6 +168,13 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 		t.Fatal(r.Error)
 	}
 	abu := set.Customers.Create(api.CustomerInput{Name: "أبو محمد"}).Data
+	// A supplier bought from in pounds, part paid (0.10.0): every figure of the payables book is local money but the
+	// quantities.
+	marwa := set.Suppliers.Create(api.SupplierInput{Name: "المروى"}).Data
+	if r := set.Suppliers.RecordPurchase(api.PurchaseInput{SupplierID: marwa.ID, Currency: "SYP", Rate: "15000", PaidNow: "10000", PaidFrom: "drawer",
+		InvoiceDiscount: "1000", Lines: []api.PurchaseLineInput{{ProductID: oil.ID, Quantity: "3", Damaged: "1", UnitCost: "30000", DiscountAmount: "2000"}}}); !r.OK {
+		t.Fatal(r.Error)
+	}
 	set.Owner.EndElevation()
 	cart := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "2"}}}
 	if r := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: quoted(t, set, cart).Token}); !r.OK {
@@ -199,6 +206,9 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 		collect("fx.history", set.FX.History(10).Data)
 		collect("stock.levels", set.Stock.Levels().Data)
 		collect("sales.receipt", set.Sales.List("").Data)
+		collect("suppliers.list", set.Suppliers.List(api.SupplierQueryDTO{}).Data)
+		collect("suppliers.statement", set.Suppliers.Statement(api.SupplierStatementQueryDTO{SupplierID: marwa.ID, Currency: "SYP"}).Data)
+		collect("suppliers.purchases", set.Suppliers.Purchases(api.PurchaseQueryDTO{}).Data)
 		return out
 	}
 
@@ -253,6 +263,8 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 		"reports.day.profit.revenueLocal", "reports.day.takings.1.charged",
 		"reports.month.total.profit.revenueLocal", "reports.stock.totalLocal",
 		"cash.drawer.currencies.1.expected",
+		"suppliers.list.totals.0.balance", "suppliers.statement.entries.1.amount", "suppliers.purchases.0.lines.0.netUnitCost",
+		"suppliers.purchases.0.rate", "cash.drawer.currencies.1.suppliersOut",
 	} {
 		if legacy[path] == redenominated[path] {
 			t.Errorf("%s did not change: it is local money and should read two noughts shorter (%q)", path, legacy[path])
@@ -315,6 +327,9 @@ var notLocalMoney = []string{
 	"stock.valuation.lines.0.onHand",
 	"stock.valuation.lines.0.value",
 	"stock.valuation.total",
+	"suppliers.purchases.0.lines.0.damaged",
+	"suppliers.purchases.0.lines.0.good",
+	"suppliers.purchases.0.lines.0.quantity",
 	"till.quote.lines.0.grossUsd",
 	"till.quote.lines.0.netUsd",
 	"till.quote.lines.0.onHand",

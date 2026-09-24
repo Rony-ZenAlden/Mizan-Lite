@@ -22,6 +22,7 @@ type shop struct {
 	backupAge     time.Duration
 	clk           *clock.Fixed
 	stockValueUSD int64
+	payableUSD    int64
 }
 
 func (s *shop) Products(context.Context) ([]domain.Product, error) {
@@ -47,7 +48,8 @@ func (s *shop) Decimals(context.Context) (int, int, error)           { return 0,
 func (s *shop) Expected(context.Context, string) (int64, int64, error) {
 	return 0, 15_000_000, nil // 15,000,000 old pounds in the drawer
 }
-func (s *shop) Owed(context.Context) (int64, int64, error) { return 0, 0, nil }
+func (s *shop) Owed(context.Context) (int64, int64, error)  { return 0, 0, nil }
+func (s *shop) Owing(context.Context) (int64, int64, error) { return s.payableUSD, 0, nil }
 func (s *shop) Newest(context.Context) (time.Time, bool, error) {
 	return s.clk.Now().Add(-s.backupAge), true, nil
 }
@@ -63,7 +65,7 @@ func newShop(t *testing.T) (*shop, *alerts.Service, *alertstest.Fake) {
 	// A month ago: the same stock and drawer, at 15,000.
 	_ = store.Put(context.Background(), domain.Snapshot{BusinessDate: "2026-08-24", RateNano: 15_000_000_000_000,
 		LocalCurrency: "SYP", StockUSDMinor: 100_000, CashLocalMinor: 15_000_000}, s.clk.Now().AddDate(0, 0, -30))
-	ports := alerts.Ports{Catalogue: s, Stock: s, Prices: s, Money: s, Drawer: s, Receivables: s, Backups: s, Gate: s}
+	ports := alerts.Ports{Catalogue: s, Stock: s, Prices: s, Money: s, Drawer: s, Receivables: s, Payables: s, Backups: s, Gate: s}
 	return s, alerts.NewService(litetest.Immediate{}, store, ports, s.clk, time.UTC), store
 }
 
@@ -98,6 +100,24 @@ func TestTheEngineFindsWhatTheOwnerAskedToBeToldAbout(t *testing.T) {
 	}
 	if r.OwnerHidden {
 		t.Error("figures were hidden from someone allowed to see them")
+	}
+}
+
+// TestTodaysSnapshotTakesOffWhatTheShopOwesItsSuppliers (0.10.0): today's worth is kept with the payables beside it,
+// and the comparison reads them.
+func TestTodaysSnapshotTakesOffWhatTheShopOwesItsSuppliers(t *testing.T) {
+	s, svc, store := newShop(t)
+	s.payableUSD = 25_000
+	r, err := svc.Current(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	today, _, found, _ := store.Get(context.Background(), "2026-09-23")
+	if !found || today.PayableUSDMinor != 25_000 {
+		t.Fatalf("today's snapshot %+v", today)
+	}
+	if r.Facts.Capital == nil || r.Facts.Capital.NowUSD != today.TotalUSDMinor(0, 2) || r.Facts.Capital.NowUSD >= 190_909 {
+		t.Fatalf("capital %+v — $250 owed to a supplier did not come off the shop's worth", r.Facts.Capital)
 	}
 }
 
@@ -181,7 +201,7 @@ func TestAStaleBackupIsTheShopsOwnAndNeverTheUSB(t *testing.T) {
 func TestANewShopIsToldHowLongUntilItCanCompare(t *testing.T) {
 	s, _, _ := newShop(t)
 	store := alertstest.NewFake()
-	ports := alerts.Ports{Catalogue: s, Stock: s, Prices: s, Money: s, Drawer: s, Receivables: s, Backups: s, Gate: s}
+	ports := alerts.Ports{Catalogue: s, Stock: s, Prices: s, Money: s, Drawer: s, Receivables: s, Payables: s, Backups: s, Gate: s}
 	svc := alerts.NewService(litetest.Immediate{}, store, ports, s.clk, time.UTC)
 	for _, want := range []int{0, 1, 6} {
 		s.clk.Current = time.Date(2026, 9, 23+want, 9, 0, 0, 0, time.UTC)

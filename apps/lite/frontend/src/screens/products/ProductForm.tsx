@@ -33,6 +33,9 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
   // The cost price, and the margin between it and the selling price (L9). `lastTyped` remembers which box the shopkeeper
   // touched last, because that is the one Go should work the other two out from — and only Go does that arithmetic.
   const [costPrice, setCostPrice] = useState(typeable(product?.costPrice ?? ""));
+  // A supplier's discount off the cost typed, as a percentage (0.10.0). Never stored: Go takes it off the cost typed with
+  // it, and the cost kept — the one this form shows next time — is what the shop really pays.
+  const [costDiscount, setCostDiscount] = useState("");
   // The level at or below which the shop wants to be told to buy more (2026-09-20). Empty means never tell me.
   const [reorderLevel, setReorderLevel] = useState(product?.reorderLevel ?? "");
   // How many of the unit make one carton (طرد) — what the invoice's carton column counts in (0.10.0). Empty for none.
@@ -83,11 +86,12 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
         onSaved(
           await client.catalog.createProduct(
             openPrice
-              ? { nameAr, nameEn, barcode, unitCode, priceCurrency, price: "", costPrice: "", marginPercent: "", marginAmount: "", openPrice: true,
+              ? { nameAr, nameEn, barcode, unitCode, priceCurrency, price: "", costPrice: "", costDiscount: "", marginPercent: "", marginAmount: "", openPrice: true,
                   unitsPerCarton: unitsPerCarton.trim() }
               : {
                   nameAr, nameEn, barcode, unitCode, priceCurrency, price,
                   costPrice,
+                  costDiscount: costDiscount.trim(),
                   marginPercent: lastTyped === "percent" ? marginPercent : "",
                   marginAmount: lastTyped === "amount" ? marginAmount : "",
                   openPrice: false,
@@ -105,7 +109,9 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
       }
       // The cost travels with the price: both live on the product, and one call keeps them consistent. "-" takes a cost
       // off; "" leaves whatever is stored alone.
-      const cost = costPrice === "" && current.costPrice !== "" ? "-" : costPrice === typeable(current.costPrice) ? "" : costPrice;
+      // A discount always travels with the cost it comes off, the one on screen, so it is never taken off a stored cost twice.
+      const discounting = costDiscount.trim() !== "" && costPrice !== "";
+      const cost = discounting ? costPrice : costPrice === "" && current.costPrice !== "" ? "-" : costPrice === typeable(current.costPrice) ? "" : costPrice;
       const marginChanged = (lastTyped === "percent" && marginPercent !== "") || (lastTyped === "amount" && marginAmount !== "");
       // An open-priced item has no price, cost or reorder level of its own: only its name and barcode are edited here.
       const typedValue = typedPrice.ok ? typedPrice.value : "";
@@ -115,6 +121,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
           client.catalog.setPrice({
             id: current.id, rowVersion: version, priceCurrency, price,
             costPrice: cost,
+            costDiscount: discounting ? costDiscount.trim() : "",
             marginPercent: lastTyped === "percent" ? marginPercent : "",
             marginAmount: lastTyped === "amount" ? marginAmount : "",
           }),
@@ -218,6 +225,17 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
             inputMode="decimal"
             dir="ltr"
             autoComplete="off"
+          />
+          <TextField
+            label={t("products.cost_discount")}
+            value={costDiscount}
+            onChange={(e) => setCostDiscount(e.target.value)}
+            error={fieldError("costDiscount")}
+            hint={t("products.cost_discount_hint")}
+            inputMode="decimal"
+            dir="ltr"
+            autoComplete="off"
+            disabled={costPrice === ""}
           />
           <div className="grid grid-cols-2 gap-3">
             <TextField

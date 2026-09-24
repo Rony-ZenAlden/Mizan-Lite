@@ -179,9 +179,12 @@ function DrawerCard({ terms: c, ownerView, onCount }: { terms: DrawerCurrency; o
     { key: "cash.term.credit_paid", value: c.creditPaidIn, out: false },
     { key: "cash.term.repayments", value: c.repaymentsIn, out: false },
     { key: "cash.term.deposits", value: c.depositsIn, out: false },
+    { key: "cash.term.suppliers_in", value: c.suppliersIn, out: false },
     { key: "cash.term.change", value: c.changeOut, out: true },
     { key: "cash.term.refunds", value: c.refundsOut, out: true },
     { key: "cash.term.void_returns", value: c.voidReturns, out: true },
+    { key: "cash.term.returns", value: c.returnsOut, out: true },
+    { key: "cash.term.suppliers_out", value: c.suppliersOut, out: true },
     { key: "cash.term.expenses", value: c.expensesOut, out: true },
     { key: ownerView ? "cash.term.withdrawals" : "cash.term.taken_out", value: c.withdrawalsOut, out: true },
   ];

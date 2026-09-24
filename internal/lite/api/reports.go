@@ -504,12 +504,18 @@ type DrawerCurrencyDTO struct {
 	VoidReturns      string `json:"voidReturns"`
 	ExpensesOut      string `json:"expensesOut"`
 	WithdrawalsOut   string `json:"withdrawalsOut"`
-	Expected         string `json:"expected"`
-	Counted          bool   `json:"counted"`
-	Count            string `json:"count"`
-	CountExpected    string `json:"countExpected"`
-	Difference       string `json:"difference"`
-	CountedAt        string `json:"countedAt"`
+	// ReturnsOut is cash handed back over the counter for returned goods (2026-09-20). Until 0.10.0 it was in Expected and
+	// on no line of its own, so a day with a cash return did not add up on the screen.
+	ReturnsOut string `json:"returnsOut"`
+	// SuppliersOut is money paid to suppliers out of the drawer, SuppliersIn their refunds into it (0.10.0).
+	SuppliersOut  string `json:"suppliersOut"`
+	SuppliersIn   string `json:"suppliersIn"`
+	Expected      string `json:"expected"`
+	Counted       bool   `json:"counted"`
+	Count         string `json:"count"`
+	CountExpected string `json:"countExpected"`
+	Difference    string `json:"difference"`
+	CountedAt     string `json:"countedAt"`
 }
 
 // DrawerDTO is a day's drawer. OwnerView is false at the counter: expenses are then shown with withdrawals as money taken
@@ -584,7 +590,8 @@ func drawerDTO(ctx context.Context, app *bootstrap.App, date string) (DrawerDTO,
 		m := func(minor int64) string { return v.money(minor, t.Currency) }
 		cur := DrawerCurrencyDTO{Currency: t.Currency, Opening: m(t.Opening), CashSalesIn: m(t.CashSalesIn), CreditPaidIn: m(t.CreditPaidIn),
 			RepaymentsIn: m(t.RepaymentsIn), DepositsIn: m(t.DepositsIn), ChangeOut: m(t.ChangeOut), RefundsOut: m(t.RefundsOut),
-			VoidReturns: m(t.VoidReturns), ExpensesOut: m(t.ExpensesOut), WithdrawalsOut: m(t.WithdrawalOut), Expected: m(t.Expected)}
+			VoidReturns: m(t.VoidReturns), ExpensesOut: m(t.ExpensesOut), WithdrawalsOut: m(t.WithdrawalOut), ReturnsOut: m(t.ReturnsOut),
+			SuppliersOut: m(t.SuppliersOut), SuppliersIn: m(t.SuppliersIn), Expected: m(t.Expected)}
 		if t.OpeningCount != nil {
 			cur.OpeningCountDate = t.OpeningCount.BusinessDate
 		}

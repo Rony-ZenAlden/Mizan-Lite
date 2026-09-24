@@ -24,12 +24,16 @@ const (
 	CodeMarginInvalid   = "lite.catalog.margin_invalid"
 	CodeMarginBelowCost = "lite.catalog.margin_below_cost"
 	CodeCostCurrency    = "lite.catalog.cost_currency"
+	// CodeCostDiscountInvalid refuses a supplier's discount that is not a percentage above nothing and below a hundred,
+	// or that has no cost typed with it to come off (0.10.0).
+	CodeCostDiscountInvalid = "lite.catalog.cost_discount_invalid"
 )
 
 // Field names a form marks.
 const (
-	FieldCost   = "costPrice"
-	FieldMargin = "margin"
+	FieldCost         = "costPrice"
+	FieldMargin       = "margin"
+	FieldCostDiscount = "costDiscount"
 )
 
 // SetCost records what the shop believes one unit costs it, in the product's own selling currency.
@@ -77,6 +81,48 @@ func (p Product) SetCost(raw string, ref Reference) (Product, error) {
 	}
 	p.CostMicro = amount.Micro()
 	p.HasCost = true
+	return p, nil
+}
+
+// DiscountCost takes a supplier's discount off the cost price just set (0.10.0, the owner's request of 2026-09-24): "I buy
+// at 2.00 and they give me 10%" is a cost of 1.80, and the margin is worked out from what the shop really pays.
+//
+// The discount is a percentage above nothing and below a hundred, at most four decimals. The cost it leaves is held to the
+// currency's decimals, half up, like one typed — so the figure the form shows can be typed back unchanged.
+func (p Product) DiscountCost(raw string, ref Reference) (Product, error) {
+	invalid := func(message string) error {
+		return errs.Validation(CodeCostDiscountInvalid, message).WithField(FieldCostDiscount, CodeCostDiscountInvalid, "invalid")
+	}
+	if strings.TrimSpace(raw) == "" {
+		return p, nil
+	}
+	if !p.HasCost {
+		return p, invalid("a discount comes off a cost price typed with it")
+	}
+	normalised, err := numinput.Normalise(raw)
+	if err != nil {
+		return p, withField(err, FieldCostDiscount)
+	}
+	percentMicro, err := micros(normalised)
+	if err != nil || numinput.Decimals(normalised) > 4 || percentMicro <= 0 || percentMicro >= 100_000_000 {
+		return p, invalid("a discount is a percentage above nothing and below a hundred")
+	}
+	currency, ok := ref.Currencies[p.PriceCurrency]
+	if !ok {
+		return p, errs.Validation(CodeUnknownCurrency, "unknown currency").
+			WithField(FieldCost, CodeUnknownCurrency, "unknown currency").WithParam("value", p.PriceCurrency)
+	}
+	step := int64(1)
+	for range 6 - currency.Decimals {
+		step *= 10
+	}
+	net := p.CostMicro - mulDivRound(p.CostMicro, percentMicro, 100_000_000)
+	net = (net + step/2) / step * step // the currency's decimals, half up: net is above nothing here
+	if net <= 0 {
+		return p, errs.Validation(CodeCostNotPositive, "a cost price is more than nothing").
+			WithField(FieldCostDiscount, CodeCostNotPositive, "more than nothing")
+	}
+	p.CostMicro = net
 	return p, nil
 }
 

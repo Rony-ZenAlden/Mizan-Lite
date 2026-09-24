@@ -490,6 +490,24 @@ func TestAPoundReceiptIsConvertedAtTheRateTypedOnIt(t *testing.T) {
 	}
 }
 
+// TestASuppliersDiscountCostsTheDeliveryAtWhatWasPaid (0.10.0): 25 kg for 450,000 pounds less 10% is 16,200 a kilo — $1.08
+// at 15,000 — and the delivery is kept at that, typed and converted.
+func TestASuppliersDiscountCostsTheDeliveryAtWhatWasPaid(t *testing.T) {
+	cost, err := domain.ResolveCost(domain.CostInput{Amount: "450000", Currency: "SYP", Rate: "15000", DiscountPercent: "١٠"}, 25*u, currencies)
+	if err != nil || cost.UnitCostMicro != 1_080_000 || cost.Entered.UnitCostMicro != 16_200*u {
+		t.Fatalf("cost = %+v, %v", cost, err)
+	}
+	// 3 jars for $10.00 less 2.5%: 3.333333 less 0.083333 = 3.25.
+	if cost, _ = domain.ResolveCost(domain.CostInput{Amount: "10", Currency: "USD", DiscountPercent: "2.5"}, 3*u, currencies); cost.UnitCostMicro != 3_250_000 {
+		t.Fatalf("cost = %+v", cost)
+	}
+	for _, bad := range []string{"0", "100", "150", "-3", "2.12345", "x"} {
+		if _, err := domain.ResolveCost(domain.CostInput{Amount: "10", Currency: "USD", DiscountPercent: bad}, u, currencies); code(err) != domain.CodeDiscountInvalid {
+			t.Errorf("a discount of %q: %v", bad, err)
+		}
+	}
+}
+
 func TestACostIsRefusedWithTooManyDecimalsOrNoCurrency(t *testing.T) {
 	for _, tc := range []struct {
 		in   domain.CostInput

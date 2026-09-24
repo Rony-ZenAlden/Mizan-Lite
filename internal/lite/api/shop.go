@@ -124,8 +124,8 @@ func (s *Settings) SetLogo(path string) envelope.Result[ShopDTO] {
 			return ShopDTO{}, errs.Validation(settingsdomain.CodeLogoInvalid, "the logo file cannot be read")
 		}
 		err = app.DB.Do(ctx, func(ctx context.Context) error {
-			if _, err := app.Settings.SetLogo(ctx, raw); err != nil {
-				return err
+			if _, setErr := app.Settings.SetLogo(ctx, raw); setErr != nil {
+				return setErr
 			}
 			return requireOwner(ctx, app, ActShopLogo, info.Name())
 		})

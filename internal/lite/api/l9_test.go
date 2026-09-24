@@ -65,3 +65,29 @@ func TestACostPriceAndItsMarginThroughTheBindings(t *testing.T) {
 		t.Fatalf("a product sold below cost = %+v", below.Data)
 	}
 }
+
+// TestASuppliersDiscountOnTheCostThroughTheBindings (0.10.0): the product form's discount comes off the cost typed with it,
+// in the new pound as in the old, and never off a stored cost that may carry one already.
+func TestASuppliersDiscountOnTheCostThroughTheBindings(t *testing.T) {
+	set, _ := attached(t, litetest.Logger())
+	firstRun(t, set)
+	setDisplay(t, set, "new")
+
+	// 200 new pounds less 10% is 180; a 25% margin on it is 225.
+	made := set.Catalog.CreateProduct(api.CreateProductInput{NameAR: "سمنة", UnitCode: "kg", PriceCurrency: "SYP",
+		Price: "1", CostPrice: "200", CostDiscount: "10", MarginPercent: "25"})
+	if !made.OK || made.Data.CostPrice != "180" || made.Data.Price != "225" {
+		t.Fatalf("created with a supplier's discount = %+v", made)
+	}
+	// A discount with no cost typed beside it is refused, under the discount.
+	alone := set.Catalog.SetPrice(api.SetPriceInput{ID: made.Data.ID, RowVersion: made.Data.RowVersion, PriceCurrency: "SYP",
+		Price: "225", CostDiscount: "10"})
+	if codeOf(t, alone) != catalogdomain.CodeCostDiscountInvalid {
+		t.Fatalf("a discount off the stored cost = %+v", alone)
+	}
+	retyped := set.Catalog.SetPrice(api.SetPriceInput{ID: made.Data.ID, RowVersion: made.Data.RowVersion, PriceCurrency: "SYP",
+		Price: "225", CostPrice: "200", CostDiscount: "5"})
+	if !retyped.OK || retyped.Data.CostPrice != "190" {
+		t.Fatalf("a new cost with its discount = %+v", retyped)
+	}
+}

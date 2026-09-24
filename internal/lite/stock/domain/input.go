@@ -1,7 +1,9 @@
 package domain
 
 import (
+	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/kernel/money"
@@ -44,6 +46,9 @@ type CostInput struct {
 	Currency string
 	// Rate is pounds per dollar, typed on the receipt when the currency is not USD (Q-L2.1). Ignored for USD.
 	Rate string
+	// DiscountPercent is a supplier's discount off the cost typed, a percentage above nothing and below a hundred, or ""
+	// for none (0.10.0). The delivery is costed at what the shop really paid, so the average cost is.
+	DiscountPercent string
 }
 
 // ResolveCost turns a typed cost for quantityMicro into a USD unit cost, keeping what was typed (L2 §5.1).
@@ -86,6 +91,10 @@ func ResolveCost(in CostInput, quantityMicro int64, currencies []Currency) (Cost
 		}
 	default:
 		return Cost{}, errs.Validation(numinput.CodeInvalid, "unknown cost mode").WithParam("value", string(in.Mode))
+	}
+
+	if unit, err = discounted(unit, kernelCurrency, in.DiscountPercent); err != nil {
+		return Cost{}, err
 	}
 
 	if currency.Code == CostCurrency {
@@ -195,4 +204,26 @@ func withField(err error, field string) error {
 		return typed.WithField(field, typed.Code, "invalid")
 	}
 	return err
+}
+
+// discounted takes a supplier's discount off a unit cost, half up at 10⁻⁶ of the major unit (0.10.0).
+func discounted(unit money.UnitAmount, c money.Currency, raw string) (money.UnitAmount, error) {
+	if strings.TrimSpace(raw) == "" {
+		return unit, nil
+	}
+	invalid := errs.Validation(CodeDiscountInvalid, "a discount is a percentage above nothing and below a hundred").
+		WithField(FieldDiscount, CodeDiscountInvalid, "invalid")
+	normalised, err := numinput.Normalise(raw)
+	if err != nil || numinput.Decimals(normalised) > 4 {
+		return unit, invalid
+	}
+	percentMicro, err := decimalMicro(normalised)
+	if err != nil || percentMicro <= 0 || percentMicro >= 100_000_000 {
+		return unit, invalid
+	}
+	off, rest := new(big.Int).QuoRem(new(big.Int).Mul(big.NewInt(unit.Micro()), big.NewInt(percentMicro)), big.NewInt(100_000_000), new(big.Int))
+	if new(big.Int).Lsh(rest, 1).Cmp(big.NewInt(100_000_000)) >= 0 {
+		off.Add(off, big.NewInt(1))
+	}
+	return money.UnitFromMicro(c, unit.Micro()-off.Int64()), nil
 }

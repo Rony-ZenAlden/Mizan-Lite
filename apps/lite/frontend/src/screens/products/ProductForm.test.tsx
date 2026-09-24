@@ -28,7 +28,7 @@ describe("ProductForm — create", () => {
     await settle();
 
     expect(createProduct).toHaveBeenCalledWith({
-      costPrice: "", marginPercent: "", marginAmount: "", openPrice: false, unitsPerCarton: "",
+      costPrice: "", costDiscount: "", marginPercent: "", marginAmount: "", openPrice: false, unitsPerCarton: "",
       nameAr: "دبس رمان", nameEn: "Pomegranate molasses", barcode: "٦٢٢٣", unitCode: "jar", priceCurrency: "SYP", price: "٤٥٠٠٠",
     });
     expect(onSaved).toHaveBeenCalledWith(aProduct({ id: "new" }));
@@ -126,7 +126,7 @@ describe("ProductForm — edit", () => {
     await settle();
 
     expect(setPrice).toHaveBeenCalledTimes(2);
-    expect(setPrice).toHaveBeenLastCalledWith({ id: existing.id, rowVersion: 4, priceCurrency: "USD", price: "3.50", costPrice: "", marginPercent: "", marginAmount: "" });
+    expect(setPrice).toHaveBeenLastCalledWith({ id: existing.id, rowVersion: 4, priceCurrency: "USD", price: "3.50", costPrice: "", costDiscount: "", marginPercent: "", marginAmount: "" });
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -252,6 +252,25 @@ describe("ProductForm — cost price and margin (owner's request, 2026-09-16)", 
     expect(createProduct).toHaveBeenCalledWith(
       expect.objectContaining({ costPrice: "2.00", marginPercent: "25", marginAmount: "" }),
     );
+  });
+
+  it("sends a supplier's discount with the cost it comes off, and Go does the arithmetic (0.10.0)", async () => {
+    const createProduct = vi.fn(async () => aProduct({ price: "2.25", costPrice: "1.80", marginAmount: "0.45", marginPercent: "25.0" }));
+    renderWithProviders(<ProductForm onSaved={() => {}} onClose={() => {}} />, {
+      client: fakeClient({ catalog: { createProduct } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.type(screen.getByLabelText("Arabic name"), "سمنة");
+    await userEvent.selectOptions(screen.getByLabelText("Price currency"), "USD");
+    await userEvent.type(screen.getByLabelText("Price"), "0.01");
+    expect(screen.getByLabelText("Supplier's discount on the cost, %")).toBeDisabled();
+    await userEvent.type(screen.getByLabelText("Cost price (capital)"), "2.00");
+    await userEvent.type(screen.getByLabelText("Supplier's discount on the cost, %"), "10");
+    await userEvent.type(screen.getByLabelText("Percent %"), "25");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await settle();
+    expect(createProduct).toHaveBeenCalledWith(expect.objectContaining({ costPrice: "2.00", costDiscount: "10", marginPercent: "25" }));
   });
 
   it("shows the margin Go worked out, and says when a product is sold below cost", async () => {

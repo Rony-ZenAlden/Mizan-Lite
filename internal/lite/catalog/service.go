@@ -247,6 +247,8 @@ type SetPriceInput struct {
 	Price      string
 	// Cost is what the shop pays for one unit, in the same currency (L9). Empty leaves it as it is; "-" clears it.
 	Cost string
+	// CostDiscount is a supplier's discount, a percentage taken off the Cost typed with it (0.10.0).
+	CostDiscount string
 	// MarginPercent or MarginAmount works the price out of the cost instead of taking Price as typed. At most one, and
 	// only when a cost is known. The form sends whichever box the shopkeeper typed in last.
 	MarginPercent string
@@ -295,6 +297,16 @@ func applyCost(p domain.Product, in SetPriceInput, ref domain.Reference) (domain
 		}
 	default:
 		if p, err = p.SetCost(in.Cost, ref); err != nil {
+			return p, err
+		}
+	}
+	// A supplier's discount comes off the cost typed with it — never off one stored, which may already carry it (0.10.0).
+	if in.CostDiscount != "" {
+		if in.Cost == "" || in.Cost == ClearCost {
+			return p, errs.Validation(domain.CodeCostDiscountInvalid, "a discount comes off a cost price typed with it").
+				WithField(domain.FieldCostDiscount, domain.CodeCostDiscountInvalid, "invalid")
+		}
+		if p, err = p.DiscountCost(in.CostDiscount, ref); err != nil {
 			return p, err
 		}
 	}

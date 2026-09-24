@@ -13,6 +13,7 @@ import { RatesScreen } from "@/screens/rates/RatesScreen";
 import { ReportsScreen } from "@/screens/reports/ReportsScreen";
 import { SalesScreen } from "@/screens/sales/SalesScreen";
 import { StockScreen } from "@/screens/stock/StockScreen";
+import { SuppliersScreen } from "@/screens/suppliers/SuppliersScreen";
 import { TillScreen } from "@/screens/till/TillScreen";
 
 export interface RouteDef {
@@ -32,6 +33,8 @@ export const ROUTES: readonly RouteDef[] = [
   { path: "/sales", labelKey: "nav.sales", Screen: SalesScreen },
   { path: "/cash", labelKey: "nav.cash", Screen: CashScreen },
   { path: "/customers", labelKey: "nav.customers", Screen: CustomersScreen },
+  // The payables book, apart from the customers' debts (0.10.0).
+  { path: "/suppliers", labelKey: "nav.suppliers", Screen: SuppliersScreen },
   { path: "/products", labelKey: "nav.products", Screen: ProductsScreen },
   { path: "/stock", labelKey: "nav.stock", Screen: StockScreen },
   { path: "/rates", labelKey: "nav.rates", Screen: RatesScreen },

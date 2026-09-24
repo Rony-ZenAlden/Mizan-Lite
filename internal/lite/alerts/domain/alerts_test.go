@@ -141,6 +141,26 @@ func TestAnUnprotectedShopIsRemindedOnceADay(t *testing.T) {
 }
 
 // TestCapitalIsTheOwnersAndBandsInFives: it discloses the shop's worth, and drifting within a band is not news.
+// TestWhatTheShopOwesItsSuppliersComesOffItsWorth (0.10.0): a delivery on credit adds stock and adds a debt of the same
+// size — the shop is no richer — and pounds owed to a supplier are pounds a falling pound makes cheaper.
+func TestWhatTheShopOwesItsSuppliersComesOffItsWorth(t *testing.T) {
+	then := domain.Snapshot{BusinessDate: "2026-08-24", RateNano: 15_000_000_000_000, StockUSDMinor: 100_000}
+	now := then
+	now.BusinessDate, now.StockUSDMinor, now.PayableUSDMinor = "2026-09-23", 150_000, 50_000
+	if c := domain.CompareCapital(then, now, 0, 2); c.NowUSD != 100_000 || c.ChangeMicro != 0 || c.Notify {
+		t.Fatalf("a delivery bought on credit made the shop richer: %+v", c)
+	}
+	// Owing 15,000,000 old pounds and holding 3,000,000: the pound falling 10% is the shop's gain, not its loss.
+	then = domain.Snapshot{BusinessDate: "2026-08-24", RateNano: 15_000_000_000_000, StockUSDMinor: 200_000,
+		CashLocalMinor: 3_000_000, PayableLocalMinor: 15_000_000}
+	now = then
+	now.BusinessDate, now.RateNano = "2026-09-23", 16_500_000_000_000
+	c := domain.CompareCapital(then, now, 0, 2)
+	if c.ThenUSD != 120_000 || c.DepreciationUSD >= 0 {
+		t.Fatalf("then %d cents, lost to the rate %d — owing pounds is not holding them", c.ThenUSD, c.DepreciationUSD)
+	}
+}
+
 func TestCapitalIsTheOwnersAndBandsInFives(t *testing.T) {
 	mk := func(change int64) domain.Facts {
 		return domain.Facts{BackupFound: true, Capital: &domain.Capital{Notify: true, ChangeMicro: change}}

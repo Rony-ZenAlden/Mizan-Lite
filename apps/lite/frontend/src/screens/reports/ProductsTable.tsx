@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ProductRow, ProductsReport } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatDecimal, formatInteger } from "@/i18n/numbers";
 import { Money } from "@/screens/sales/Money";
 import { SelectField } from "@/ui/Field";
@@ -19,6 +20,8 @@ function order(value: string): number {
  */
 export function ProductsTable({ report }: { report: ProductsReport }) {
   const { t, tDynamic, locale } = useLocale();
+  // A dollars-only shop reads its products in dollars alone (0.10.0).
+  const { usdOnly } = useCurrencies();
   const [sort, setSort] = useState<SortKey>("profit");
   const cur = report.localCurrency;
   const rows = useMemo(() => {
@@ -46,7 +49,7 @@ export function ProductsTable({ report }: { report: ProductsReport }) {
               <th className="p-2 text-start">{t("reports.col.cost_usd")}</th>
               <th className="p-2 text-start">{t("reports.col.gross_usd")}</th>
               <th className="p-2 text-start">{t("reports.col.margin")}</th>
-              <th className="p-2 text-start">{t("reports.col.gross_local")}</th>
+              {usdOnly ? null : <th className="p-2 text-start">{t("reports.col.gross_local")}</th>}
               <th className="p-2 text-start">{t("reports.col.no_cost")}</th>
             </tr>
           </thead>
@@ -76,9 +79,11 @@ export function ProductsTable({ report }: { report: ProductsReport }) {
                   <Money value={r.profitUsd} currency="USD" />
                 </td>
                 <td className="p-2">{r.marginUsd ? t("reports.margin", { margin: formatDecimal(r.marginUsd, locale) }) : ""}</td>
-                <td className="p-2">
-                  <Money value={r.profitLocal} currency={cur} />
-                </td>
+                {usdOnly ? null : (
+                  <td className="p-2">
+                    <Money value={r.profitLocal} currency={cur} />
+                  </td>
+                )}
                 <td className={`p-2 ${r.openLines > 0 ? "text-text-muted" : "text-danger"}`}>
                   {r.openLines > 0
                     ? t("reports.open_item_lines", { count: formatInteger(r.openLines, locale), usd: formatDecimal(r.openUsd, locale) })
@@ -96,12 +101,14 @@ export function ProductsTable({ report }: { report: ProductsReport }) {
                 <Money value={report.discountUsd} currency="USD" />
               </td>
               <td className="p-2" colSpan={3} />
-              <td className="p-2" colSpan={2}>
-                {t("reports.reconciling_local", {
-                  discount: formatDecimal(report.discountLocal, locale),
-                  rounding: formatDecimal(report.roundingLocal, locale),
-                  currency: tDynamic(`currency.short.${cur}`),
-                })}
+              <td className="p-2" colSpan={usdOnly ? 1 : 2}>
+                {usdOnly
+                  ? null
+                  : t("reports.reconciling_local", {
+                      discount: formatDecimal(report.discountLocal, locale),
+                      rounding: formatDecimal(report.roundingLocal, locale),
+                      currency: tDynamic(`currency.short.${cur}`),
+                    })}
               </td>
             </tr>
             <tr data-testid="products-total" className="border-t-2 border-border font-semibold">
@@ -118,9 +125,11 @@ export function ProductsTable({ report }: { report: ProductsReport }) {
                 <Money value={report.total.profitUsd} currency="USD" />
               </td>
               <td className="p-2">{report.total.marginUsd ? t("reports.margin", { margin: formatDecimal(report.total.marginUsd, locale) }) : ""}</td>
-              <td className="p-2">
-                <Money value={report.total.profitLocal} currency={cur} />
-              </td>
+              {usdOnly ? null : (
+                <td className="p-2">
+                  <Money value={report.total.profitLocal} currency={cur} />
+                </td>
+              )}
               <td className="p-2" />
             </tr>
           </tbody>

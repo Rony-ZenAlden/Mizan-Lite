@@ -259,7 +259,8 @@ func (v debtView) entry(e domain.Entry, reversed bool) EntryDTO {
 		ID: e.ID.String(), Seq: e.Seq, BusinessDate: e.BusinessDate, OccurredAt: clock.Format(e.OccurredAt), Kind: string(e.Kind),
 		Currency: e.Currency, Amount: v.money(e.AmountMinor, e.Currency), BalanceAfter: v.money(e.BalanceAfterMinor, e.Currency),
 		SaleID: e.SaleID.String(), ReversesID: e.ReversesID.String(), Note: e.Note, CustomerName: e.CustomerName, Reversed: reversed,
-		Reversible: !reversed && e.Kind != domain.KindCharge && e.Kind != domain.KindReversal,
+		// A conversion moved a balance between currencies and is never reversed (0.10.0).
+		Reversible: !reversed && e.Kind != domain.KindCharge && e.Kind != domain.KindReversal && e.Kind != domain.KindConversion,
 	}
 	if e.Kind == domain.KindPayment || e.Kind == domain.KindRefund {
 		dto.TenderedCurrency, dto.Tendered = e.Cash.TenderedCurrency, v.money(e.Cash.TenderedMinor, e.Cash.TenderedCurrency)
@@ -438,6 +439,9 @@ func (c *Customers) QuotePayment(in PaymentInput) envelope.Result[PaymentQuoteDT
 		if err != nil {
 			return PaymentQuoteDTO{}, err
 		}
+		if err = localCurrencyOff(shop, "currency", in.Currency, in.TenderCurrency, in.ChangeCurrency); err != nil {
+			return PaymentQuoteDTO{}, err
+		}
 		q, err := app.Customers.QuotePayment(ctx, customerID, in.cash(shop))
 		if err != nil {
 			return PaymentQuoteDTO{}, err
@@ -475,6 +479,9 @@ func (c *Customers) RecordPayment(in PaymentInput) envelope.Result[EntryDTO] {
 		if err != nil {
 			return domain.Entry{}, err
 		}
+		if err = localCurrencyOff(shop, "currency", in.Currency, in.TenderCurrency, in.ChangeCurrency); err != nil {
+			return domain.Entry{}, err
+		}
 		return app.Customers.RecordPayment(ctx, customers.PaymentInput{CustomerID: customerID, Cash: in.cash(shop), Note: in.Note, Token: in.Token})
 	})
 }
@@ -488,6 +495,9 @@ func (c *Customers) Opening(in DebtAmountInput) envelope.Result[EntryDTO] {
 		}
 		shop, err := moneyShop(ctx, app)
 		if err != nil {
+			return domain.Entry{}, err
+		}
+		if err = localCurrencyOff(shop, "currency", in.Currency); err != nil {
 			return domain.Entry{}, err
 		}
 		return app.Customers.Opening(ctx, customers.AmountInput{CustomerID: customerID, Currency: in.Currency,
@@ -506,6 +516,9 @@ func (c *Customers) WriteOff(in DebtAmountInput) envelope.Result[EntryDTO] {
 		if err != nil {
 			return domain.Entry{}, err
 		}
+		if err = localCurrencyOff(shop, "currency", in.Currency); err != nil {
+			return domain.Entry{}, err
+		}
 		return app.Customers.WriteOff(ctx, customers.AmountInput{CustomerID: customerID, Currency: in.Currency,
 			Amount: shop.Base(in.Amount, in.Currency), All: in.All, Note: in.Note})
 	})
@@ -520,6 +533,9 @@ func (c *Customers) Refund(in RefundInput) envelope.Result[EntryDTO] {
 		}
 		shop, err := moneyShop(ctx, app)
 		if err != nil {
+			return domain.Entry{}, err
+		}
+		if err = localCurrencyOff(shop, "currency", in.Currency, in.TenderCurrency); err != nil {
 			return domain.Entry{}, err
 		}
 		return app.Customers.Refund(ctx, customers.RefundInput{CustomerID: customerID, Reason: in.Reason,

@@ -378,6 +378,14 @@ drill lite-reports-forbids-suppliers "reports may not import another Lite module
   internal/lite/reports/zz_drill.go "package reports
 import _ \"$M/internal/lite/suppliers\""
 
+drill lite-usdmode-isolated "usdmode may not import another Lite module" \
+  internal/lite/usdmode/zz_drill.go "package usdmode
+import _ \"$M/internal/lite/catalog\""
+
+drill lite-customers-forbids-usdmode "customers may not import another Lite module" \
+  internal/lite/customers/zz_drill.go "package customers
+import _ \"$M/internal/lite/usdmode\""
+
 drill lite-typeset-only "only internal/lite/typeset may import go-text" \
   internal/lite/documents/zz_drill.go "package documents
 import _ \"github.com/go-text/typesetting/shaping\""

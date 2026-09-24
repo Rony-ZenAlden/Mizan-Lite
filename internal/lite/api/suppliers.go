@@ -304,6 +304,9 @@ func (v supplierView) purchase(p domain.Purchase) PurchaseDTO {
 // toService takes a purchase back into the pounds the books hold: every figure in the purchase's currency, and the rate —
 // local pounds per dollar — always in the local one (as a delivery's, 0.9.9).
 func (in PurchaseInput) toService(shop moneyfmt.Shop) (domain.Input, error) {
+	if err := localCurrencyOff(shop, "currency", in.Currency); err != nil {
+		return domain.Input{}, err
+	}
 	supplierID, err := parseSupplierID(in.SupplierID)
 	if err != nil {
 		return domain.Input{}, err
@@ -582,6 +585,9 @@ func (s *Suppliers) money(method string, in SupplierMoneyInput,
 		}
 		shop, err := moneyShop(ctx, app)
 		if err != nil {
+			return SupplierEntryDTO{}, err
+		}
+		if err = localCurrencyOff(shop, "currency", in.Currency); err != nil {
 			return SupplierEntryDTO{}, err
 		}
 		e, err := fn(ctx, app, suppliers.MoneyInput{SupplierID: supplierID, Currency: in.Currency, Amount: shop.Base(in.Amount, in.Currency),

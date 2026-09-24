@@ -4,6 +4,7 @@ package customers
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -711,6 +712,95 @@ func (s *Service) appendAt(ctx context.Context, e domain.Entry, place domain.Pla
 		return domain.Entry{}, err
 	}
 	return placed, nil
+}
+
+// ─── dollars only (0.10.0) ───────────────────────────────────────────────────
+
+// CodeConversionStale refuses a conversion whose balance moved since the owner was shown it.
+const CodeConversionStale = "lite.customers.conversion_stale"
+
+// LocalBalance is a customer's non-zero balance in one currency.
+type LocalBalance struct {
+	CustomerID   id.ID
+	Name         string
+	BalanceMinor int64
+}
+
+// BalancesIn lists every customer with a balance in a currency other than nought — what going over to dollars only would
+// convert. Unguarded: the conversion's plan reads it, and the conversion itself is the owner's act.
+func (s *Service) BalancesIn(ctx context.Context, currency string) ([]LocalBalance, error) {
+	// Every customer, not a screen's worth: a balance left out would stay in pounds in a shop that counts in dollars.
+	all, err := s.store.Search(ctx, Query{IncludeInactive: true, Limit: math.MaxInt32})
+	if err != nil {
+		return nil, err
+	}
+	out := []LocalBalance{}
+	for _, c := range all {
+		place, err := s.store.Newest(ctx, c.ID, currency)
+		if err != nil {
+			return nil, err
+		}
+		if place.BalanceMinor != 0 {
+			out = append(out, LocalBalance{CustomerID: c.ID, Name: c.Name, BalanceMinor: place.BalanceMinor})
+		}
+	}
+	return out, nil
+}
+
+// ConversionInput moves a customer's whole balance from one currency to another: FromMinor — which must be the From
+// chain's balance still — off it, and ToMinor, the same sum at the rate, onto the To chain.
+type ConversionInput struct {
+	CustomerID id.ID
+	From       string
+	FromMinor  int64
+	To         string
+	ToMinor    int64
+	Note       string
+}
+
+// Convert writes a conversion's two entries in the caller's transaction (0.10.0). The going-over-to-dollars act is the
+// owner's and is recorded once by its caller; a balance too small to be a cent in dollars leaves the pound chain at nought
+// and writes nothing on the dollar one.
+func (s *Service) Convert(ctx context.Context, in ConversionInput) ([]domain.Entry, error) {
+	var out []domain.Entry
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		c, err := s.store.Customer(ctx, in.CustomerID)
+		if err != nil {
+			return err
+		}
+		note, err := domain.Reason(in.Note)
+		if err != nil {
+			return err
+		}
+		from, err := s.store.Newest(ctx, c.ID, in.From)
+		if err != nil {
+			return err
+		}
+		if from.BalanceMinor != in.FromMinor || in.FromMinor == 0 {
+			return errs.Conflict(CodeConversionStale, "the balance changed since the conversion was shown").WithParam("name", c.Name)
+		}
+		off, err := s.append(ctx, domain.Entry{CustomerID: c.ID, Currency: in.From, Kind: domain.KindConversion,
+			AmountMinor: -in.FromMinor, CustomerName: c.Name, Note: note}, from)
+		if err != nil {
+			return err
+		}
+		out = append(out, off)
+		if in.ToMinor == 0 {
+			return nil
+		}
+		to, err := s.store.Newest(ctx, c.ID, in.To)
+		if err != nil {
+			return err
+		}
+		on, err := s.append(ctx, domain.Entry{CustomerID: c.ID, Currency: in.To, Kind: domain.KindConversion,
+			AmountMinor: in.ToMinor, CustomerName: c.Name, Note: note}, to)
+		if err != nil {
+			return err
+		}
+		out = append(out, on)
+		return nil
+	})
+	return out, err
 }
 
 // ─── the till's port ─────────────────────────────────────────────────────────

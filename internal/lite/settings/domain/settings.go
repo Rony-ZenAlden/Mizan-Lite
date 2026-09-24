@@ -243,7 +243,8 @@ type Settings struct {
 	// RateAdjustPercentMicro is the margin put on a fetched rate, at 10⁻⁶ of a percentage point, signed. Zero leaves the
 	// internet's figure as it came; it applies only in automatic mode, and never to a rate typed by hand.
 	RateAdjustPercentMicro int64
-	// MoneyDisplay is how the shop reads its local currency: "legacy", "new" or "dual" (L10).
+	// MoneyDisplay is how the shop reads its local currency: "legacy", "new" or "dual" (L10) — or "usd", a shop gone over
+	// to dollars only (0.10.0).
 	MoneyDisplay string
 	// PINRequired is whether guarded acts stop for the owner's PIN (2026-09-17). False on a fresh shop.
 	PINRequired bool
@@ -447,7 +448,7 @@ func (s Settings) Apply(u Update) (Settings, []Change, error) {
 	}
 	if u.MoneyDisplay != nil {
 		if !moneyfmt.Valid(*u.MoneyDisplay) {
-			return s, nil, errs.Validation(CodeInvalidMoneyDisplay, "a money display is legacy, new or dual").
+			return s, nil, errs.Validation(CodeInvalidMoneyDisplay, "a money display is legacy, new, dual or usd").
 				WithField("moneyDisplay", CodeInvalidMoneyDisplay, "unknown").WithParam("value", *u.MoneyDisplay)
 		}
 		if chosen := string(moneyfmt.Parse(*u.MoneyDisplay)); chosen != s.MoneyDisplay {

@@ -5,8 +5,10 @@ import (
 	"strconv"
 
 	"github.com/mizan-erp/mizan/internal/api/envelope"
+	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	"github.com/mizan-erp/mizan/internal/lite/bootstrap"
 	"github.com/mizan-erp/mizan/internal/lite/fx/infra/httpsource"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
 	"github.com/mizan-erp/mizan/internal/lite/settings/domain"
 )
 
@@ -77,6 +79,12 @@ const (
 // Update applies a partial change and returns the settings as they now are.
 func (s *Settings) Update(in SettingsInput) envelope.Result[SettingsDTO] {
 	return call(s.core, "Settings.Update", func(ctx context.Context, app *bootstrap.App) (SettingsDTO, error) {
+		// Dollars only is reached by the switch, which converts the prices and balances first (0.10.0). Leaving it is a
+		// plain setting: every figure the shop holds is in dollars, which a two-currency shop reads as it is.
+		if in.MoneyDisplay != nil && moneyfmt.Parse(*in.MoneyDisplay) == moneyfmt.USD {
+			return SettingsDTO{}, errs.Validation(CodeUSDOnlyByConversion, "go over to dollars only with the switch, which converts first").
+				WithField("moneyDisplay", CodeUSDOnlyByConversion, "use the switch")
+		}
 		// A local-market endpoint is checked here, where the shop can be told about it, rather than at fetch time where
 		// the only sign would be a rate that never arrives (2026-09-17).
 		var url *string

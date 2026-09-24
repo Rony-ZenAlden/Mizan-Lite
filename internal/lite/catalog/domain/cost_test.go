@@ -195,3 +195,22 @@ func TestASuppliersDiscountComesOffTheCostBeforeTheMargin(t *testing.T) {
 		t.Fatal("an open-priced item took a supplier's discount")
 	}
 }
+
+// TestAnOpenItemChangesOnlyTheCurrencyItIsPricedIn (0.10.0).
+func TestAnOpenItemChangesOnlyTheCurrencyItIsPricedIn(t *testing.T) {
+	pid, _ := id.New()
+	misc, err := domain.NewProduct(pid, domain.Draft{NameAR: "متفرقات", UnitCode: "l", PriceCurrency: "SYP", OpenPrice: true}, costRef())
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, err := misc.OpenPricedIn("USD", costRef())
+	if err != nil || usd.PriceCurrency != "USD" || usd.PriceMicro != 0 || !usd.OpenPrice {
+		t.Fatalf("OpenPricedIn = %+v, %v", usd, err)
+	}
+	if _, err = priced(t, "SYP", "1000").OpenPricedIn("USD", costRef()); errs.CodeOf(err) != domain.CodeOpenPriceHasNoPrice {
+		t.Fatalf("a priced product's currency changed alone: %v", err)
+	}
+	if _, err = misc.OpenPricedIn("EUR", costRef()); errs.CodeOf(err) != domain.CodeUnknownCurrency {
+		t.Fatalf("an unknown currency: %v", err)
+	}
+}

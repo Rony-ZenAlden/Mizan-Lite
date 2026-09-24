@@ -282,6 +282,20 @@ func (p Product) Reprice(currencyCode, raw string, ref Reference) (Product, erro
 	return p, nil
 }
 
+// OpenPricedIn changes the currency an open-priced item's price is typed in at the till (0.10.0). It has no price of its
+// own, so a shop going over to dollars only moves nothing else of it.
+func (p Product) OpenPricedIn(currencyCode string, ref Reference) (Product, error) {
+	if !p.OpenPrice {
+		return p, errs.Validation(CodeOpenPriceHasNoPrice, "only an open-priced product is priced at the till")
+	}
+	if _, ok := ref.Currencies[currencyCode]; !ok {
+		return p, errs.Validation(CodeUnknownCurrency, "unknown currency").
+			WithField(FieldCurrency, CodeUnknownCurrency, "unknown currency").WithParam("value", currencyCode)
+	}
+	p.PriceCurrency = currencyCode
+	return p, nil
+}
+
 // SamePrice reports whether the product already has this price and currency — so a form that saves an
 // unchanged price does not ask for the owner's PIN.
 func (p Product) SamePrice(currencyCode string, micro int64) bool {

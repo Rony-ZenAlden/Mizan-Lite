@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { CashEntry } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
@@ -17,7 +18,8 @@ export function MoneyDialog({ kind, categories, onDone, onClose }: { kind: Money
   const client = useClient();
   const { withOwner } = useOwner();
   const { t, tDynamic, errorText } = useLocale();
-  const [currency, setCurrency] = useState("SYP");
+  const { currencies, home } = useCurrencies("SYP");
+  const [currency, setCurrency] = useState(home);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(categories[0] ?? "other");
   const [fromDrawer, setFromDrawer] = useState(true);
@@ -58,8 +60,11 @@ export function MoneyDialog({ kind, categories, onDone, onClose }: { kind: Money
     <Dialog title={tDynamic(`cash.${kind}.title`)} onClose={onClose}>
       <form className="space-y-3" onSubmit={submit}>
         <SelectField label={t("cash.currency")} value={currency} onChange={(e) => setCurrency(e.target.value)}>
-          <option value="SYP">{t("currency.SYP")}</option>
-          <option value="USD">{t("currency.USD")}</option>
+          {currencies.map((c) => (
+            <option key={c} value={c}>
+              {tDynamic(`currency.${c}`)}
+            </option>
+          ))}
         </SelectField>
         <TextField label={t("cash.amount")} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" dir="ltr" error={errors.field("amount")} required />
         {kind === "expense" ? (

@@ -267,6 +267,11 @@ func (c *Catalog) CreateProduct(in CreateProductInput) envelope.Result[ProductDT
 		if err != nil {
 			return domain.Product{}, err
 		}
+		// A dollars-only shop prices in dollars (0.10.0).
+		in.PriceCurrency = orUSD(shop, in.PriceCurrency)
+		if err = localCurrencyOff(shop, "priceCurrency", in.PriceCurrency); err != nil {
+			return domain.Product{}, err
+		}
 		// What a person typed is in the shop's own reading of its currency; the books hold the base figure (L10).
 		return app.Catalog.Create(ctx, domain.Draft{
 			NameAR: in.NameAR, NameEN: in.NameEN, Barcode: in.Barcode,
@@ -331,6 +336,9 @@ func (c *Catalog) SetPrice(in SetPriceInput) envelope.Result[ProductDTO] {
 		}
 		shop, err := moneyShop(ctx, app)
 		if err != nil {
+			return domain.Product{}, err
+		}
+		if err = localCurrencyOff(shop, "priceCurrency", in.PriceCurrency); err != nil {
 			return domain.Product{}, err
 		}
 		cost := in.CostPrice

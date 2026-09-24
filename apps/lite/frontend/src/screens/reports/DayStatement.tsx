@@ -1,5 +1,6 @@
 import type { Amount, DayReport, Takings } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatDecimal, formatInteger } from "@/i18n/numbers";
 import { Money, isZero } from "@/screens/sales/Money";
 import { Alert } from "@/ui/Alert";
@@ -14,6 +15,8 @@ function Row({ label, usd, local, localCurrency, strong = false, sub = false, te
   sub?: boolean;
   testId?: string;
 }) {
+  // A dollars-only shop reads its statement in dollars alone (0.10.0).
+  const { usdOnly } = useCurrencies();
   return (
     <tr data-testid={testId} className={`border-t border-border ${strong ? "font-semibold" : ""}`}>
       <th scope="row" className={`p-2 text-start font-normal ${sub ? "ps-6 text-text-muted" : ""} ${strong ? "font-semibold" : ""}`}>
@@ -22,9 +25,11 @@ function Row({ label, usd, local, localCurrency, strong = false, sub = false, te
       <td className="p-2">
         <Money value={usd} currency="USD" />
       </td>
-      <td className="p-2">
-        <Money value={local} currency={localCurrency} />
-      </td>
+      {usdOnly ? null : (
+        <td className="p-2">
+          <Money value={local} currency={localCurrency} />
+        </td>
+      )}
     </tr>
   );
 }
@@ -35,6 +40,7 @@ function Row({ label, usd, local, localCurrency, strong = false, sub = false, te
  */
 export function DayStatement({ report }: { report: DayReport }) {
   const { t, tDynamic, locale } = useLocale();
+  const { usdOnly } = useCurrencies();
   const p = report.profit;
   const cur = report.localCurrency;
   const amountRow = (key: Parameters<typeof t>[0], a: Amount, sub = true) =>
@@ -75,7 +81,7 @@ export function DayStatement({ report }: { report: DayReport }) {
             <tr>
               <th className="p-2 text-start">{t("reports.col.line")}</th>
               <th className="p-2 text-start">{t("reports.col.usd")}</th>
-              <th className="p-2 text-start">{t("reports.col.local")}</th>
+              {usdOnly ? null : <th className="p-2 text-start">{t("reports.col.local")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -83,7 +89,7 @@ export function DayStatement({ report }: { report: DayReport }) {
             {!isZero(p.discountUsd) || !isZero(p.discountLocal) ? (
               <Row label={t("reports.sale_discounts")} usd={p.discountUsd} local={p.discountLocal} localCurrency={cur} sub />
             ) : null}
-            {!isZero(p.roundingLocal) ? <Row label={t("reports.rounding")} usd="0.00" local={p.roundingLocal} localCurrency={cur} sub /> : null}
+            {!isZero(p.roundingLocal) && !usdOnly ? <Row label={t("reports.rounding")} usd="0.00" local={p.roundingLocal} localCurrency={cur} sub /> : null}
             <Row label={t("reports.cost")} usd={p.costUsd} local={p.costLocal} localCurrency={cur} />
             <Row label={t("reports.gross_profit")} usd={p.profitUsd} local={p.profitLocal} localCurrency={cur} strong testId="gross" />
             {p.marginUsd || p.marginLocal ? (
@@ -92,7 +98,7 @@ export function DayStatement({ report }: { report: DayReport }) {
                   {t("reports.col.margin")}
                 </th>
                 <td className="p-2">{margin(p.marginUsd)}</td>
-                <td className="p-2">{margin(p.marginLocal)}</td>
+                {usdOnly ? null : <td className="p-2">{margin(p.marginLocal)}</td>}
               </tr>
             ) : null}
             <Row label={t("reports.losses")} usd={report.losses.out.usd} local={report.losses.out.local} localCurrency={cur} testId="losses" />

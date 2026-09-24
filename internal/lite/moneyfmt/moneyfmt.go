@@ -41,6 +41,10 @@ const (
 	New Display = "new"
 	// Dual shows the new figure with the old one beside it: 150 (15,000).
 	Dual Display = "dual"
+	// USD is a shop gone over to dollars only (0.10.0, the owner's request of 2026-09-24): it prices, sells, lends, owes
+	// and counts in dollars, and types pounds nowhere. The local figures the books keep beside every dollar — and the
+	// history from before — are left as they are held: no screen of a dollars-only shop shows them.
+	USD Display = "usd"
 )
 
 // Default is what a shop that has never chosen reads: the pounds it has always used.
@@ -56,16 +60,21 @@ func Parse(raw string) Display {
 		return New
 	case Dual:
 		return Dual
+	case USD:
+		return USD
 	default:
 		return Default
 	}
 }
 
+// USDOnly reports whether the shop has gone over to dollars only.
+func (s Shop) USDOnly() bool { return s.Mode == USD }
+
 // Valid reports whether a display was one this application knows — for the setting's validation, which must refuse an
 // unknown value rather than silently showing the shop the old pound.
 func Valid(raw string) bool {
 	switch Display(strings.ToLower(strings.TrimSpace(raw))) {
-	case Legacy, New, Dual:
+	case Legacy, New, Dual, USD:
 		return true
 	default:
 		return false
@@ -161,7 +170,7 @@ func (s Shop) Base(typed, currency string) string {
 
 // applies reports whether the redenomination touches this currency at all.
 func (s Shop) applies(currency string) bool {
-	return s.Mode != Legacy && s.Local != "" && strings.EqualFold(currency, s.Local)
+	return (s.Mode == New || s.Mode == Dual) && s.Local != "" && strings.EqualFold(currency, s.Local)
 }
 
 // shift moves a decimal point by places — negative left (dividing), positive right (multiplying). Exact: it is text

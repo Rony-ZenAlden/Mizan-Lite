@@ -193,3 +193,24 @@ func TestWhatIsNotAFigureIsHandedOnAsTyped(t *testing.T) {
 		}
 	}
 }
+
+// TestADollarsOnlyShopShiftsNothing (0.10.0): "usd" is a setting of its own, and a shop that reads it moves no point in
+// any figure — it types no pounds, and the pounds the books still hold are shown by no screen of it.
+func TestADollarsOnlyShopShiftsNothing(t *testing.T) {
+	if moneyfmt.Parse(" USD ") != moneyfmt.USD || !moneyfmt.Valid("usd") {
+		t.Fatal("usd is not a display")
+	}
+	shop := moneyfmt.Shop{Mode: moneyfmt.USD, Local: "SYP"}
+	if !shop.USDOnly() || (moneyfmt.Shop{Mode: moneyfmt.Dual, Local: "SYP"}).USDOnly() {
+		t.Fatal("USDOnly")
+	}
+	if got := shop.Display("15000", "SYP"); got != "15000" {
+		t.Fatalf("Display = %q", got)
+	}
+	if got := shop.Base("150", "SYP"); got != "150" {
+		t.Fatalf("Base = %q", got)
+	}
+	if got := shop.Display("3.25", "USD"); got != "3.25" {
+		t.Fatalf("Display = %q", got)
+	}
+}

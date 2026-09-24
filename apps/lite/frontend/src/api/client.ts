@@ -37,6 +37,7 @@ export type SettingsState = Plain<api.SettingsDTO>;
 export type ShopState = Plain<api.ShopDTO>;
 export type ShopInput = Plain<api.ShopInput>;
 export type LogoFile = Plain<api.LogoFileDTO>;
+export type USDOnlyPlan = Plain<api.USDOnlyPlanDTO>;
 export type SettingsInput = Plain<api.SettingsInput>;
 export type FirstRunInput = Plain<api.FirstRunInput>;
 export type Unit = Plain<api.UnitDTO>;
@@ -181,6 +182,9 @@ export function createClient() {
       pickLogoFile: () => unwrap(Settings.PickLogoFile),
       setLogo: (path: string) => unwrap(() => Settings.SetLogo(path)),
       removeLogo: () => unwrap(Settings.RemoveLogo),
+      // Going over to dollars only (0.10.0): the plan changes nothing; the switch writes exactly the plan its token names.
+      usdOnlyPlan: () => unwrap(Settings.USDOnlyPlan),
+      switchToUsdOnly: (token: string) => unwrap(() => Settings.SwitchToUSDOnly(token)),
     },
     catalog: {
       units: () => unwrap(Catalog.Units),

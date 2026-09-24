@@ -147,6 +147,11 @@ type CashNoteDTO struct {
 // Each amount is now taken back in its own currency, and that currency is resolved BEFORE the conversion: Base with
 // an empty currency changes nothing, which is exactly how the gap went unnoticed.
 func (in CartInput) toDomain(shop moneyfmt.Shop, priceCurrency func(id.ID) string) (salesdomain.CartInput, error) {
+	// A dollars-only shop sells, takes and gives change in dollars (0.10.0): an empty choice is dollars, a local one refused.
+	in.Settlement, in.TenderCurrency, in.ChangeCurrency = orUSD(shop, in.Settlement), orUSD(shop, in.TenderCurrency), orUSD(shop, in.ChangeCurrency)
+	if err := localCurrencyOff(shop, "settlement", in.Settlement, in.TenderCurrency, in.ChangeCurrency); err != nil {
+		return salesdomain.CartInput{}, err
+	}
 	settle := in.Settlement
 	if settle == "" {
 		settle = shop.Local // the sales domain's default, resolved here so the conversion sees it
@@ -398,7 +403,7 @@ func (t *Till) OpenItem() envelope.Result[ProductDTO] {
 		if err != nil {
 			return ProductDTO{}, err
 		}
-		p, err := app.Catalog.OpenItem(ctx, shop.Local)
+		p, err := app.Catalog.OpenItem(ctx, sellingCurrency(shop))
 		if err != nil {
 			return ProductDTO{}, err
 		}

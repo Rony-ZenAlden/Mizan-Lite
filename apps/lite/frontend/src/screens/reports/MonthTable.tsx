@@ -1,5 +1,6 @@
 import type { MonthReport } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatInteger } from "@/i18n/numbers";
 import { Money } from "@/screens/sales/Money";
 import { formatDate } from "@/i18n/time";
@@ -8,6 +9,8 @@ import { Button } from "@/ui/Button";
 /** A month: a row per day that had anything in it, and the month's totals — the sum of its days (Q-L6.8). */
 export function MonthTable({ report, onOpenDay }: { report: MonthReport; onOpenDay: (date: string) => void }) {
   const { t, locale } = useLocale();
+  // A dollars-only shop reads its months in dollars alone (0.10.0).
+  const { usdOnly } = useCurrencies();
   const cur = report.localCurrency;
   return (
     <div className="overflow-x-auto rounded-md border border-border bg-surface-raised">
@@ -19,14 +22,14 @@ export function MonthTable({ report, onOpenDay }: { report: MonthReport; onOpenD
             <th className="p-2 text-start">{t("reports.col.revenue_usd")}</th>
             <th className="p-2 text-start">{t("reports.col.gross_usd")}</th>
             <th className="p-2 text-start">{t("reports.col.net_usd")}</th>
-            <th className="p-2 text-start">{t("reports.col.gross_local")}</th>
-            <th className="p-2 text-start">{t("reports.col.net_local")}</th>
+            {usdOnly ? null : <th className="p-2 text-start">{t("reports.col.gross_local")}</th>}
+            {usdOnly ? null : <th className="p-2 text-start">{t("reports.col.net_local")}</th>}
           </tr>
         </thead>
         <tbody>
           {report.days.length === 0 ? (
             <tr>
-              <td colSpan={7} className="p-2 text-text-muted">
+              <td colSpan={usdOnly ? 5 : 7} className="p-2 text-text-muted">
                 {t("reports.month_empty")}
               </td>
             </tr>
@@ -48,12 +51,16 @@ export function MonthTable({ report, onOpenDay }: { report: MonthReport; onOpenD
               <td className="p-2">
                 <Money value={d.netUsd} currency="USD" />
               </td>
-              <td className="p-2">
-                <Money value={d.profit.profitLocal} currency={cur} />
-              </td>
-              <td className="p-2">
-                <Money value={d.netLocal} currency={cur} />
-              </td>
+              {usdOnly ? null : (
+                <td className="p-2">
+                  <Money value={d.profit.profitLocal} currency={cur} />
+                </td>
+              )}
+              {usdOnly ? null : (
+                <td className="p-2">
+                  <Money value={d.netLocal} currency={cur} />
+                </td>
+              )}
             </tr>
           ))}
           <tr data-testid="month-total" className="border-t-2 border-border font-semibold">
@@ -68,12 +75,16 @@ export function MonthTable({ report, onOpenDay }: { report: MonthReport; onOpenD
             <td className="p-2">
               <Money value={report.total.netUsd} currency="USD" />
             </td>
-            <td className="p-2">
-              <Money value={report.total.profit.profitLocal} currency={cur} />
-            </td>
-            <td className="p-2">
-              <Money value={report.total.netLocal} currency={cur} />
-            </td>
+            {usdOnly ? null : (
+              <td className="p-2">
+                <Money value={report.total.profit.profitLocal} currency={cur} />
+              </td>
+            )}
+            {usdOnly ? null : (
+              <td className="p-2">
+                <Money value={report.total.netLocal} currency={cur} />
+              </td>
+            )}
           </tr>
         </tbody>
       </table>

@@ -627,6 +627,9 @@ func (c *Cash) Record(in CashRecordInput) envelope.Result[CashEntryDTO] {
 		if err != nil {
 			return cashbookdomain.Entry{}, err
 		}
+		if err = localCurrencyOff(shop, "currency", in.Currency); err != nil {
+			return cashbookdomain.Entry{}, err
+		}
 		return app.Cashbook.Record(ctx, cashbook.RecordInput{Kind: cashbookdomain.Kind(in.Kind), Currency: in.Currency,
 			Amount:   shop.Base(in.Amount, in.Currency),
 			Category: in.Category, FromDrawer: in.FromDrawer, Recurrence: in.Recurrence, Note: in.Note})
@@ -638,6 +641,9 @@ func (c *Cash) Count(in CashCountInput) envelope.Result[CashEntryDTO] {
 	return c.entryAct("Cash.Count", func(ctx context.Context, app *bootstrap.App) (cashbookdomain.Entry, error) {
 		shop, err := moneyShop(ctx, app)
 		if err != nil {
+			return cashbookdomain.Entry{}, err
+		}
+		if err = localCurrencyOff(shop, "currency", in.Currency); err != nil {
 			return cashbookdomain.Entry{}, err
 		}
 		return app.Cashbook.Count(ctx, cashbook.CountInput{Currency: in.Currency, Counted: shop.Base(in.Counted, in.Currency), Note: in.Note})

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { Purchase, Supplier, SupplierEntry, SupplierStatement } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatDateTime } from "@/i18n/time";
 import { formatInteger } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
@@ -42,8 +43,9 @@ export function SupplierAccount({
   const client = useClient();
   const { withOwner } = useOwner();
   const { t, tDynamic, errorText, locale } = useLocale();
-  const currencies = [localCurrency, "USD"].filter(Boolean);
-  const initial = supplier.balances.find((b) => !isZero(b.balance))?.currency ?? supplier.balances[0]?.currency ?? "USD";
+  const { currencies } = useCurrencies(localCurrency);
+  // The first currency owed in, of those the shop still reads — dollars alone in a dollars-only shop (0.10.0).
+  const initial = supplier.balances.find((b) => !isZero(b.balance) && currencies.includes(b.currency))?.currency ?? currencies[currencies.length - 1] ?? "USD";
   const [currency, setCurrency] = useState(initial);
   const [statement, setStatement] = useState<SupplierStatement | null>(null);
   const [error, setError] = useState<unknown>(null);

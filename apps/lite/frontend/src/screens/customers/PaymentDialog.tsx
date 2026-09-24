@@ -3,6 +3,7 @@ import { useClient } from "@/api/ClientContext";
 import type { Entry, PaymentQuote } from "@/api/client";
 import { BindingError } from "@/api/envelope";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { Money } from "@/screens/sales/Money";
 import { formErrors } from "@/screens/stock/forms";
 import { Alert } from "@/ui/Alert";
@@ -82,7 +83,7 @@ export function PaymentDialog({
   }, [client, customerId, currency, tenderCurrency, amount, all, changeCurrency, requote]);
 
   const errors = formErrors(quoteError ?? error, errorText);
-  const currencies = [localCurrency, "USD"].filter(Boolean);
+  const { currencies } = useCurrencies(localCurrency);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

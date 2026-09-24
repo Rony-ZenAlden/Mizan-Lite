@@ -55,6 +55,9 @@ type RateDTO struct {
 	CanFetch  bool     `json:"canFetch"`
 	HasFetch  bool     `json:"hasFetch"`
 	LastFetch FetchDTO `json:"lastFetch"`
+	// USDOnly is a shop gone over to dollars only (0.10.0): every screen reads the rate from here, so this is where it
+	// learns to show dollars alone.
+	USDOnly bool `json:"usdOnly"`
 }
 
 // RateHistoryDTO is one recorded rate.
@@ -98,7 +101,7 @@ func toFetchDTO(f fxdomain.Fetch, shop moneyfmt.Shop) FetchDTO {
 
 // toRateDTO reads the rate as the shop reads its own currency (L10): a rate is local money per dollar.
 func toRateDTO(c fx.Current, canFetch bool, shop moneyfmt.Shop) RateDTO {
-	dto := RateDTO{Set: c.Found, LocalCurrency: c.Local, Mode: string(c.Mode), CanFetch: canFetch, HasFetch: c.Fetched,
+	dto := RateDTO{Set: c.Found, LocalCurrency: c.Local, Mode: string(c.Mode), CanFetch: canFetch, HasFetch: c.Fetched, USDOnly: shop.USDOnly(),
 		AdjustPercent: settingsdomain.FormatRateAdjustPercent(c.AdjustPercentMicro)}
 	if c.Found {
 		dto.Rate = rateText(shop, c.Rate.Nano)

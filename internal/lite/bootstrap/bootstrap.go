@@ -36,6 +36,8 @@ import (
 	fxdb "github.com/mizan-erp/mizan/internal/lite/fx/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/locales"
 	"github.com/mizan-erp/mizan/internal/lite/migrations"
+	"github.com/mizan-erp/mizan/internal/lite/moneyfmt"
+	"github.com/mizan-erp/mizan/internal/lite/numinput"
 	"github.com/mizan-erp/mizan/internal/lite/owner"
 	ownerdb "github.com/mizan-erp/mizan/internal/lite/owner/infra/sqlite"
 	"github.com/mizan-erp/mizan/internal/lite/paths"
@@ -56,6 +58,8 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/suppliers"
 	suppliersdomain "github.com/mizan-erp/mizan/internal/lite/suppliers/domain"
 	suppliersdb "github.com/mizan-erp/mizan/internal/lite/suppliers/infra/sqlite"
+	"github.com/mizan-erp/mizan/internal/lite/usdmode"
+	usdmodedomain "github.com/mizan-erp/mizan/internal/lite/usdmode/domain"
 	"github.com/mizan-erp/mizan/internal/platform/backup"
 	"github.com/mizan-erp/mizan/internal/platform/crypto"
 	"github.com/mizan-erp/mizan/internal/platform/database"
@@ -175,6 +179,8 @@ type App struct {
 	Alerts *alerts.Service
 	// Suppliers is the payables book: suppliers, purchases on cash or credit, and what the shop pays them (0.10.0).
 	Suppliers *suppliers.Service
+	// USDMode takes the shop over to dollars only, converting everything at the rate in force (0.10.0).
+	USDMode *usdmode.Service
 	// Restored is the restore applied at this start, or nil.
 	Restored *backup.Intent
 	// SchemaVersion is the migration the database is at, read from the runner's RESULT rather than
@@ -271,6 +277,12 @@ func Start(ctx context.Context, opts Options) (*App, error) {
 		Money: suppliersMoney{settings: app.Settings}, Gate: suppliersGate{owner: app.Owner},
 	}, opts.Clock, opts.Location)
 	app.Reports.UsePayables(reportsPayables{suppliers: app.Suppliers})
+	// Going over to dollars only reaches every book through its own module's rules (0.10.0).
+	app.USDMode = usdmode.NewService(db, usdmode.Ports{
+		Money: usdmodeMoney{settings: app.Settings, fx: app.FX, catalog: app.Catalog}, Catalogue: usdmodeCatalogue{catalog: app.Catalog},
+		Customers: usdmodeCustomers{customers: app.Customers}, Suppliers: usdmodeSuppliers{suppliers: app.Suppliers},
+		Drawer: usdmodeDrawer{app: app}, Gate: usdmodeGate{owner: app.Owner},
+	})
 
 	app.Printing = printing.NewService(db, printingdb.NewStore(db), opts.Clock)
 	app.Customers.SetVouchers(app.Printing)
@@ -1440,3 +1452,161 @@ func (r reportsPayables) SupplierCashBetween(ctx context.Context, from, to strin
 	}
 	return out, nil
 }
+
+// ─── Going over to dollars only (0.10.0) ─────────────────────────────────────────────────────────────────────────
+
+type usdmodeMoney struct {
+	settings *settings.Service
+	fx       *fx.Service
+	catalog  *catalog.Service
+}
+
+func (m usdmodeMoney) Money(ctx context.Context) (usdmodedomain.Money, error) {
+	current, err := m.fx.Current(ctx)
+	if err != nil {
+		return usdmodedomain.Money{}, err
+	}
+	currencies, err := m.catalog.Currencies(ctx)
+	if err != nil {
+		return usdmodedomain.Money{}, err
+	}
+	out := usdmodedomain.Money{Local: current.Local, USDDecimals: 2}
+	for _, c := range currencies {
+		switch c.Code {
+		case current.Local:
+			out.LocalDecimals = c.Decimals
+		case fxdomain.USD:
+			out.USDDecimals = c.Decimals
+		}
+	}
+	if current.Found {
+		out.RateNano = current.Rate.Nano
+	}
+	return out, nil
+}
+
+func (m usdmodeMoney) USDOnly(ctx context.Context) (bool, error) {
+	current, err := m.settings.Get(ctx)
+	return current.MoneyDisplay == string(moneyfmt.USD), err
+}
+
+func (m usdmodeMoney) SetUSDOnly(ctx context.Context) error {
+	usd := string(moneyfmt.USD)
+	_, err := m.settings.Update(ctx, settingsdomain.Update{MoneyDisplay: &usd})
+	return err
+}
+
+type usdmodeCatalogue struct{ catalog *catalog.Service }
+
+func (c usdmodeCatalogue) LocalPriced(ctx context.Context, local string) ([]usdmodedomain.Product, error) {
+	all, err := c.catalog.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []usdmodedomain.Product{}
+	for _, p := range all {
+		if p.PriceCurrency != local {
+			continue
+		}
+		out = append(out, usdmodedomain.Product{ID: p.ID, RowVersion: p.RowVersion, NameAR: p.NameAR, NameEN: p.NameEN,
+			OpenPrice: p.OpenPrice, LocalPriceMicro: p.PriceMicro, HasCost: p.HasCost, LocalCostMicro: p.CostMicro})
+	}
+	return out, nil
+}
+
+// SetUSDPrice sets the dollar price through the catalogue's own SetPrice — the owner's act, recorded with the old price
+// and the new, as a re-price is. The cost goes with it, converted: left as it was, a cost of 36,000 pounds would read as
+// 36,000 dollars once the price is in dollars.
+func (c usdmodeCatalogue) SetUSDPrice(ctx context.Context, change usdmodedomain.PriceChange) error {
+	in := catalog.SetPriceInput{ID: change.Product.ID, RowVersion: change.Product.RowVersion, Currency: usdmodedomain.USD,
+		Price: catalogdomain.FormatMicro(change.USDPriceMicro, 2)}
+	if change.Product.HasCost {
+		in.Cost = catalogdomain.FormatMicro(change.USDCostMicro, 2)
+	}
+	_, err := c.catalog.SetPrice(ctx, in)
+	return err
+}
+
+func (c usdmodeCatalogue) SetUSDOpen(ctx context.Context, p usdmodedomain.Product) error {
+	_, err := c.catalog.SetOpenCurrency(ctx, p.ID, p.RowVersion, usdmodedomain.USD)
+	return err
+}
+
+type usdmodeCustomers struct{ customers *customers.Service }
+
+func (b usdmodeCustomers) BalancesIn(ctx context.Context, local string) ([]usdmodedomain.Balance, error) {
+	found, err := b.customers.BalancesIn(ctx, local)
+	out := make([]usdmodedomain.Balance, 0, len(found))
+	for _, f := range found {
+		out = append(out, usdmodedomain.Balance{ID: f.CustomerID, Name: f.Name, LocalMinor: f.BalanceMinor})
+	}
+	return out, err
+}
+
+func (b usdmodeCustomers) Convert(ctx context.Context, change usdmodedomain.BalanceChange, local, note string) error {
+	_, err := b.customers.Convert(ctx, customers.ConversionInput{CustomerID: change.ID, From: local, FromMinor: change.LocalMinor,
+		To: usdmodedomain.USD, ToMinor: change.USDMinor, Note: note})
+	return err
+}
+
+type usdmodeSuppliers struct{ suppliers *suppliers.Service }
+
+func (b usdmodeSuppliers) BalancesIn(ctx context.Context, local string) ([]usdmodedomain.Balance, error) {
+	found, err := b.suppliers.BalancesIn(ctx, local)
+	out := make([]usdmodedomain.Balance, 0, len(found))
+	for _, f := range found {
+		out = append(out, usdmodedomain.Balance{ID: f.SupplierID, Name: f.Name, LocalMinor: f.BalanceMinor})
+	}
+	return out, err
+}
+
+func (b usdmodeSuppliers) Convert(ctx context.Context, change usdmodedomain.BalanceChange, local, note string) error {
+	_, err := b.suppliers.Convert(ctx, suppliers.ConversionInput{SupplierID: change.ID, From: local, FromMinor: change.LocalMinor,
+		To: usdmodedomain.USD, ToMinor: change.USDMinor, Note: note})
+	return err
+}
+
+// usdmodeDrawer reads the drawer's expected local cash from the reports, and exchanges it through the cash book: a
+// withdrawal of the pounds and a deposit of the dollars, each the cash book's own entry and the owner's act.
+type usdmodeDrawer struct{ app *App }
+
+func (d usdmodeDrawer) ExpectedLocal(ctx context.Context, local string) (int64, error) {
+	return d.app.Reports.ExpectedCash(ctx, d.app.Reports.Today(), local)
+}
+
+func (d usdmodeDrawer) Convert(ctx context.Context, change usdmodedomain.DrawerChange, local, note string) error {
+	currencies, err := d.app.Catalog.Currencies(ctx)
+	if err != nil {
+		return err
+	}
+	decimals := map[string]int{}
+	for _, c := range currencies {
+		decimals[c.Code] = c.Decimals
+	}
+	for _, leg := range []struct {
+		kind     cashbookdomain.Kind
+		currency string
+		minor    int64
+	}{
+		{cashbookdomain.KindWithdrawal, local, change.LocalMinor},
+		{cashbookdomain.KindDeposit, usdmodedomain.USD, change.USDMinor},
+	} {
+		if leg.minor <= 0 {
+			continue
+		}
+		d0 := decimals[leg.currency]
+		if _, err = d.app.Cashbook.Record(ctx, cashbook.RecordInput{Kind: leg.kind, Currency: leg.currency,
+			Amount: numinput.FormatFixed(leg.minor, d0, d0), Note: note}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type usdmodeGate struct{ owner *owner.Service }
+
+func (g usdmodeGate) Require(ctx context.Context, act usdmode.GuardedAct) error {
+	return g.owner.Require(ctx, owner.Act{Action: act.Action, SubjectID: act.SubjectID, Before: act.Before, After: act.After})
+}
+
+func (g usdmodeGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }

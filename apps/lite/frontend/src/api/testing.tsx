@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { LossReport, Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, Purchase, PurchaseLine, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState, Supplier, SupplierEntry, SupplierList, SupplierStatement } from "./client";
+import type { USDOnlyPlan, LossReport, Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, Purchase, PurchaseLine, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState, Supplier, SupplierEntry, SupplierList, SupplierStatement } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -97,6 +97,7 @@ export function aRate(overrides: Partial<RateState> = {}): RateState {
     canFetch: true,
     hasFetch: false,
     lastFetch: aFetch(),
+    usdOnly: false,
     ...overrides,
   };
 }
@@ -566,6 +567,25 @@ export function aDrawer(overrides: Partial<Drawer> = {}): Drawer {
   };
 }
 
+/** Going over to dollars only in the demo shop: one pound price, a customer, a supplier and the drawer's pounds. */
+export function aUSDOnlyPlan(overrides: Partial<USDOnlyPlan> = {}): USDOnlyPlan {
+  return {
+    localCurrency: "SYP",
+    rate: "15000",
+    prices: [
+      { productId: "p-labneh", nameAr: "لبنة", nameEn: "Labneh", localPrice: "60000", usdPrice: "4.00", localCost: "45000", usdCost: "3.00", raisedToCent: false },
+      { productId: "p-gum", nameAr: "علكة", nameEn: "Gum", localPrice: "25", usdPrice: "0.01", localCost: "", usdCost: "", raisedToCent: true },
+    ],
+    openItems: 1,
+    customers: [{ id: "c-1", name: "سمير", local: "150000", dollars: "10.00" }],
+    suppliers: [{ id: "s-1", name: "المروى", local: "300000", dollars: "20.00" }],
+    drawerLocal: "375000",
+    drawerDollars: "25.00",
+    token: "plan-token",
+    ...overrides,
+  };
+}
+
 /** The month's losses: 1.5 kg of labneh gone bad, and two litres of oil that arrived broken and were not charged. */
 export function aLossReport(overrides: Partial<LossReport> = {}): LossReport {
   return {
@@ -776,6 +796,8 @@ export function fakeClient(overrides: Overrides = {}): Client {
       pickLogoFile: async () => ({ path: "/Users/shop/Pictures/logo.png", cancelled: false }),
       setLogo: async () => aShop({ logo: "iVBORw0KGgo=", logoWidth: 300, logoHeight: 120 }),
       removeLogo: async () => aShop(),
+      usdOnlyPlan: async () => aUSDOnlyPlan(),
+      switchToUsdOnly: async () => aSettings({ moneyDisplay: "usd" }),
     },
     catalog: {
       importTemplate: async () => ({ path: "/Users/shop/Documents/products.xlsx", bytes: 1, cancelled: false }),

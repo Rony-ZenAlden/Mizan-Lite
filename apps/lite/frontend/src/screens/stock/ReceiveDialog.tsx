@@ -39,6 +39,8 @@ export function ReceiveDialog({
   const client = useClient();
   const { t, tDynamic, errorText, locale } = useLocale();
   const { rate: inForce } = useRate();
+  // A dollars-only shop receives in dollars (0.10.0).
+  const usdOnly = inForce?.usdOnly === true;
   const [kind, setKind] = useState<"receipt" | "opening">(firstMovement ? "opening" : "receipt");
   const [quantity, setQuantity] = useState("");
   const [costMode, setCostMode] = useState<"total" | "unit">("total");
@@ -108,7 +110,7 @@ export function ReceiveDialog({
             }}
             error={errors.field("currency")}
           >
-            {currencies.map((c) => (
+            {currencies.filter((c) => !usdOnly || c.code === COST_CURRENCY).map((c) => (
               <option key={c.code} value={c.code}>
                 {tDynamic(`currency.${c.code}`)}
               </option>

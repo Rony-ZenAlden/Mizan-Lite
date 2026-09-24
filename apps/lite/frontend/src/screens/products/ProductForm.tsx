@@ -3,6 +3,7 @@ import { useClient } from "@/api/ClientContext";
 import type { Currency, Product, Unit } from "@/api/client";
 import { BindingError } from "@/api/envelope";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { normaliseNumber, typeable } from "@/i18n/numbers";
 import { OwnerCancelled, useOwner } from "@/owner/OwnerProvider";
 import { Button } from "@/ui/Button";
@@ -27,7 +28,9 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
   const [nameEn, setNameEn] = useState(product?.nameEn ?? "");
   const [barcode, setBarcode] = useState(product?.barcode ?? "");
   const [unitCode, setUnitCode] = useState(product?.unitCode ?? "");
-  const [priceCurrency, setPriceCurrency] = useState(product?.priceCurrency ?? "SYP");
+  // A dollars-only shop prices in dollars (0.10.0).
+  const { usdOnly } = useCurrencies();
+  const [priceCurrency, setPriceCurrency] = useState(product?.priceCurrency ?? (usdOnly ? "USD" : "SYP"));
   // In dual mode a price reads "150 (15000)"; the field starts from the figure a person types, the new one (0.9.9).
   const [price, setPrice] = useState(typeable(product?.price ?? ""));
   // The cost price, and the margin between it and the selling price (L9). `lastTyped` remembers which box the shopkeeper
@@ -193,7 +196,7 @@ export function ProductForm({ product, onSaved, onClose }: { product?: Product; 
         ) : null}
         <div className="grid grid-cols-2 gap-3">
           <SelectField label={t("product.currency")} value={priceCurrency} onChange={(e) => setPriceCurrency(e.target.value)} error={fieldError("priceCurrency")}>
-            {currencies.map((c) => (
+            {currencies.filter((c) => !usdOnly || c.code === "USD").map((c) => (
               <option key={c.code} value={c.code}>
                 {tDynamic(`currency.${c.code}`)}
               </option>

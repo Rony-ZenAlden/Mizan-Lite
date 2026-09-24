@@ -129,8 +129,8 @@ func (w words) receiptDocument(sale SaleDTO, copyNo int) documents.Document {
 	if said := w.inWords(sale.Total, settle); said != "" {
 		blocks = append(blocks, documents.Paragraph{Text: said, Small: true, Center: true})
 	}
-	blocks = append(blocks, documents.Rule{Dashed: true},
-		documents.Paragraph{Text: w.rate(sale.Rate, sale.LocalCurrency), Small: true, Center: true})
+	blocks = append(blocks, documents.Rule{Dashed: true})
+	blocks = append(blocks, w.rateLine(sale.Rate, sale.LocalCurrency, true)...)
 	if credit {
 		blocks = append(blocks, documents.Signature{Label: w.t("doc.customer_signature")})
 	}
@@ -262,7 +262,7 @@ func (w words) invoiceDocument(sale SaleDTO, party invoiceParty) documents.Docum
 			{Label: w.t("receipt.balance_after"), Value: documents.T(w.money(sale.CreditBalanceAfter, sale.CreditCurrency))},
 		}}, documents.Signature{Label: w.t("doc.customer_signature")})
 	}
-	blocks = append(blocks, documents.Paragraph{Text: w.rate(sale.Rate, sale.LocalCurrency), Small: true})
+	blocks = append(blocks, w.rateLine(sale.Rate, sale.LocalCurrency, false)...)
 	blocks = append(blocks, w.footer()...)
 	return documents.Document{Direction: w.dir, Blocks: blocks, Footer: "-{page}-",
 		Meta: documents.Meta{Title: w.t("invoice.title", "number", strconv.FormatInt(sale.ReceiptNo, 10)), Author: w.settings.ShopName,
@@ -313,9 +313,9 @@ func (w words) voucherDocument(v debtView, e customersdomain.Entry, number int64
 	if e.Note != "" {
 		pairs = append(pairs, documents.Pair{Label: w.t("doc.note"), Value: documents.T(w.user(e.Note))})
 	}
-	blocks = append(blocks, documents.Pairs{Rows: pairs}, documents.Rule{Dashed: true},
-		documents.Paragraph{Text: w.rate(fxdomain.FormatRate(e.Cash.RateNano), v.local), Small: true, Center: true},
-		documents.Signature{Label: w.t("doc.receiver_signature")})
+	blocks = append(blocks, documents.Pairs{Rows: pairs}, documents.Rule{Dashed: true})
+	blocks = append(blocks, w.rateLine(fxdomain.FormatRate(e.Cash.RateNano), v.local, true)...)
+	blocks = append(blocks, documents.Signature{Label: w.t("doc.receiver_signature")})
 	return documents.Document{Direction: w.dir, Blocks: append(blocks, w.footer()...)}
 }
 
@@ -336,6 +336,14 @@ func (w words) testDocument(printer string) documents.Document {
 		documents.Rule{},
 	)
 	return documents.Document{Direction: w.dir, Blocks: append(blocks, w.footer()...)}
+}
+
+// rateLine is a printout's exchange-rate line — none in a dollars-only shop, which prints no rate (0.10.0).
+func (w words) rateLine(rate, local string, center bool) []documents.Block {
+	if moneyfmt.Parse(w.settings.MoneyDisplay) == moneyfmt.USD {
+		return nil
+	}
+	return []documents.Block{documents.Paragraph{Text: w.rate(rate, local), Small: true, Center: center}}
 }
 
 // rate is the exchange-rate line of a printout: 1 USD = 15,000 ل.س, each amount isolated.

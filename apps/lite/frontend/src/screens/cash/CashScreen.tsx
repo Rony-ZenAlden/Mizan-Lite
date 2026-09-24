@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { CashEntry, Drawer, DrawerCurrency } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatDecimal } from "@/i18n/numbers";
 import { formatDate, formatDateTime } from "@/i18n/time";
 import { ExportButtons } from "@/exports/ExportButtons";
@@ -20,6 +21,8 @@ type Term = { key: Parameters<ReturnType<typeof useLocale>["t"]>[0]; value: stri
  * expenses, withdrawals, deposits and reversals are the owner's.
  */
 export function CashScreen() {
+  // A dollars-only shop counts one drawer, in dollars (0.10.0).
+  const { usdOnly } = useCurrencies();
   const client = useClient();
   const { status } = useOwner();
   const { t, tDynamic, errorText, locale } = useLocale();
@@ -106,7 +109,7 @@ export function CashScreen() {
       {drawer ? (
         <>
           <div className="grid gap-3 lg:grid-cols-2">
-            {drawer.currencies.map((c) => (
+            {drawer.currencies.filter((c) => !usdOnly || c.currency === "USD").map((c) => (
               <DrawerCard key={c.currency} terms={c} ownerView={drawer.ownerView} onCount={isToday ? () => setCounting(c) : undefined} />
             ))}
           </div>

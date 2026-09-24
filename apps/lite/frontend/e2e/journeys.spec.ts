@@ -446,6 +446,47 @@ for (const locale of LOCALES) {
       expect(Number(spoiled.value.usd)).toBeGreaterThan(0);
     });
 
+    // 0.10.0 (2026-09-24): going over to US dollars only — "convert everything" — shown first, confirmed, then a sale in dollars.
+    test(`J15 the shop goes over to US dollars only, and sells in dollars — ${locale}`, async ({ page }) => {
+      await reset(page, "seeded", locale);
+      const owing = await call<{ customers: { id: string; balances: { currency: string; balance: string }[] }[] }>(page.request, "Customers", "Outstanding");
+      const inPounds = owing.customers.filter((c) => c.balances.some((b) => b.currency === "SYP" && !/^-?0$/.test(b.balance)));
+      expect(inPounds.length).toBeGreaterThan(0);
+
+      await go(page, locale, "nav.settings");
+      await page.getByLabel(label(locale, "settings.money_display")).selectOption("usd");
+      const dialog = page.getByRole("dialog", { name: label(locale, "usd_only.title") });
+      await expect(dialog.getByTestId("usd-only-plan")).toBeVisible();
+      await expect(dialog.getByTestId("usd-only-price").first()).toBeVisible();
+      await checkStructure(page, locale, "going over to dollars");
+      const go_ = dialog.getByRole("button", { name: label(locale, "usd_only.confirm") });
+      await expect(go_).toBeDisabled();
+      await dialog.getByLabel(label(locale, "usd_only.understood")).check();
+      await go_.click();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByTestId("header-usd-only")).toBeVisible();
+      expect((await call<{ moneyDisplay: string }>(page.request, "Settings", "Get")).moneyDisplay).toBe("usd");
+
+      // Every pound balance is in dollars now, and the drawer holds no pounds.
+      const after = await call<{ customers: { id: string; balances: { currency: string; balance: string }[] }[] }>(page.request, "Customers", "Outstanding");
+      for (const c of after.customers) {
+        for (const b of c.balances.filter((b) => b.currency === "SYP")) expect(b.balance).toMatch(/^-?0$/);
+      }
+      const drawer = await call<{ currencies: { currency: string; expected: string }[] }>(page.request, "Cash", "Drawer", "");
+      expect(drawer.currencies.find((c) => c.currency === "SYP")!.expected).toMatch(/^-?0$/);
+
+      // The till sells in dollars: no currency to choose, no rate to read.
+      await go(page, locale, "nav.till");
+      await scan(page, locale, MOLASSES.barcode);
+      await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      await expect(page.getByRole("group", { name: label(locale, "till.settlement") })).toHaveCount(0);
+      await checkStructure(page, locale, "a dollars-only till");
+      await page.keyboard.press("F9");
+      await receiptDialog(page).getByRole("button", { name: label(locale, "action.close") }).click();
+      const sales = await call<{ sales: { settlement: string }[] }>(page.request, "Sales", "List", "");
+      expect(sales.sales.at(-1)!.settlement).toBe("USD");
+    });
+
     test(`J10 the rate by hand, and the language switched mid-session — ${locale}`, async ({ page }) => {
       await reset(page, "seeded", locale);
       await go(page, locale, "nav.rates");

@@ -246,6 +246,9 @@ func (s *Stock) Movements(q MovementsQueryDTO) envelope.Result[HistoryDTO] {
 // straight through (as it was until 0.9.9) a delivery would be costed at 150 old pounds to the dollar, and the average
 // cost of everything bought in pounds would come out a hundred times too high.
 func (in ReceiveInput) toService(shop moneyfmt.Shop) (stock.ReceiveInput, error) {
+	if err := localCurrencyOff(shop, "currency", in.Currency); err != nil {
+		return stock.ReceiveInput{}, err
+	}
 	productID, err := parseProductID(in.ProductID)
 	return stock.ReceiveInput{
 		ProductID: productID, Quantity: in.Quantity, Note: in.Note,

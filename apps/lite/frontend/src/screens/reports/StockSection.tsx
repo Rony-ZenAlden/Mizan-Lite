@@ -1,5 +1,6 @@
 import type { StockReport } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatDecimal, formatInteger } from "@/i18n/numbers";
 import { Money, isZero } from "@/screens/sales/Money";
 import { formatDate } from "@/i18n/time";
@@ -13,6 +14,8 @@ type Named = { nameAr: string; nameEn: string };
  */
 export function StockSection({ report }: { report: StockReport }) {
   const { t, tDynamic, locale } = useLocale();
+  // A dollars-only shop reads its stock in dollars alone (0.10.0).
+  const { usdOnly } = useCurrencies();
   const cur = report.localCurrency;
   const name = (p: Named) => (locale === "en" && p.nameEn ? p.nameEn : p.nameAr);
   const c = report.reconciliation;
@@ -31,8 +34,9 @@ export function StockSection({ report }: { report: StockReport }) {
       <section className="space-y-2">
         <h3 className="font-semibold">{t("reports.stock.value_on", { date: formatDate(report.to) })}</h3>
         <p data-testid="stock-total">
-          <Money value={report.totalUsd} currency="USD" /> ·{" "}
-          {report.valueRate ? (
+          <Money value={report.totalUsd} currency="USD" />
+          {usdOnly ? null : " · "}
+          {usdOnly ? null : report.valueRate ? (
             t("reports.stock.local_at", { value: formatDecimal(report.totalLocal, locale), currency: tDynamic(`currency.short.${cur}`), rate: formatDecimal(report.valueRate, locale) })
           ) : (
             t("reports.stock.no_rate")
@@ -42,7 +46,7 @@ export function StockSection({ report }: { report: StockReport }) {
         {report.retailTotalUsd ? (
           <p className="text-sm text-text-muted" data-testid="stock-retail">
             {t("reports.retail_value")}: <Money value={report.retailTotalUsd} currency="USD" />
-            {report.valueRate ? (
+            {report.valueRate && !usdOnly ? (
               <>
                 {" · "}
                 <bdi dir="ltr">{formatDecimal(report.retailTotalLocal, locale)}</bdi> {tDynamic(`currency.short.${cur}`)}
@@ -58,7 +62,7 @@ export function StockSection({ report }: { report: StockReport }) {
                 <th className="p-2 text-start">{t("reports.col.on_hand")}</th>
                 <th className="p-2 text-start">{t("reports.col.average_cost")}</th>
                 <th className="p-2 text-start">{t("reports.col.value_usd")}</th>
-                <th className="p-2 text-start">{t("reports.col.value_local")}</th>
+                {usdOnly ? null : <th className="p-2 text-start">{t("reports.col.value_local")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -76,9 +80,11 @@ export function StockSection({ report }: { report: StockReport }) {
                   <td className="p-2">
                     <Money value={l.valueUsd} currency="USD" />
                   </td>
-                  <td className="p-2">
-                    <Money value={l.valueLocal} currency={cur} />
-                  </td>
+                  {usdOnly ? null : (
+                    <td className="p-2">
+                      <Money value={l.valueLocal} currency={cur} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -116,8 +122,9 @@ export function StockSection({ report }: { report: StockReport }) {
       <section className="space-y-2">
         <h3 className="font-semibold">{t("reports.shelf.title")}</h3>
         <p data-testid="shelf-total">
-          <Money value={report.shelfTotalUsd} currency="USD" /> ·{" "}
-          {report.shelfRate ? t("reports.stock.local_at", { value: formatDecimal(report.shelfTotalLocal, locale), currency: tDynamic(`currency.short.${cur}`), rate: formatDecimal(report.shelfRate, locale) }) : t("reports.stock.no_rate")}
+          <Money value={report.shelfTotalUsd} currency="USD" />
+          {usdOnly ? null : " · "}
+          {usdOnly ? null : report.shelfRate ? t("reports.stock.local_at", { value: formatDecimal(report.shelfTotalLocal, locale), currency: tDynamic(`currency.short.${cur}`), rate: formatDecimal(report.shelfRate, locale) }) : t("reports.stock.no_rate")}
         </p>
         {report.belowCost > 0 ? <Alert tone="danger" title={t("reports.shelf.below_cost", { count: formatInteger(report.belowCost, locale) })} /> : null}
         <div className="overflow-x-auto rounded-md border border-border bg-surface-raised">
@@ -129,7 +136,7 @@ export function StockSection({ report }: { report: StockReport }) {
                 <th className="p-2 text-start">{t("reports.col.average_cost")}</th>
                 <th className="p-2 text-start">{t("reports.col.price")}</th>
                 <th className="p-2 text-start">{t("reports.col.expected_usd")}</th>
-                <th className="p-2 text-start">{t("reports.col.expected_local")}</th>
+                {usdOnly ? null : <th className="p-2 text-start">{t("reports.col.expected_local")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -153,9 +160,11 @@ export function StockSection({ report }: { report: StockReport }) {
                   <td className="p-2">
                     <Money value={l.profitUsd} currency="USD" />
                   </td>
-                  <td className="p-2">
-                    <Money value={l.profitLocal} currency={cur} />
-                  </td>
+                  {usdOnly ? null : (
+                    <td className="p-2">
+                      <Money value={l.profitLocal} currency={cur} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

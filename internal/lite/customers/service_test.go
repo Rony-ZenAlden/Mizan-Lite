@@ -391,3 +391,47 @@ func TestPaymentsAndRefundsAreNumberedInTheirTransaction(t *testing.T) {
 	}
 	// That the failure also rolls the payment back is the real database's to show: TestAVoucherFailureRollsThePaymentBack.
 }
+
+// TestAPoundBalanceIsConvertedToDollars (0.10.0): the pounds off the pound chain, the same sum at the rate onto the dollar
+// chain, both with the note; a balance that moved since the owner was shown it is refused; a conversion is never reversed.
+func TestAPoundBalanceIsConvertedToDollars(t *testing.T) {
+	f := newFixture()
+	abu := f.customer(t, "أبو محمد")
+	f.charge(t, abu, "SYP", 150_000)
+	f.charge(t, abu, "USD", 250)
+	owed, err := f.svc.BalancesIn(ctx, "SYP")
+	if err != nil || len(owed) != 1 || owed[0].BalanceMinor != 150_000 {
+		t.Fatalf("BalancesIn = %+v, %v", owed, err)
+	}
+	if _, err = f.svc.Convert(ctx, customers.ConversionInput{CustomerID: abu.ID, From: "SYP", FromMinor: 100_000, To: "USD", ToMinor: 667,
+		Note: "إلى الدولار بسعر 15000"}); code(err) != customers.CodeConversionStale {
+		t.Fatalf("a stale conversion: %v", err)
+	}
+	entries, err := f.svc.Convert(ctx, customers.ConversionInput{CustomerID: abu.ID, From: "SYP", FromMinor: 150_000, To: "USD", ToMinor: 1_000,
+		Note: "إلى الدولار بسعر 15000"})
+	if err != nil || len(entries) != 2 || entries[0].Kind != domain.KindConversion || entries[0].AmountMinor != -150_000 || entries[1].AmountMinor != 1_000 {
+		t.Fatalf("Convert = %+v, %v", entries, err)
+	}
+	balances, _ := f.svc.Balances(ctx, abu.ID)
+	if balances["SYP"] != 0 || balances["USD"] != 1_250 {
+		t.Fatalf("balances after = %+v", balances)
+	}
+	if _, err = f.svc.Reverse(ctx, entries[1].ID, "خطأ"); code(err) != domain.CodeNotReversible {
+		t.Fatalf("a conversion reversed: %v", err)
+	}
+	if owed, _ = f.svc.BalancesIn(ctx, "SYP"); len(owed) != 0 {
+		t.Fatalf("still in pounds: %+v", owed)
+	}
+	if findings, verr := f.svc.VerifyUnguarded(ctx); verr != nil || len(findings) != 0 {
+		t.Fatalf("the verifier after a conversion: %+v, %v", findings, verr)
+	}
+	// A conversion always carries its note: the rate it was done at.
+	sami := f.customer(t, "سامي")
+	f.gate.Elevated = true
+	if _, err = f.svc.Opening(ctx, customers.AmountInput{CustomerID: sami.ID, Currency: "SYP", Amount: "3000"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.svc.Convert(ctx, customers.ConversionInput{CustomerID: sami.ID, From: "SYP", FromMinor: 3_000, To: "USD", ToMinor: 20}); code(err) != domain.CodeReasonRequired {
+		t.Fatalf("a conversion without its note: %v", err)
+	}
+}

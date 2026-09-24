@@ -425,6 +425,10 @@ export function TillScreen() {
     return { pinned, all: [...pinned, ...rest] };
   }, [products, locale]);
   const local = rate?.localCurrency || quote?.localCurrency || "";
+  // A dollars-only shop sells, takes and gives change in dollars, and reads no rate (0.10.0): Go refuses the rest.
+  const usdOnly = rate?.usdOnly === true;
+  const home = usdOnly ? "USD" : local;
+  const offered = usdOnly ? ["USD"] : [local, "USD"].filter(Boolean);
   const noRate = rate !== null && !rate.set;
   const errors = formErrors(quoteError, errorText);
   const lineError = (index: number, field: string) =>
@@ -515,7 +519,7 @@ export function TillScreen() {
     setStale(false);
     if (next === "credit") {
       // On credit the sale is charged in the default debt currency (Q-L5.1), one tap from the other.
-      setSettlement(debtCurrency === local ? "" : debtCurrency);
+      setSettlement(usdOnly || debtCurrency === local ? "" : debtCurrency);
       if (!customer) setPicking(true);
       setDetails(true); // choosing credit IS the explicit choice: "paid now" is the field the cashier came for
     } else {
@@ -830,20 +834,21 @@ export function TillScreen() {
                 ) : null}
               </div>
             ) : null}
+            {offered.length > 1 ? (
             <div
               role="group"
               aria-label={t("till.settlement")}
               className="flex flex-wrap gap-2"
             >
-              {[local, "USD"].filter(Boolean).map((currency) => {
-                const chosen = (settlement || local) === currency;
+              {offered.map((currency) => {
+                const chosen = (settlement || home) === currency;
                 return (
                   <button
                     key={currency}
                     type="button"
                     aria-pressed={chosen}
                     onClick={() => {
-                      setSettlement(currency === local ? "" : currency);
+                      setSettlement(currency === home ? "" : currency);
                       setStale(false);
                     }}
                     className={`rounded-md px-3 py-1 text-sm ${chosen ? "bg-primary text-primary-fg" : "border border-border hover:bg-surface"}`}
@@ -855,6 +860,7 @@ export function TillScreen() {
                 );
               })}
             </div>
+            ) : null}
 
             <div
               data-testid="till-total"
@@ -866,10 +872,12 @@ export function TillScreen() {
                   <p className="text-3xl font-semibold">
                     <Money value={quote.total} currency={quote.settlement} />
                   </p>
-                  <p className="text-sm text-text-muted">
-                    {t("till.total_other")}{" "}
-                    <Money value={quote.totalOther} currency={other} />
-                  </p>
+                  {usdOnly ? null : (
+                    <p className="text-sm text-text-muted">
+                      {t("till.total_other")}{" "}
+                      <Money value={quote.totalOther} currency={other} />
+                    </p>
+                  )}
                   {!isZero(quote.rounding) ? (
                     <p className="text-sm text-text-muted">
                       {t("till.rounding", {
@@ -920,12 +928,14 @@ export function TillScreen() {
                       ) : null}
                     </dl>
                   ) : null}
-                  <p
-                    className={`text-xs ${quote.rateStale ? "text-danger" : "text-text-muted"}`}
-                  >
-                    {t("till.rate", ratePair(quote.rate, quote.localCurrency, locale, tDynamic))}
-                    {quote.rateStale ? ` · ${t("header.rate_stale")}` : ""}
-                  </p>
+                  {usdOnly ? null : (
+                    <p
+                      className={`text-xs ${quote.rateStale ? "text-danger" : "text-text-muted"}`}
+                    >
+                      {t("till.rate", ratePair(quote.rate, quote.localCurrency, locale, tDynamic))}
+                      {quote.rateStale ? ` · ${t("header.rate_stale")}` : ""}
+                    </p>
+                  )}
                 </>
               ) : (
                 <p className="text-3xl font-semibold text-text-muted">—</p>
@@ -950,7 +960,7 @@ export function TillScreen() {
               <div className="grid gap-3 sm:grid-cols-2" data-testid="till-details">
                 <TextField
                   label={t("till.sale_discount", {
-                    currency: tDynamic(`currency.${settlement || local}`),
+                    currency: tDynamic(`currency.${settlement || home}`),
                   })}
                   value={saleDiscount}
                   onChange={(e) => setSaleDiscount(e.target.value)}
@@ -959,18 +969,20 @@ export function TillScreen() {
                   dir="ltr"
                   autoComplete="off"
                 />
-                <SelectField
-                  label={t("till.tender_currency")}
-                  value={tenderCurrency}
-                  onChange={(e) => setTenderCurrency(e.target.value)}
-                >
-                  <option value="">{t("till.same_as_total")}</option>
-                  {[local, "USD"].filter(Boolean).map((c) => (
-                    <option key={c} value={c}>
-                      {tDynamic(`currency.${c}`)}
-                    </option>
-                  ))}
-                </SelectField>
+                {usdOnly ? null : (
+                  <SelectField
+                    label={t("till.tender_currency")}
+                    value={tenderCurrency}
+                    onChange={(e) => setTenderCurrency(e.target.value)}
+                  >
+                    <option value="">{t("till.same_as_total")}</option>
+                    {offered.map((c) => (
+                      <option key={c} value={c}>
+                        {tDynamic(`currency.${c}`)}
+                      </option>
+                    ))}
+                  </SelectField>
+                )}
                 <TextField
                   label={credit ? t("till.paid_now") : t("till.tendered")}
                   hint={
@@ -983,7 +995,7 @@ export function TillScreen() {
                   dir="ltr"
                   autoComplete="off"
                 />
-                {credit ? null : (
+                {credit || usdOnly ? null : (
                   <SelectField
                     label={t("till.change_currency")}
                     value={changeCurrency}
@@ -992,7 +1004,7 @@ export function TillScreen() {
                     hint={t("till.change_default_hint")}
                   >
                     <option value="">{t("till.change_default")}</option>
-                    {[local, "USD"].filter(Boolean).map((c) => (
+                    {offered.map((c) => (
                       <option key={c} value={c}>
                         {tDynamic(`currency.${c}`)}
                       </option>

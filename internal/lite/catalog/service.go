@@ -322,6 +322,14 @@ func applyCost(p domain.Product, in SetPriceInput, ref domain.Reference) (domain
 	return p, nil
 }
 
+// SetOpenCurrency changes the currency an open-priced item is priced in at the till — a shop going over to dollars only
+// (0.10.0). No guard of its own: the going-over is the owner's act, and its caller records it.
+func (s *Service) SetOpenCurrency(ctx context.Context, productID id.ID, rowVersion int64, currency string) (domain.Product, error) {
+	return s.change(ctx, productID, rowVersion, func(_ context.Context, current domain.Product, ref domain.Reference) (domain.Product, error) {
+		return current.OpenPricedIn(currency, ref)
+	})
+}
+
 // SetActiveInput takes a product out of sale or returns it.
 type SetActiveInput struct {
 	ID         id.ID

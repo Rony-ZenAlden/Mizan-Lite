@@ -706,3 +706,19 @@ describe("TillScreen — the open item and held sales (2026-09-23)", () => {
     expect(screen.queryByTestId("held-cart")).not.toBeInTheDocument();
   });
 });
+
+describe("TillScreen — US dollars only (0.10.0)", () => {
+  it("offers no currency and reads no rate: the sale is in dollars", async () => {
+    const quote = vi.fn(async (input: CartInput) => aQuote({ settlement: input.settlement || "USD", total: "3.25" }));
+    renderWithProviders(<TillScreen />, {
+      client: fakeClient({ catalog: { products }, till: { scan: scanJam, quote }, fx: { current: async () => aRate({ usdOnly: true }) } }),
+      locale: "en",
+    });
+    await settle();
+    await userEvent.type(scanField(), "6291{Enter}");
+    await settle();
+    expect(screen.queryByRole("group", { name: "Charge the total in" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 USD =/)).not.toBeInTheDocument();
+    expect(quote).toHaveBeenLastCalledWith(expect.objectContaining({ settlement: "" }));
+  });
+});

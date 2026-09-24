@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { CashSource, Product, Purchase, PurchaseInput, PurchaseQuote, Supplier } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { useCurrencies } from "@/rates/useCurrencies";
 import { formatDecimal, typeable } from "@/i18n/numbers";
 import { isNegative, unsigned } from "@/screens/customers/Balances";
 import { Money, isZero } from "@/screens/sales/Money";
@@ -57,6 +58,7 @@ export function PurchaseDialog({
 }) {
   const client = useClient();
   const { t, tDynamic, errorText, locale } = useLocale();
+  const { currencies: offered } = useCurrencies(localCurrency);
   const [supplierId, setSupplierId] = useState(initialSupplier);
   const [currency, setCurrency] = useState("USD");
   const [rate, setRate] = useState("");
@@ -188,7 +190,7 @@ export function PurchaseDialog({
           </SelectField>
           <TextField label={t("purchase.ref")} value={supplierRef} onChange={(e) => setSupplierRef(e.target.value)} error={errors.field("supplierRef")} maxLength={40} dir="ltr" autoComplete="off" />
           <SelectField label={t("purchase.currency")} value={currency} onChange={(e) => chooseCurrency(e.target.value)} error={errors.field("currency")}>
-            {[localCurrency, "USD"].filter(Boolean).map((c) => (
+            {offered.map((c) => (
               <option key={c} value={c}>
                 {tDynamic(`currency.${c}`)}
               </option>

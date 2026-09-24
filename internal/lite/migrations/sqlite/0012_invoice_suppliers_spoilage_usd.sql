@@ -7,6 +7,7 @@
 --   §4 Stock that spoiled — food gone bad — written off under a reason of its own, beside damaged and expired.
 --   §5 Suppliers, their purchases — lines, damage, discounts — and the payables book.
 --   §6 What the shop owes its suppliers, taken off its capital.
+--   §7 Dollars only: the debt book learns a conversion, so a customer's pound balance can move to dollars.
 --
 -- ORDER MATTERS (as 0010 found): §4 rebuilds stock_ledger inside the runner's transaction, where foreign keys stay on.
 -- stock_levels points at the ledger and is copied aside first; purchase_lines (§5) will point at it too, and is created
@@ -266,7 +267,8 @@ CREATE TABLE supplier_entries (
   seq                     BIGINT       NOT NULL CHECK (seq >= 1),
   business_date           CHAR(10)     NOT NULL,
   occurred_at             CHAR(24)     NOT NULL,
-  kind                    VARCHAR(10)  NOT NULL CHECK (kind IN ('opening', 'purchase', 'payment', 'refund', 'reversal')),
+  -- 'conversion' moves a balance from the local currency to dollars when the shop goes over to dollars only (§7).
+  kind                    VARCHAR(10)  NOT NULL CHECK (kind IN ('opening', 'purchase', 'payment', 'refund', 'reversal', 'conversion')),
   amount_minor            BIGINT       NOT NULL CHECK (amount_minor <> 0),        -- + the shop owes more, − less
   balance_before_minor    BIGINT       NOT NULL,
   balance_after_minor     BIGINT       NOT NULL,
@@ -283,16 +285,17 @@ CREATE TABLE supplier_entries (
   CONSTRAINT ck_supplier_sign_matches_kind CHECK (
     (kind IN ('purchase', 'refund') AND amount_minor > 0) OR
     (kind = 'payment' AND amount_minor < 0) OR
-     kind IN ('opening', 'reversal')),
+     kind IN ('opening', 'reversal', 'conversion')),
   CONSTRAINT ck_supplier_purchase_names_it CHECK (kind <> 'purchase' OR purchase_id IS NOT NULL),
   CONSTRAINT ck_supplier_purchase_only_on_purchase_or_payment CHECK (purchase_id IS NULL OR kind IN ('purchase', 'payment')),
   CONSTRAINT ck_supplier_reversal_names_its_entry CHECK ((kind = 'reversal') = (reverses_id IS NOT NULL)),
   -- Cash moves on a payment and a refund, and on the reversal of one; never on an opening or a purchase.
   CONSTRAINT ck_supplier_cash_source CHECK (
     (kind IN ('payment', 'refund') AND cash_source IS NOT NULL) OR
-    (kind IN ('opening', 'purchase') AND cash_source IS NULL) OR
+    (kind IN ('opening', 'purchase', 'conversion') AND cash_source IS NULL) OR
      kind = 'reversal'),
-  CONSTRAINT ck_supplier_reversal_has_a_reason CHECK (kind <> 'reversal' OR (note IS NOT NULL AND length(trim(note)) > 0))
+  CONSTRAINT ck_supplier_reversal_has_a_reason CHECK (
+    kind NOT IN ('reversal', 'conversion') OR (note IS NOT NULL AND length(trim(note)) > 0))
 );
 CREATE INDEX ix_supplier_entries_day ON supplier_entries (business_date);
 
@@ -303,3 +306,184 @@ CREATE INDEX ix_supplier_entries_day ON supplier_entries (business_date);
 -- suppliers, so nought is the truth for them, not a guess.
 ALTER TABLE capital_snapshots ADD COLUMN payable_usd_minor BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE capital_snapshots ADD COLUMN payable_local_minor BIGINT NOT NULL DEFAULT 0;
+
+-- ── §7. Dollars only: the debt book learns a conversion ─────────────────────────────────────────────────────────────
+--
+-- A shop that goes over to dollars only (the owner's answer, 2026-09-24: "convert everything") moves each customer's pound
+-- balance to dollars at the day's rate: the pounds taken off the pound chain and the same sum put on the dollar chain,
+-- two entries of a kind of their own. None of the existing kinds is that: an opening is always above nought, and a
+-- write-off is a BAD DEBT the reports count as a loss — a customer whose debt was re-counted in dollars has not failed to
+-- pay anything.
+--
+-- A conversion moves no cash and names no sale; it carries a note (the rate it was done at), like every owner's act.
+--
+-- kind is a CHECK, so debt_entries is rebuilt, and three tables point at it or at a table that does: voucher_numbers and
+-- sale_returns name a debt entry, and sale_return_lines names a sale return. The runner's transaction keeps foreign keys
+-- on, so each is copied aside and dropped first — the lines before the returns they point at — and made again, exactly
+-- as it was, once the new ledger stands.
+CREATE TABLE voucher_numbers_copy AS SELECT * FROM voucher_numbers;
+DROP TABLE voucher_numbers;
+CREATE TABLE sale_return_lines_copy AS SELECT * FROM sale_return_lines;
+DROP TABLE sale_return_lines;
+CREATE TABLE sale_returns_copy AS SELECT * FROM sale_returns;
+DROP TABLE sale_returns;
+
+CREATE TABLE debt_entries_r12 (
+  id                     CHAR(36)     NOT NULL PRIMARY KEY,
+  customer_id            CHAR(36)     NOT NULL REFERENCES customers(id),
+  currency               CHAR(3)      NOT NULL REFERENCES currencies(code),
+  seq                    BIGINT       NOT NULL CHECK (seq >= 1),
+  business_date          CHAR(10)     NOT NULL,
+  occurred_at            CHAR(24)     NOT NULL,
+  kind                   VARCHAR(12)  NOT NULL
+                           CHECK (kind IN ('opening', 'charge', 'payment', 'write_off', 'refund', 'reversal', 'sale_return',
+                                           'conversion')),
+  amount_minor           BIGINT       NOT NULL CHECK (amount_minor <> 0),
+  balance_before_minor   BIGINT       NOT NULL,
+  balance_after_minor    BIGINT       NOT NULL,
+  sale_id                CHAR(36)     REFERENCES sales(id),
+  reverses_id            CHAR(36)     REFERENCES debt_entries_r12(id),
+  fx_rate_id             CHAR(36)     REFERENCES fx_rates(id),
+  local_per_usd_nano     BIGINT,
+  cash_note_minor        BIGINT,
+  tendered_currency      CHAR(3)      REFERENCES currencies(code),
+  tendered_minor         BIGINT,
+  change_currency        CHAR(3)      REFERENCES currencies(code),
+  change_minor           BIGINT,
+  customer_name_snapshot VARCHAR(100) NOT NULL,
+  note                   VARCHAR(200),
+  created_at             CHAR(24)     NOT NULL,
+  CONSTRAINT ux_debt_entries_place    UNIQUE (customer_id, currency, seq),
+  CONSTRAINT ux_debt_entries_reverses UNIQUE (reverses_id),
+  CONSTRAINT ck_debt_chain CHECK (balance_after_minor = balance_before_minor + amount_minor),
+  CONSTRAINT ck_debt_sign_matches_kind CHECK (
+    (kind IN ('opening', 'charge', 'refund')        AND amount_minor > 0) OR
+    (kind IN ('payment', 'write_off', 'sale_return') AND amount_minor < 0) OR
+     kind IN ('reversal', 'conversion')),
+  CONSTRAINT ck_debt_charge_names_its_sale    CHECK ((kind = 'charge')   = (sale_id IS NOT NULL)),
+  CONSTRAINT ck_debt_reversal_names_its_entry CHECK ((kind = 'reversal') = (reverses_id IS NOT NULL)),
+  CONSTRAINT ck_debt_cash_moves_only_on_payment_and_refund CHECK (
+    (kind IN ('payment', 'refund')
+       AND tendered_currency IS NOT NULL AND tendered_minor IS NOT NULL AND tendered_minor > 0
+       AND change_currency IS NOT NULL AND change_minor IS NOT NULL AND change_minor >= 0
+       AND fx_rate_id IS NOT NULL AND local_per_usd_nano IS NOT NULL AND local_per_usd_nano > 0
+       AND cash_note_minor IS NOT NULL AND cash_note_minor >= 1) OR
+    (kind NOT IN ('payment', 'refund')
+       AND tendered_currency IS NULL AND tendered_minor IS NULL AND change_currency IS NULL AND change_minor IS NULL
+       AND fx_rate_id IS NULL AND local_per_usd_nano IS NULL AND cash_note_minor IS NULL)),
+  CONSTRAINT ck_debt_owner_acts_have_a_reason CHECK (
+    kind NOT IN ('write_off', 'refund', 'reversal', 'sale_return', 'conversion') OR (note IS NOT NULL AND length(trim(note)) > 0)),
+  CONSTRAINT ck_debt_payment_never_below_zero CHECK (kind NOT IN ('payment', 'write_off') OR balance_after_minor >= 0),
+  CONSTRAINT ck_debt_refund_only_what_is_owed_back CHECK (
+    kind <> 'refund' OR (balance_before_minor < 0 AND balance_after_minor <= 0))
+);
+
+INSERT INTO debt_entries_r12 (
+  id, customer_id, currency, seq, business_date, occurred_at, kind, amount_minor, balance_before_minor, balance_after_minor,
+  sale_id, reverses_id, fx_rate_id, local_per_usd_nano, cash_note_minor, tendered_currency, tendered_minor, change_currency,
+  change_minor, customer_name_snapshot, note, created_at)
+SELECT
+  id, customer_id, currency, seq, business_date, occurred_at, kind, amount_minor, balance_before_minor, balance_after_minor,
+  sale_id, reverses_id, fx_rate_id, local_per_usd_nano, cash_note_minor, tendered_currency, tendered_minor, change_currency,
+  change_minor, customer_name_snapshot, note, created_at
+FROM debt_entries;
+
+DROP TABLE debt_entries;
+ALTER TABLE debt_entries_r12 RENAME TO debt_entries;
+
+CREATE UNIQUE INDEX ux_debt_entries_one_charge_per_sale ON debt_entries (sale_id);
+CREATE INDEX ix_debt_entries_business_date ON debt_entries (business_date);
+
+-- sale_returns, exactly as 0010 made it.
+CREATE TABLE sale_returns (
+  id                 CHAR(36)    NOT NULL PRIMARY KEY,
+  return_no          BIGINT      NOT NULL CHECK (return_no >= 1),
+  sale_id            CHAR(36)    NOT NULL REFERENCES sales(id),
+  business_date      CHAR(10)    NOT NULL,
+  returned_at        CHAR(24)    NOT NULL,
+  -- How the money went back: cash out of the drawer, or off what the customer owes.
+  settlement         VARCHAR(6)  NOT NULL CHECK (settlement IN ('cash', 'debt')),
+  settlement_currency CHAR(3)    NOT NULL REFERENCES currencies(code),
+  -- What the customer got back, in the settlement currency, and the same sum in each currency of the books.
+  refund_minor       BIGINT      NOT NULL CHECK (refund_minor >= 0),
+  refund_local_minor BIGINT      NOT NULL CHECK (refund_local_minor >= 0),
+  refund_usd_minor   BIGINT      NOT NULL CHECK (refund_usd_minor >= 0),
+  -- The cost put back on the shelf, so the day's profit is reduced by the margin and not by the whole price.
+  cost_usd_minor     BIGINT      NOT NULL CHECK (cost_usd_minor >= 0),
+  cost_local_minor   BIGINT      NOT NULL CHECK (cost_local_minor >= 0),
+  cost_known         SMALLINT    NOT NULL CHECK (cost_known IN (0, 1)),
+  -- The rate the refund was converted at: the rate in force when the goods came back, not when they were sold.
+  fx_rate_id         CHAR(36)    NOT NULL REFERENCES fx_rates(id),
+  local_per_usd_nano BIGINT      NOT NULL CHECK (local_per_usd_nano > 0),
+  -- A debt return names the customer whose balance it reduced; a cash one names nobody.
+  customer_id        CHAR(36)    REFERENCES customers(id),
+  -- A DEBT return moves money through the debt ledger, which is where a balance lives, and names the entry it wrote.
+  --
+  -- A CASH return writes no cash entry, and deliberately: a cash SALE does not write one either. The drawer derives
+  -- what the till took from the sales themselves (reports/domain.cashMoves), so a refund that wrote a cash entry would
+  -- be counted once as an entry and once as a return, and the drawer would be short by the refund twice over.
+  debt_entry_id      CHAR(36)    REFERENCES debt_entries(id),
+  reason             VARCHAR(200) NOT NULL,
+  created_at         CHAR(24)    NOT NULL,
+  CONSTRAINT ux_sale_returns_no UNIQUE (return_no),
+  CONSTRAINT ck_sale_return_settlement_is_complete CHECK (
+    (settlement = 'debt' AND customer_id IS NOT NULL AND debt_entry_id IS NOT NULL) OR
+    (settlement = 'cash' AND customer_id IS NULL     AND debt_entry_id IS NULL)),
+  CONSTRAINT ck_sale_return_unknown_cost_is_zero CHECK (
+    cost_known = 1 OR (cost_usd_minor = 0 AND cost_local_minor = 0)),
+  CONSTRAINT ck_sale_return_has_a_reason CHECK (length(trim(reason)) > 0)
+);
+INSERT INTO sale_returns (
+  id, return_no, sale_id, business_date, returned_at, settlement, settlement_currency, refund_minor, refund_local_minor,
+  refund_usd_minor, cost_usd_minor, cost_local_minor, cost_known, fx_rate_id, local_per_usd_nano, customer_id,
+  debt_entry_id, reason, created_at)
+SELECT
+  id, return_no, sale_id, business_date, returned_at, settlement, settlement_currency, refund_minor, refund_local_minor,
+  refund_usd_minor, cost_usd_minor, cost_local_minor, cost_known, fx_rate_id, local_per_usd_nano, customer_id,
+  debt_entry_id, reason, created_at
+FROM sale_returns_copy;
+DROP TABLE sale_returns_copy;
+CREATE INDEX ix_sale_returns_sale ON sale_returns (sale_id);
+CREATE INDEX ix_sale_returns_date ON sale_returns (business_date);
+
+-- sale_return_lines, exactly as 0010 made it.
+CREATE TABLE sale_return_lines (
+  id                 CHAR(36) NOT NULL PRIMARY KEY,
+  return_id          CHAR(36) NOT NULL REFERENCES sale_returns(id),
+  sale_line_id       CHAR(36) NOT NULL REFERENCES sale_lines(id),
+  line_no            SMALLINT NOT NULL CHECK (line_no >= 1),
+  product_id         CHAR(36) NOT NULL REFERENCES products(id),
+  quantity_micro     BIGINT   NOT NULL CHECK (quantity_micro > 0),
+  -- The share of that sale line's net (after its discount) that this quantity represents, in both currencies.
+  refund_local_minor BIGINT   NOT NULL CHECK (refund_local_minor >= 0),
+  refund_usd_minor   BIGINT   NOT NULL CHECK (refund_usd_minor >= 0),
+  -- The cost that goes back on the shelf, at the cost the SALE snapshotted — not today's average (D-L9.1's reasoning).
+  unit_cost_usd_micro BIGINT  NOT NULL CHECK (unit_cost_usd_micro >= 0),
+  cost_known         SMALLINT NOT NULL CHECK (cost_known IN (0, 1)),
+  cost_usd_minor     BIGINT   NOT NULL CHECK (cost_usd_minor >= 0),
+  cost_local_minor   BIGINT   NOT NULL CHECK (cost_local_minor >= 0),
+  -- Whether the goods went back on the shelf. A damaged tin is refunded but not resold.
+  restocked          SMALLINT NOT NULL CHECK (restocked IN (0, 1)),
+  CONSTRAINT ux_sale_return_lines_line UNIQUE (return_id, line_no),
+  CONSTRAINT ck_sale_return_line_unknown_cost_is_zero CHECK (
+    cost_known = 1 OR (unit_cost_usd_micro = 0 AND cost_usd_minor = 0 AND cost_local_minor = 0))
+);
+INSERT INTO sale_return_lines (
+  id, return_id, sale_line_id, line_no, product_id, quantity_micro, refund_local_minor, refund_usd_minor,
+  unit_cost_usd_micro, cost_known, cost_usd_minor, cost_local_minor, restocked)
+SELECT
+  id, return_id, sale_line_id, line_no, product_id, quantity_micro, refund_local_minor, refund_usd_minor,
+  unit_cost_usd_micro, cost_known, cost_usd_minor, cost_local_minor, restocked
+FROM sale_return_lines_copy;
+DROP TABLE sale_return_lines_copy;
+CREATE INDEX ix_sale_return_lines_return    ON sale_return_lines (return_id);
+CREATE INDEX ix_sale_return_lines_sale_line ON sale_return_lines (sale_line_id);
+
+-- voucher_numbers, exactly as 0010 made it.
+CREATE TABLE voucher_numbers (
+  entry_id    CHAR(36) NOT NULL PRIMARY KEY REFERENCES debt_entries(id),
+  voucher_no  BIGINT   NOT NULL CHECK (voucher_no >= 1),
+  CONSTRAINT ux_voucher_numbers_no UNIQUE (voucher_no)
+);
+INSERT INTO voucher_numbers (entry_id, voucher_no) SELECT entry_id, voucher_no FROM voucher_numbers_copy;
+DROP TABLE voucher_numbers_copy;

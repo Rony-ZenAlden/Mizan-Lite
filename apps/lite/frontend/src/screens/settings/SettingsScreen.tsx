@@ -11,6 +11,10 @@ import { Spinner } from "@/ui/Spinner";
 import { usePrinterSettings } from "@/printing/PrintPanel";
 import { Link } from "react-router-dom";
 import { StoreInfo } from "./StoreInfo";
+import { USDOnlyDialog } from "./USDOnlyDialog";
+
+/** How the shop reads its money: the old pound, the new one, both — or, since 0.10.0, US dollars only. */
+type Display = "legacy" | "new" | "dual" | "usd";
 
 /** Where a fetched rate comes from, as the screen offers it. "manual" is the rate mode, not a fetch source. */
 type Source = "standard" | "local" | "manual";
@@ -37,7 +41,11 @@ export function SettingsScreen() {
   const [source, setSource] = useState<Source>("standard");
   const [url, setUrl] = useState("");
   const [field, setField] = useState("");
-  const [moneyDisplay, setMoneyDisplay] = useState<"legacy" | "new" | "dual">("legacy");
+  const [moneyDisplay, setMoneyDisplay] = useState<Display>("legacy");
+  // Going over to dollars only is not a setting saved with the rest: it converts the shop's prices and balances, and
+  // opens its own dialog to show what first (0.10.0).
+  const [switching, setSwitching] = useState(false);
+  const [switched, setSwitched] = useState(false);
   const [pinRequired, setPinRequired] = useState(false);
   // Printing lives on its own screen (the printer, the paper, the header); what belongs HERE is the one decision a
   // shop makes about it — whether a finished sale prints itself (2026-09-20).
@@ -52,7 +60,7 @@ export function SettingsScreen() {
     try {
       const [current, rate] = await Promise.all([client.settings.get(), client.fx.current()]);
       setSettings(current);
-      setMoneyDisplay((current.moneyDisplay || "legacy") as "legacy" | "new" | "dual");
+      setMoneyDisplay((current.moneyDisplay || "legacy") as Display);
       setPinRequired(current.pinRequired);
       setUrl(current.localRateUrl);
       setField(current.localRateField);
@@ -93,7 +101,7 @@ export function SettingsScreen() {
           client.settings.update({ rateSource: source, localRateUrl: url, localRateField: field }),
         );
       }
-      if (moneyDisplay !== settings?.moneyDisplay) {
+      if (moneyDisplay !== settings?.moneyDisplay && moneyDisplay !== "usd") {
         await withOwner(() => client.settings.update({ moneyDisplay }));
       }
       // Turning the PIN ON is free; turning it OFF asks for it, because Go guards the switch against the setting as it
@@ -157,16 +165,26 @@ export function SettingsScreen() {
           <SelectField
             label={t("settings.money_display")}
             value={moneyDisplay}
-            onChange={(e) => setMoneyDisplay(e.target.value as "legacy" | "new" | "dual")}
+            onChange={(e) => {
+              const next = e.target.value as Display;
+              if (next === "usd" && settings.moneyDisplay !== "usd") setSwitching(true);
+              else setMoneyDisplay(next);
+            }}
           >
-            {(["legacy", "new", "dual"] as const).map((name) => (
+            {(["legacy", "new", "dual", "usd"] as const).map((name) => (
               <option key={name} value={name}>
                 {t(`settings.money_display.${name}` as "settings.money_display.legacy")}
               </option>
             ))}
           </SelectField>
           <p className="text-xs text-text-muted">{t("settings.money_display_hint")}</p>
-          {moneyDisplay !== "legacy" ? (
+          {settings.moneyDisplay === "usd" ? (
+            <p className="text-xs text-text-muted" data-testid="money-display-usd">
+              {t("settings.money_display_usd_on")}
+            </p>
+          ) : null}
+          {switched ? <Alert tone="success" title={t("usd_only.done")} /> : null}
+          {moneyDisplay === "new" || moneyDisplay === "dual" ? (
             <p className="text-xs text-text-muted" data-testid="money-display-typing">
               {t("settings.money_display_typing")}
             </p>
@@ -250,6 +268,16 @@ export function SettingsScreen() {
           {t("settings.save")}
         </Button>
       </div>
+      {switching ? (
+        <USDOnlyDialog
+          onDone={() => {
+            setSwitching(false);
+            setSwitched(true);
+            void load();
+          }}
+          onClose={() => setSwitching(false)}
+        />
+      ) : null}
     </section>
   );
 }

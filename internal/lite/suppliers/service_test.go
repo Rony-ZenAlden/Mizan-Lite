@@ -419,3 +419,34 @@ func TestGoodsThatArrivedDamagedAreListedAtWhatTheyWouldHaveCost(t *testing.T) {
 		t.Fatalf("damage outside the period: %+v", none)
 	}
 }
+
+// TestASuppliersPoundBalanceIsConvertedToDollars (0.10.0).
+func TestASuppliersPoundBalanceIsConvertedToDollars(t *testing.T) {
+	_, svc, _ := newBook(t)
+	ctx := context.Background()
+	sup := aSupplier(t, svc)
+	if _, err := svc.Opening(ctx, suppliers.MoneyInput{SupplierID: sup.ID, Currency: "SYP", Amount: "300000"}); err != nil {
+		t.Fatal(err)
+	}
+	owed, err := svc.BalancesIn(ctx, "SYP")
+	if err != nil || len(owed) != 1 || owed[0].BalanceMinor != 300_000 || owed[0].Name != "المروى" {
+		t.Fatalf("BalancesIn = %+v, %v", owed, err)
+	}
+	if _, err = svc.Convert(ctx, suppliers.ConversionInput{SupplierID: sup.ID, From: "SYP", FromMinor: 1, To: "USD", ToMinor: 1, Note: "x"}); errs.CodeOf(err) != suppliers.CodeConversionStale {
+		t.Fatalf("a stale conversion: %v", err)
+	}
+	entries, err := svc.Convert(ctx, suppliers.ConversionInput{SupplierID: sup.ID, From: "SYP", FromMinor: 300_000, To: "USD", ToMinor: 2_000,
+		Note: "إلى الدولار بسعر 15000"})
+	if err != nil || len(entries) != 2 || entries[0].AmountMinor != -300_000 || entries[1].AmountMinor != 2_000 {
+		t.Fatalf("Convert = %+v, %v", entries, err)
+	}
+	if got := balance(t, svc, sup.ID, "USD"); got != 2_000 {
+		t.Fatalf("dollars owed %d", got)
+	}
+	if _, err = svc.Reverse(ctx, entries[0].ID, "خطأ"); errs.CodeOf(err) != domain.CodeNotReversible {
+		t.Fatalf("a conversion reversed: %v", err)
+	}
+	if moves, _ := svc.DrawerBetween(ctx, "2026-09-01", "2026-09-30"); len(moves) != 0 {
+		t.Fatalf("a conversion moved the drawer: %+v", moves)
+	}
+}

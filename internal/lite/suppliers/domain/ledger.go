@@ -28,6 +28,10 @@ const (
 	KindRefund Kind = "refund"
 	// KindReversal undoes an entry made by mistake, with its reason.
 	KindReversal Kind = "reversal"
+	// KindConversion moves a balance from the local currency to dollars when the shop goes over to dollars only
+	// (0.10.0): either sign, no cash, a note — and never reversed, since half of one undone would leave the balance in
+	// both currencies.
+	KindConversion Kind = "conversion"
 )
 
 // CashSource is where money paid to a supplier came from, or where money from one went (the owner's choice,
@@ -131,6 +135,10 @@ func (p Place) Append(e Entry) (Entry, error) {
 		if e.ReversesID == "" {
 			return Entry{}, errs.Validation(CodeNotReversible, "a reversal names what it reverses")
 		}
+	case KindConversion:
+		if e.Source != "" || e.Note == "" {
+			return Entry{}, errs.Validation(CodeReasonRequired, "a conversion moves no cash and names its rate")
+		}
 	default:
 		return Entry{}, errs.Validation("database.constraint_violation", "unknown kind")
 	}
@@ -146,6 +154,8 @@ func Reverse(original Entry, reason string, byVoid bool) (Entry, error) {
 		return Entry{}, errs.Conflict(CodeNotReversible, "a reversal is never reversed")
 	case original.Kind == KindPurchase && !byVoid:
 		return Entry{}, errs.Conflict(CodeNotReversible, "a purchase is reversed by voiding it")
+	case original.Kind == KindConversion:
+		return Entry{}, errs.Conflict(CodeNotReversible, "a conversion moved a balance and is never reversed")
 	}
 	note, err := Reason(reason)
 	if err != nil {

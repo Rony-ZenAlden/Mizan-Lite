@@ -23,6 +23,12 @@ const (
 	// It is not a write-off: a write-off is the shop forgiving a debt it does not expect to collect, and the reports
 	// count one as a BAD DEBT. A customer returning goods has not failed to pay anybody.
 	KindSaleReturn Kind = "sale_return"
+	// KindConversion moves a balance from one currency to another when the shop goes over to dollars only (0.10.0):
+	// the pounds off the pound chain, the same sum at the day's rate onto the dollar chain. Either sign, no cash, a note.
+	//
+	// Not an opening, which is always above nought, and not a write-off, which the reports count as a bad debt: a
+	// customer whose debt was re-counted in dollars has neither started owing nor failed to pay.
+	KindConversion Kind = "conversion"
 )
 
 // Currency is a currency's code and decimals.
@@ -112,7 +118,7 @@ func (p Place) Append(e Entry) (Entry, error) {
 		if e.AmountMinor > 0 {
 			return Entry{}, errs.Validation(CodeAmountRequired, "a return reduces a balance")
 		}
-	case KindReversal:
+	case KindReversal, KindConversion:
 	default:
 		return Entry{}, errs.Validation("database.constraint_violation", "unknown kind")
 	}
@@ -128,6 +134,9 @@ func Reverse(original Entry, reason string, bySale bool) (Entry, error) {
 		return Entry{}, errs.Conflict(CodeNotReversible, "a reversal is never reversed")
 	case original.Kind == KindCharge && !bySale:
 		return Entry{}, errs.Conflict(CodeNotReversible, "a charge is reversed by voiding its sale")
+	case original.Kind == KindConversion:
+		// Half a conversion undone would leave the balance in both currencies at once.
+		return Entry{}, errs.Conflict(CodeNotReversible, "a conversion moved a balance and is never reversed")
 	}
 	note, err := Reason(reason)
 	if err != nil {

@@ -678,6 +678,92 @@ func (s *Service) DamagedOnArrival(ctx context.Context, from, to string) ([]Dama
 	return out, nil
 }
 
+// ─── Dollars only (0.10.0) ─────────────────────────────────────────────────────────────────────────────────────────
+
+// CodeConversionStale refuses a conversion whose balance moved since the owner was shown it.
+const CodeConversionStale = "lite.suppliers.conversion_stale"
+
+// Balance is a supplier's non-zero balance in one currency.
+type Balance struct {
+	SupplierID   id.ID
+	Name         string
+	BalanceMinor int64
+}
+
+// BalancesIn lists every supplier with a balance other than nought in a currency — what going over to dollars only would
+// convert. Unguarded: the conversion's plan reads it, and the conversion is the owner's act.
+func (s *Service) BalancesIn(ctx context.Context, currency string) ([]Balance, error) {
+	balances, err := s.store.Balances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []Balance{}
+	for supplierID, byCurrency := range balances {
+		if byCurrency[currency] == 0 {
+			continue
+		}
+		sup, err := s.store.Supplier(ctx, supplierID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Balance{SupplierID: supplierID, Name: sup.Name, BalanceMinor: byCurrency[currency]})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// ConversionInput moves a supplier's whole balance from one currency to another: FromMinor — still the From chain's
+// balance — off it, and ToMinor, the same sum at the rate, onto the To chain.
+type ConversionInput struct {
+	SupplierID id.ID
+	From       string
+	FromMinor  int64
+	To         string
+	ToMinor    int64
+	Note       string
+}
+
+// Convert writes a conversion's entries in the caller's transaction (0.10.0). The going-over-to-dollars act is the
+// owner's and is recorded once by its caller.
+func (s *Service) Convert(ctx context.Context, in ConversionInput) ([]domain.Entry, error) {
+	var out []domain.Entry
+	err := s.tx.Do(ctx, func(ctx context.Context) error {
+		sup, err := s.store.Supplier(ctx, in.SupplierID)
+		if err != nil {
+			return err
+		}
+		note, err := domain.Reason(in.Note)
+		if err != nil {
+			return err
+		}
+		from, err := s.store.Newest(ctx, sup.ID, in.From)
+		if err != nil {
+			return err
+		}
+		if from.BalanceMinor != in.FromMinor || in.FromMinor == 0 {
+			return errs.Conflict(CodeConversionStale, "the balance changed since the conversion was shown").WithParam("name", sup.Name)
+		}
+		at := s.now()
+		off, err := s.appendAt(ctx, domain.Entry{SupplierID: sup.ID, Currency: in.From, Kind: domain.KindConversion,
+			AmountMinor: -in.FromMinor, SupplierName: sup.Name, Note: note}, at)
+		if err != nil {
+			return err
+		}
+		out = append(out, off)
+		if in.ToMinor == 0 {
+			return nil
+		}
+		on, err := s.appendAt(ctx, domain.Entry{SupplierID: sup.ID, Currency: in.To, Kind: domain.KindConversion,
+			AmountMinor: in.ToMinor, SupplierName: sup.Name, Note: note}, at)
+		if err != nil {
+			return err
+		}
+		out = append(out, on)
+		return nil
+	})
+	return out, err
+}
+
 // ─── Money ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 // MoneyInput is a payment to a supplier, a refund from one, or an opening balance.

@@ -71,7 +71,12 @@ function Frame() {
           <p className="text-lg font-semibold">{shopName || t("app.name")}</p>
           {shopName ? <p className="text-xs text-text-muted">{t("app.name")}</p> : null}
         </div>
-        {rate ? (
+        {rate?.usdOnly ? (
+          // A dollars-only shop reads no rate on its screens (0.10.0).
+          <span data-testid="header-usd-only" className="rounded-md px-3 py-1 text-sm text-text-muted">
+            {t("header.usd_only")}
+          </span>
+        ) : rate ? (
           <Link
             to="/rates"
             data-testid="header-rate"

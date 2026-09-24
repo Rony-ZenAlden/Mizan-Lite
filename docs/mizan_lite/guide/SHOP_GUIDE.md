@@ -54,6 +54,25 @@ Sales → the receipt → **Void sale**. Before the PIN, the application states 
 - **Stock:** receive a delivery with its cost, count what is on the shelf, write off damaged goods, open a large container into smaller units.
 - An item's cost is a **weighted average** the application updates with every delivery.
 
+## Suppliers and purchases
+
+- **Suppliers** keeps what the shop owes the people it buys from, apart from what customers owe it: each supplier's balance in each currency, and every purchase and payment.
+- **New purchase:** choose the supplier, add the items that arrived (type the name or scan the barcode), and for each one how many came, how many were **damaged**, the price of one and any discount (a percentage or an amount). A discount on the whole invoice goes below. The application works out every line and what one good unit really cost.
+- Damaged units are **not received into stock and not charged**. If you already paid for them, the supplier owes the shop the difference.
+- Pay what you can now — from the **drawer** or from **your own money**, chosen each time — and the rest goes on the supplier's account. Money paid from the drawer comes off what the drawer should hold.
+- A purchase entered by mistake is **voided** from its page, with a reason. Purchases, payments and voids need the owner PIN when the PIN is switched on.
+
+## Spoilage and losses
+
+- **Spoilage & losses → Record spoilage:** find the item, type how much was lost, and say why — **damaged**, **expired** or **spoiled**. It comes off the shelf at its average cost and needs the owner PIN.
+- The screen shows the period's losses at what the goods cost, by reason and line by line, and — apart — the goods that **arrived damaged** from suppliers, which the supplier did not charge for.
+
+## US dollars only
+
+- Settings → **How money is shown → US dollars only** converts the whole shop to dollars at today's rate: every price and cost, every customer's and supplier's balance in pounds, and the pounds in the drawer.
+- The application **shows every figure before anything changes**. Check them, tick the box and confirm with the owner PIN. If anything changed in between — a sale, a payment — it shows the new figures and asks again.
+- After that the till, the prices, the drawer and the reports are in dollars only. To go back, choose another way of showing money: everything stays in dollars.
+
 ## Products from Excel
 
 Products → **Import from Excel**:

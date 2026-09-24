@@ -39,6 +39,7 @@ what is not verified — once built.
 | **L10** | Dropping the two noughts: one money pipeline, three readings of the pound | [DECISIONS.md](DECISIONS.md) — D-L10.1–5 | ✅ shipped, tagged `lite-v0.9.5` |
 | **L11** | Partial returns, recurring expenses, reorder levels, price tags, the thermal Z-report | [DECISIONS.md](DECISIONS.md) — D-097.1–15 | ✅ shipped, tagged `lite-v0.9.7` |
 | **L12** | Held sales, the open-priced item, optional re-pricing after a rate move, one notification engine (bell, toasts, centre, capital in dollars) | [DECISIONS.md](DECISIONS.md) — D-099.1–18 | ✅ shipped, tagged `lite-v0.9.9` |
+| **L13** | The A4 invoice and the shop's own branding, suppliers and purchases (discounts, damage at intake), spoilage and losses, US dollars only | [DECISIONS.md](DECISIONS.md) — D-0100.1–20 | ✅ shipped, tagged `lite-v0.10.0` |
 
 ## Conventions
 

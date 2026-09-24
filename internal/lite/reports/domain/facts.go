@@ -103,6 +103,7 @@ const (
 
 	ReasonDamaged = "damaged"
 	ReasonExpired = "expired"
+	ReasonSpoiled = "spoiled"
 	ReasonOwnUse  = "own_use"
 	ReasonGift    = "gift"
 	ReasonOther   = "other"
@@ -110,6 +111,9 @@ const (
 
 // Movement is a stock ledger row: what moved, at what unit cost, and the level before and after it.
 type Movement struct {
+	// ID and Note name a movement on the loss report (0.10.0).
+	ID                 id.ID
+	Note               string
 	ProductID          id.ID
 	Seq                int64
 	BusinessDate       string

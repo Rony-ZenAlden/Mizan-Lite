@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useClient } from "@/api/ClientContext";
 import type { CashSource, Product, Purchase, PurchaseInput, PurchaseQuote, Supplier } from "@/api/client";
 import { useLocale } from "@/i18n/LocaleProvider";
@@ -6,6 +6,7 @@ import { formatDecimal, typeable } from "@/i18n/numbers";
 import { isNegative, unsigned } from "@/screens/customers/Balances";
 import { Money, isZero } from "@/screens/sales/Money";
 import { formErrors } from "@/screens/stock/forms";
+import { useProductSearch } from "@/screens/stock/useProductSearch";
 import { Button } from "@/ui/Button";
 import { Dialog } from "@/ui/Dialog";
 import { CellInput, SelectField, TextField } from "@/ui/Field";
@@ -14,9 +15,6 @@ import { SourceField, useSupplierAct } from "./SupplierDialogs";
 
 /** How long typing pauses before Go is asked to work the purchase out again. */
 export const PURCHASE_QUOTE_DEBOUNCE_MS = 250;
-
-/** How many products the item search offers at once. */
-const MATCHES = 8;
 
 type DiscountMode = "percent" | "amount";
 
@@ -68,12 +66,7 @@ export function PurchaseDialog({
   const [paidNow, setPaidNow] = useState("");
   const [paidFrom, setPaidFrom] = useState<CashSource>("drawer");
   const [note, setNote] = useState("");
-  const [products, setProducts] = useState<Product[] | null>(null);
   const [loaded, setLoaded] = useState<Supplier[]>([]);
-  // A scanner types a barcode and Enter faster than the products load when the dialog has just opened: the Enter is
-  // remembered, and answered once they are here (found by the end-to-end journey J13).
-  const [pendingEnter, setPendingEnter] = useState(false);
-  const [search, setSearch] = useState("");
   const [quote, setQuote] = useState<PurchaseQuote | null>(null);
   const [quoteError, setQuoteError] = useState<unknown>(null);
   const nextKey = useRef(1);
@@ -95,22 +88,6 @@ export function PurchaseDialog({
       cancelled = true;
     };
   }, [client, given]);
-
-  useEffect(() => {
-    let cancelled = false;
-    client.catalog
-      .products({ text: "", includeInactive: false })
-      .then((all) => {
-        // An open-priced item is never kept in stock, so it is never bought into it (2026-09-23).
-        if (!cancelled) setProducts(all.filter((p) => p.active && !p.openPrice));
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setQuoteError(e);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client]);
 
   const needsRate = currency !== "USD";
   const input: PurchaseInput = useMemo(
@@ -162,37 +139,10 @@ export function PurchaseDialog({
   }, [client, input, ready]);
 
   const name = (p: Product) => (locale === "en" && p.nameEn ? p.nameEn : p.nameAr);
-  const matches = useMemo(() => {
-    const text = search.trim().toLowerCase();
-    if (text === "" || products === null) return [];
-    const byBarcode = products.filter((p) => p.barcode !== "" && p.barcode === search.trim());
-    if (byBarcode.length > 0) return byBarcode;
-    return products.filter((p) => p.nameAr.toLowerCase().includes(text) || p.nameEn.toLowerCase().includes(text)).slice(0, MATCHES);
-  }, [products, search]);
-
-  const add = (product: Product) => {
-    setLines((current) => [...current, blank(product, nextKey.current++)]);
-    setSearch("");
-  };
-
-  useEffect(() => {
-    if (!pendingEnter || products === null) return;
-    setPendingEnter(false);
-    const first = matches[0];
-    if (first) {
-      setLines((current) => [...current, blank(first, nextKey.current++)]);
-      setSearch("");
-    }
-  }, [pendingEnter, products, matches]);
+  // An open-priced item is never kept in stock, so it is never bought into it (2026-09-23): the search never offers one.
+  const finder = useProductSearch((product) => setLines((current) => [...current, blank(product, nextKey.current++)]));
   const change = (key: number, patch: Partial<Line>) => setLines((current) => current.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const remove = (key: number) => setLines((current) => current.filter((l) => l.key !== key));
-
-  const onSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault(); // Enter adds the item; it never records the purchase
-    if (products === null) setPendingEnter(true);
-    else if (matches[0]) add(matches[0]);
-  };
 
   const chooseCurrency = (next: string) => {
     setCurrency(next);
@@ -206,7 +156,7 @@ export function PurchaseDialog({
   };
 
   // A refusal from recording, else from the latest quote: under the field or line it names.
-  const errors = formErrors(error ?? quoteError, errorText);
+  const errors = formErrors(error ?? quoteError ?? finder.error, errorText);
   const lineError = (index: number, field: string) => errors.field(`lines.${index + 1}.${field}`);
   const quoted = (index: number) => quote?.purchase.lines.find((l) => l.lineNo === index + 1);
   const active = (given ?? loaded).filter((s) => s.active || s.id === supplierId);
@@ -262,20 +212,20 @@ export function PurchaseDialog({
         <div className="space-y-2">
           <TextField
             label={t("purchase.add_item")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={onSearchKey}
+            value={finder.search}
+            onChange={(e) => finder.setSearch(e.target.value)}
+            onKeyDown={finder.onKeyDown}
             type="search"
             autoComplete="off"
           />
-          {search.trim() !== "" && products !== null ? (
-            matches.length === 0 ? (
+          {finder.search.trim() !== "" && finder.loaded ? (
+            finder.matches.length === 0 ? (
               <p className="text-sm text-text-muted">{t("purchase.no_match")}</p>
             ) : (
               <ul className="flex flex-wrap gap-2" aria-label={t("purchase.matches")}>
-                {matches.map((p) => (
+                {finder.matches.map((p) => (
                   <li key={p.id}>
-                    <Button onClick={() => add(p)}>
+                    <Button onClick={() => finder.pick(p)}>
                       {name(p)} — {tDynamic(`uom.${p.unitCode}`)}
                     </Button>
                   </li>

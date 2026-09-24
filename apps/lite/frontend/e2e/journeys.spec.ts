@@ -406,11 +406,44 @@ for (const locale of LOCALES) {
       await expect(pay).toBeHidden();
       await expectReadable(account.getByTestId("supplier-balance"), "12.50");
 
-      // What Go recorded: $12.50 still owed, and the drawer expecting $10.00 less than it would have.
-      const list = await call<{ totals: { currency: string; balance: string }[] }>(page.request, "Suppliers", "List", { text: "", includeInactive: false });
-      expect(list.totals).toEqual([{ currency: "USD", balance: "12.50" }]);
+      // What Go recorded: $12.50 still owed to this supplier, and the drawer expecting $10.00 less than it would have (the
+      // demo shop's own supplier was paid from the owner's pocket, so the drawer's supplier line is this payment alone).
+      const list = await call<{ suppliers: { name: string; balances: { currency: string; balance: string }[] }[] }>(
+        page.request, "Suppliers", "List", { text: "المروى", includeInactive: false });
+      expect(list.suppliers.find((s) => s.name === "المروى")!.balances).toEqual([{ currency: "USD", balance: "12.50" }]);
       const drawer = await call<{ currencies: { currency: string; suppliersOut: string }[] }>(page.request, "Cash", "Drawer", "");
       expect(drawer.currencies.find((c) => c.currency === "USD")!.suppliersOut).toBe("10.00");
+    });
+
+    // 0.10.0 (2026-09-24): spoilage written off from its own screen — found by barcode, why chosen — and the losses at cost.
+    test(`J14 spoilage written off, and the shop's losses at what they cost — ${locale}`, async ({ page }) => {
+      await reset(page, "seeded", locale);
+      const products = await call<{ id: string; barcode: string }[]>(page.request, "Catalog", "Products", { text: "", includeInactive: true });
+      const molassesId = products.find((p) => p.barcode === MOLASSES.barcode)!.id;
+      const onHand = async () => (await call<{ productId: string; onHand: string }[]>(page.request, "Stock", "Levels")).find((l) => l.productId === molassesId)?.onHand ?? "0";
+      const before = Number(await onHand());
+
+      await go(page, locale, "nav.losses");
+      await page.getByRole("button", { name: label(locale, "losses.record") }).click();
+      const dialog = page.getByRole("dialog", { name: label(locale, "spoilage.title") });
+      const find = dialog.getByLabel(label(locale, "spoilage.find"));
+      await find.fill(MOLASSES.barcode);
+      await find.press("Enter");
+      await expect(dialog.getByTestId("spoilage-item")).toBeVisible();
+      await dialog.getByLabel(label(locale, "spoilage.quantity", { unit: label(locale, "uom.jar") })).fill("2");
+      await dialog.getByLabel(label(locale, "spoilage.reason")).selectOption("spoiled");
+      await checkStructure(page, locale, "recording spoilage");
+      await dialog.getByRole("button", { name: label(locale, "spoilage.save") }).click();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByTestId("loss-total-spoiled")).toBeVisible();
+      await checkStructure(page, locale, "the losses");
+
+      // What Go recorded: two jars off the shelf, on the loss report as spoiled, at cost.
+      expect(Number(await onHand())).toBe(before - 2);
+      const report = await call<{ byReason: { reason: string; lines: number; value: { usd: string } }[] }>(page.request, "Reports", "Losses", { from: "", to: "" });
+      const spoiled = report.byReason.find((r) => r.reason === "spoiled")!;
+      expect(spoiled.lines).toBe(1);
+      expect(Number(spoiled.value.usd)).toBeGreaterThan(0);
     });
 
     test(`J10 the rate by hand, and the language switched mid-session — ${locale}`, async ({ page }) => {

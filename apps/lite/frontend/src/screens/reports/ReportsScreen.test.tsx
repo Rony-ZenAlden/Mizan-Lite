@@ -66,7 +66,7 @@ describe("ReportsScreen", () => {
       "Gross profit2.50 USD37,500 SYP",
       "Margin38.5%38.5%",
       "Stock losses, at cost0.40 USD6,000 SYP",
-      "Spoiled or expired0.40 USD6,000 SYP",
+      "Damaged, expired or spoiled0.40 USD6,000 SYP",
       "Debts written off0.00 USD0 SYP",
       "Expenses1.00 USD15,000 SYP",
       // The day's small change told apart from rent and the bills (2026-09-20): a day the rent is paid is not a bad

@@ -499,3 +499,25 @@ func TestTheSeederExercisesPrintingAndBackups(t *testing.T) {
 		t.Fatalf("outside copy %+v, %v", status, err)
 	}
 }
+
+// TestTheSeederKeepsASuppliersBook (0.10.0): a wholesaler owed for a carton of grape molasses — eleven good jars at $1.80
+// less 5%, $18.81, the broken one not charged — less the $10.00 the owner paid from their own pocket.
+func TestTheSeederKeepsASuppliersBook(t *testing.T) {
+	ctx := context.Background()
+	app := start(t)
+	res, err := demoseed.Run(ctx, app, demoseed.Options{PIN: "481537"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Suppliers != 1 || res.Purchases != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	owed, err := app.Suppliers.Payables(ctx)
+	if err != nil || owed["USD"] != 881 {
+		t.Fatalf("payables = %+v, %v", owed, err)
+	}
+	moves, err := app.Suppliers.DrawerBetween(ctx, "0001-01-01", "9999-12-31")
+	if err != nil || len(moves) != 0 {
+		t.Fatalf("the drawer was touched: %+v, %v", moves, err)
+	}
+}

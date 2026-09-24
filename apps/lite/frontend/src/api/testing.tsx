@@ -6,7 +6,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { ClientProvider } from "./ClientContext";
-import type { Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, Purchase, PurchaseLine, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState, Supplier, SupplierEntry, SupplierList, SupplierStatement } from "./client";
+import type { LossReport, Amount, BackupInfo, BackupStatus, CartQuote, CashEntry, Client, Customer, DayReport, Drawer, Entry, Movement, PrinterSettings, Product, Profit, Purchase, PurchaseLine, RateState, RepriceProposal, AlertsState, Returnable, Sale, SaleReturn, Statement, StockReport, SettingsState, ShopState, Supplier, SupplierEntry, SupplierList, SupplierStatement } from "./client";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import type { Locale } from "@/i18n/messages";
 import { OwnerProvider } from "@/owner/OwnerProvider";
@@ -566,6 +566,46 @@ export function aDrawer(overrides: Partial<Drawer> = {}): Drawer {
   };
 }
 
+/** The month's losses: 1.5 kg of labneh gone bad, and two litres of oil that arrived broken and were not charged. */
+export function aLossReport(overrides: Partial<LossReport> = {}): LossReport {
+  return {
+    from: "2026-09-01",
+    to: "2026-09-24",
+    localCurrency: "SYP",
+    lines: [
+      {
+        movementId: "m-1",
+        businessDate: "2026-09-20",
+        productId: "p-labneh",
+        nameAr: "لبنة بلدية",
+        nameEn: "Labneh",
+        unitCode: "kg",
+        reason: "spoiled",
+        quantity: "1.500",
+        value: { usd: "6.00", local: "90000", unconverted: 0 },
+        note: "من الحر",
+      },
+    ],
+    byReason: [{ reason: "spoiled", lines: 1, value: { usd: "6.00", local: "90000", unconverted: 0 } }],
+    total: { usd: "6.00", local: "90000", unconverted: 0 },
+    arrival: [
+      {
+        businessDate: "2026-09-05",
+        purchaseNo: 7,
+        supplierName: "المروى",
+        productId: "p-oil",
+        nameAr: "زيت زيتون",
+        nameEn: "Olive oil",
+        unitCode: "l",
+        damaged: "2.000",
+        currency: "USD",
+        value: "5.00",
+      },
+    ],
+    ...overrides,
+  };
+}
+
 /** A supplier as Go lists one: المروى of Aleppo, owed $22.00, with any field replaceable. */
 export function aSupplier(overrides: Partial<Supplier> = {}): Supplier {
   return {
@@ -934,6 +974,7 @@ export function fakeClient(overrides: Overrides = {}): Client {
         total: aProfit(),
       }),
       stock: async () => aStockReport(),
+      losses: async (from, to) => aLossReport({ from: from || "2026-09-01", to: to || "2026-09-24" }),
     },
     cash: {
       drawer: async (date) => aDrawer({ date: date || "2026-09-14" }),

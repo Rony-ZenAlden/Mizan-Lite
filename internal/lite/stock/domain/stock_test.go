@@ -553,7 +553,12 @@ func TestEveryKindAndReasonMatchesTheSchema(t *testing.T) {
 	if got != kinds {
 		t.Fatalf("kinds = %s", got)
 	}
-	if len(domain.AdjustmentReasons) != 5 || strconv.Quote(string(domain.AdjustmentReasons[3])) != `"gift"` {
+	// 0012 added 'spoiled' (0.10.0), beside damaged and expired.
+	reasons := ""
+	for _, r := range domain.AdjustmentReasons {
+		reasons += strconv.Quote(string(r)) + " "
+	}
+	if reasons != `"damaged" "expired" "spoiled" "own_use" "gift" "other" ` {
 		t.Fatalf("reasons = %v", domain.AdjustmentReasons)
 	}
 }

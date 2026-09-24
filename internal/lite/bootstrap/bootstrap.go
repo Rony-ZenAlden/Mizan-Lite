@@ -1158,7 +1158,7 @@ type reportsStock struct{ stock *stock.Service }
 func movementFacts(rows []stockdomain.Movement) []reportsdomain.Movement {
 	out := make([]reportsdomain.Movement, 0, len(rows))
 	for _, m := range rows {
-		out = append(out, reportsdomain.Movement{ProductID: m.ProductID, Seq: m.Seq, BusinessDate: m.BusinessDate, Kind: string(m.Kind),
+		out = append(out, reportsdomain.Movement{ID: m.ID, Note: m.Note, ProductID: m.ProductID, Seq: m.Seq, BusinessDate: m.BusinessDate, Kind: string(m.Kind),
 			Reason: string(m.Reason), QuantityMicro: m.QuantityMicro, UnitCostMicro: m.UnitCostMicro, OnHandBeforeMicro: m.OnHandBeforeMicro,
 			AvgCostBeforeMicro: m.AvgCostBeforeMicro, OnHandAfterMicro: m.OnHandAfterMicro, AvgCostAfterMicro: m.AvgCostAfterMicro})
 	}
@@ -1410,8 +1410,23 @@ func (g suppliersGate) Require(ctx context.Context, act suppliers.GuardedAct) er
 
 func (g suppliersGate) Allowed(ctx context.Context) bool { return g.owner.Allowed(ctx) }
 
-// reportsPayables satisfies the reports' Payables port: the payables book's money in the drawer.
+// reportsPayables satisfies the reports' Payables port: the payables book's money in the drawer, and the goods that
+// arrived damaged for the loss report.
 type reportsPayables struct{ suppliers *suppliers.Service }
+
+func (r reportsPayables) DamagedOnArrival(ctx context.Context, from, to string) ([]reportsdomain.ArrivalDamage, error) {
+	damaged, err := r.suppliers.DamagedOnArrival(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]reportsdomain.ArrivalDamage, 0, len(damaged))
+	for _, d := range damaged {
+		out = append(out, reportsdomain.ArrivalDamage{BusinessDate: d.BusinessDate, PurchaseNo: d.PurchaseNo, SupplierName: d.SupplierName,
+			ProductID: d.ProductID, NameAR: d.NameAR, NameEN: d.NameEN, UnitCode: d.UnitCode, DamagedMicro: d.DamagedMicro,
+			Currency: d.Currency, ValueMinor: d.ValueMinor})
+	}
+	return out, nil
+}
 
 func (r reportsPayables) SupplierCashBetween(ctx context.Context, from, to string) ([]reportsdomain.SupplierCash, error) {
 	moves, err := r.suppliers.DrawerBetween(ctx, from, to)

@@ -200,7 +200,7 @@ describe("StockScreen — counts and write-offs", () => {
 
     let dialog = await openDialog("Adjust", "Adjust stock — Olive oil");
     const reasons = within(within(dialog).getByLabelText("Reason")).getAllByRole("option").map((o) => o.textContent);
-    expect(reasons).toEqual(["Damaged", "Expired or spoiled", "Own use", "Gift or sample", "Other"]);
+    expect(reasons).toEqual(["Damaged or broken", "Expired", "Spoiled (gone bad)", "Own use", "Gift or sample", "Other"]);
     await userEvent.type(within(dialog).getByLabelText("Quantity (Litre)"), "1");
     await userEvent.selectOptions(within(dialog).getByLabelText("Reason"), "gift");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));

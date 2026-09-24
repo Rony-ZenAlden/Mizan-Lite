@@ -4,6 +4,7 @@ import { AboutScreen } from "@/screens/about/AboutScreen";
 import { BackupsScreen } from "@/screens/backups/BackupsScreen";
 import { CashScreen } from "@/screens/cash/CashScreen";
 import { CustomersScreen } from "@/screens/customers/CustomersScreen";
+import { LossesScreen } from "@/screens/losses/LossesScreen";
 import { NotificationsScreen } from "@/screens/notifications/NotificationsScreen";
 import { SettingsScreen } from "@/screens/settings/SettingsScreen";
 import { OwnerScreen } from "@/screens/owner/OwnerScreen";
@@ -37,6 +38,8 @@ export const ROUTES: readonly RouteDef[] = [
   { path: "/suppliers", labelKey: "nav.suppliers", Screen: SuppliersScreen },
   { path: "/products", labelKey: "nav.products", Screen: ProductsScreen },
   { path: "/stock", labelKey: "nav.stock", Screen: StockScreen },
+  // Spoilage recorded, and every loss at cost (0.10.0).
+  { path: "/losses", labelKey: "nav.losses", Screen: LossesScreen },
   { path: "/rates", labelKey: "nav.rates", Screen: RatesScreen },
   { path: "/reports", labelKey: "nav.reports", Screen: ReportsScreen },
   // The bell in the header opens it too (2026-09-23).

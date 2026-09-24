@@ -16,8 +16,9 @@ type Facts struct {
 	MoveList    []domain.Movement
 	DebtList    []domain.DebtEntry
 	CashList    []domain.CashEntry
-	// SupplierList is the payables book's money in the drawer (0.10.0).
+	// SupplierList is the payables book's money in the drawer, ArrivalList the goods that arrived damaged (0.10.0).
 	SupplierList []domain.SupplierCash
+	ArrivalList  []domain.ArrivalDamage
 	// Asked records each range asked of the sales port.
 	Asked [][2]string
 }
@@ -82,6 +83,16 @@ func (f *Facts) SupplierCashBetween(_ context.Context, from, to string) ([]domai
 	for _, m := range f.SupplierList {
 		if within(m.BusinessDate, from, to) {
 			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+func (f *Facts) DamagedOnArrival(_ context.Context, from, to string) ([]domain.ArrivalDamage, error) {
+	var out []domain.ArrivalDamage
+	for _, a := range f.ArrivalList {
+		if within(a.BusinessDate, from, to) {
+			out = append(out, a)
 		}
 	}
 	return out, nil

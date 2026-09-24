@@ -34,6 +34,8 @@ type Returns interface {
 // refunds into it. Wired after construction (UsePayables); nil reads as none, which is every shop before 0.10.0.
 type Payables interface {
 	SupplierCashBetween(ctx context.Context, from, to string) ([]domain.SupplierCash, error)
+	// DamagedOnArrival is the goods that arrived damaged on the period's purchases — the loss report shows them.
+	DamagedOnArrival(ctx context.Context, from, to string) ([]domain.ArrivalDamage, error)
 }
 
 // Stock supplies ledger rows.
@@ -266,6 +268,38 @@ func (s *Service) Products(ctx context.Context, from, to string) (domain.Product
 		return domain.Products{}, err
 	}
 	return domain.ProductsOver(sales, from, to, pair, byID), nil
+}
+
+// Losses is a period's losses — the month to date when empty — at what the stock cost: written off as damaged, expired
+// or spoiled, given away, found short; and the goods that arrived damaged, which the shop never paid for (0.10.0). Owner
+// only: every figure is a cost.
+func (s *Service) Losses(ctx context.Context, from, to string) (domain.LossReport, error) {
+	if !s.gate.Allowed(ctx) {
+		return domain.LossReport{}, ownerRequired()
+	}
+	from, to, err := s.Range(from, to)
+	if err != nil {
+		return domain.LossReport{}, err
+	}
+	pair, rates, err := s.pair(ctx)
+	if err != nil {
+		return domain.LossReport{}, err
+	}
+	rows, err := s.stock.Between(ctx, from, to)
+	if err != nil {
+		return domain.LossReport{}, err
+	}
+	_, byID, err := s.productsByID(ctx)
+	if err != nil {
+		return domain.LossReport{}, err
+	}
+	var arrival []domain.ArrivalDamage
+	if s.payables != nil {
+		if arrival, err = s.payables.DamagedOnArrival(ctx, from, to); err != nil {
+			return domain.LossReport{}, err
+		}
+	}
+	return domain.LossesBetween(rows, byID, rates, pair, from, to, arrival), nil
 }
 
 // StockReport is the stock on a date, a period's movements to it reconciled, and the profit on the shelf now.

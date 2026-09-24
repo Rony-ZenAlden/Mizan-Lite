@@ -175,6 +175,10 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 		InvoiceDiscount: "1000", Lines: []api.PurchaseLineInput{{ProductID: oil.ID, Quantity: "3", Damaged: "1", UnitCost: "30000", DiscountAmount: "2000"}}}); !r.OK {
 		t.Fatal(r.Error)
 	}
+	// Spoiled stock, for the loss report (0.10.0).
+	if r := set.Stock.Adjust(api.AdjustInput{ProductID: oil.ID, Direction: "out", Quantity: "1", Reason: "spoiled"}); !r.OK {
+		t.Fatal(r.Error)
+	}
 	set.Owner.EndElevation()
 	cart := api.CartInput{Lines: []api.CartLineInput{{ProductID: oil.ID, Quantity: "2"}}}
 	if r := set.Till.Checkout(api.CheckoutInput{Cart: cart, Token: quoted(t, set, cart).Token}); !r.OK {
@@ -209,6 +213,7 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 		collect("suppliers.list", set.Suppliers.List(api.SupplierQueryDTO{}).Data)
 		collect("suppliers.statement", set.Suppliers.Statement(api.SupplierStatementQueryDTO{SupplierID: marwa.ID, Currency: "SYP"}).Data)
 		collect("suppliers.purchases", set.Suppliers.Purchases(api.PurchaseQueryDTO{}).Data)
+		collect("reports.losses", set.Reports.Losses(api.RangeInput{}).Data)
 		return out
 	}
 
@@ -265,6 +270,7 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 		"cash.drawer.currencies.1.expected",
 		"suppliers.list.totals.0.balance", "suppliers.statement.entries.1.amount", "suppliers.purchases.0.lines.0.netUnitCost",
 		"suppliers.purchases.0.rate", "cash.drawer.currencies.1.suppliersOut",
+		"reports.losses.total.local", "reports.losses.lines.0.value.local", "reports.losses.arrival.0.value",
 	} {
 		if legacy[path] == redenominated[path] {
 			t.Errorf("%s did not change: it is local money and should read two noughts shorter (%q)", path, legacy[path])
@@ -281,18 +287,29 @@ func TestNoLocalMoneyFieldEscapesThePipeline(t *testing.T) {
 var notLocalMoney = []string{
 	"catalog.products.0.barcode",
 	"catalog.products.0.price",
+	"reports.day.losses.out.usd",
+	"reports.day.losses.spoiled.usd",
 	"reports.day.netUsd",
 	"reports.day.profit.costUsd",
 	"reports.day.profit.marginLocal",
 	"reports.day.profit.marginUsd",
 	"reports.day.profit.profitUsd",
 	"reports.day.profit.revenueUsd",
+	"reports.losses.arrival.0.damaged",
+	"reports.losses.byReason.0.value.usd",
+	"reports.losses.lines.0.quantity",
+	"reports.losses.lines.0.value.usd",
+	"reports.losses.total.usd",
+	"reports.month.days.0.losses.out.usd",
+	"reports.month.days.0.losses.spoiled.usd",
 	"reports.month.days.0.netUsd",
 	"reports.month.days.0.profit.costUsd",
 	"reports.month.days.0.profit.marginLocal",
 	"reports.month.days.0.profit.marginUsd",
 	"reports.month.days.0.profit.profitUsd",
 	"reports.month.days.0.profit.revenueUsd",
+	"reports.month.total.losses.out.usd",
+	"reports.month.total.losses.spoiled.usd",
 	"reports.month.total.netUsd",
 	"reports.month.total.profit.costUsd",
 	"reports.month.total.profit.marginLocal",
@@ -303,6 +320,7 @@ var notLocalMoney = []string{
 	"reports.stock.lines.0.onHand",
 	"reports.stock.lines.0.valueUsd",
 	"reports.stock.reconciliation.closing",
+	"reports.stock.reconciliation.losses",
 	"reports.stock.reconciliation.received",
 	"reports.stock.reconciliation.sold",
 	"reports.stock.retailTotalUsd",

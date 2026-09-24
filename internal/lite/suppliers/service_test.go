@@ -389,3 +389,33 @@ func TestWithThePINOnTheBookIsTheOwners(t *testing.T) {
 		t.Fatalf("the notification engine lost sight of the book: %+v, %v", owed, err)
 	}
 }
+
+// TestGoodsThatArrivedDamagedAreListedAtWhatTheyWouldHaveCost (0.10.0): the loss report's section on goods the supplier
+// did not charge for — voided purchases left out.
+func TestGoodsThatArrivedDamagedAreListedAtWhatTheyWouldHaveCost(t *testing.T) {
+	s, svc, _ := newBook(t)
+	ctx := context.Background()
+	sup := aSupplier(t, svc)
+	if _, err := svc.RecordPurchase(ctx, domain.Input{SupplierID: sup.ID, Currency: "USD",
+		Lines: []domain.LineInput{{ProductID: s.cups, Quantity: "10", Damaged: "3", UnitCost: "2.50"}, {ProductID: s.plates, Quantity: "4", UnitCost: "1"}}}); err != nil {
+		t.Fatal(err)
+	}
+	voided, err := svc.RecordPurchase(ctx, domain.Input{SupplierID: sup.ID, Currency: "USD",
+		Lines: []domain.LineInput{{ProductID: s.plates, Quantity: "2", Damaged: "1", UnitCost: "1"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.VoidPurchase(ctx, voided.ID, "entered twice"); err != nil {
+		t.Fatal(err)
+	}
+	damaged, err := svc.DamagedOnArrival(ctx, "2026-09-01", "2026-09-30")
+	if err != nil || len(damaged) != 1 {
+		t.Fatalf("DamagedOnArrival = %+v, %v", damaged, err)
+	}
+	if d := damaged[0]; d.NameAR != "فنجان قهوة" || d.DamagedMicro != 3_000_000 || d.ValueMinor != 750 || d.SupplierName != "المروى" || d.PurchaseNo != 1 {
+		t.Fatalf("the damaged cups %+v — three at $2.50 is $7.50", d)
+	}
+	if none, _ := svc.DamagedOnArrival(ctx, "2026-10-01", "2026-10-31"); len(none) != 0 {
+		t.Fatalf("damage outside the period: %+v", none)
+	}
+}

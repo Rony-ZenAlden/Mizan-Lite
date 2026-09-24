@@ -48,6 +48,7 @@ import (
 	"github.com/mizan-erp/mizan/internal/lite/setup"
 	"github.com/mizan-erp/mizan/internal/lite/stock"
 	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
+	suppliersdomain "github.com/mizan-erp/mizan/internal/lite/suppliers/domain"
 )
 
 // CodeStockInconsistent fails a run whose stock the verifier finds anything wrong with: a demo that cannot pass the
@@ -246,6 +247,9 @@ type Result struct {
 	PrintJobs int
 	Vouchers  int
 	Backups   int
+	// Suppliers and Purchases are the payables book (0.10.0).
+	Suppliers int
+	Purchases int
 }
 
 // NewClock is a clock fixed on now, for the graph the seeder steps through its history: the command wires Lite and imports
@@ -356,6 +360,9 @@ func Run(ctx context.Context, app *bootstrap.App, opts Options) (Result, error) 
 		return Result{}, err
 	}
 	if err := seedPrinting(ctx, app, opts.PIN, &res); err != nil {
+		return Result{}, err
+	}
+	if err := seedSuppliers(ctx, app, opts.PIN, byName, &res); err != nil {
 		return Result{}, err
 	}
 	if err := check(ctx, app, opts.PIN, &res); err != nil {
@@ -609,6 +616,32 @@ func check(ctx context.Context, app *bootstrap.App, pin string, res *Result) err
 			res.Takings[c.Code] = fxdomain.FormatMinor(t.ChargedMinor-t.VoidedMinor, c.Decimals)
 		}
 	}
+	_, err = app.Owner.EndElevation(ctx)
+	return err
+}
+
+// seedSuppliers keeps a supplier's book (0.10.0): a wholesaler bought from on credit — a carton of grape molasses, one jar
+// broken on arrival and not charged, 5% off the line — part paid from the owner's own pocket, so the drawer the day's
+// counts are made against is untouched.
+func seedSuppliers(ctx context.Context, app *bootstrap.App, pin string, byName map[string]domain.Product, res *Result) error {
+	if _, err := app.Owner.Elevate(ctx, pin); err != nil {
+		return err
+	}
+	sup, err := app.Suppliers.Create(ctx, suppliersdomain.Draft{Name: "شركة الشرق للتوزيع", Phone: "011 222 3344", City: "دمشق"})
+	if err != nil {
+		return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "seeding a supplier")
+	}
+	res.Suppliers++
+	grape, err := stockProduct(byName, "دبس عنب")
+	if err != nil {
+		return err
+	}
+	if _, err = app.Suppliers.RecordPurchase(ctx, suppliersdomain.Input{SupplierID: sup.ID, Currency: "USD", SupplierRef: "S-1042",
+		PaidNow: "10", PaidFrom: "owner",
+		Lines: []suppliersdomain.LineInput{{ProductID: grape.ID, Quantity: "12", Damaged: "1", UnitCost: "1.80", DiscountPercent: "5"}}}); err != nil {
+		return errs.Wrap(err, errs.CategoryInternal, errs.CodeOf(err), "seeding a purchase")
+	}
+	res.Purchases++
 	_, err = app.Owner.EndElevation(ctx)
 	return err
 }

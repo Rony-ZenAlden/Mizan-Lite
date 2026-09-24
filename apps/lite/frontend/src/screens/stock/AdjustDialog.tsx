@@ -9,7 +9,10 @@ import { SelectField, TextField } from "@/ui/Field";
 import { formErrors, typedQuantity } from "./forms";
 
 /** The adjustment reasons, in display order (Q-L2.6); mirrors stock/domain.AdjustmentReasons. */
-export const ADJUSTMENT_REASONS = ["damaged", "expired", "own_use", "gift", "other"] as const;
+export const ADJUSTMENT_REASONS = ["damaged", "expired", "spoiled", "own_use", "gift", "other"] as const;
+
+/** The write-offs the spoilage screen records (0.10.0); mirrors stock/domain.SpoilageReasons. */
+export const SPOILAGE_REASONS = ["damaged", "expired", "spoiled"] as const;
 
 /** A write-off, or stock found. Taking stock out needs the owner (Q-L2.3); "other" needs a note. */
 export function AdjustDialog({

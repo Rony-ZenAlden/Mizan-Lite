@@ -143,6 +143,13 @@ func (l Line) GoodMicro() int64 { return l.QuantityMicro - l.DamagedMicro }
 // DueMinor is what the line costs the shop.
 func (l Line) DueMinor() int64 { return l.GrossMinor - l.LineDiscountMinor - l.InvoiceShareMinor }
 
+// DamagedValueMinor is what the damaged units would have cost at the line's unit price, in the currency's minor units,
+// half up — the value a supplier did not charge (0.10.0).
+func (l Line) DamagedValueMinor(decimals int) int64 {
+	v, _ := roundDiv(new(big.Int).Mul(big.NewInt(l.DamagedMicro), big.NewInt(l.UnitCostMicro)), pow10(12-decimals))
+	return v
+}
+
 // NetUnitMicro is what one good unit cost after every discount, at 10⁻⁶ of the currency's major unit, half up — the
 // cost the stock book received it at. Nought when nothing arrived fit to sell.
 func (l Line) NetUnitMicro(decimals int) int64 {

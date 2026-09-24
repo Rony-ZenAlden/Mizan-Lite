@@ -4,6 +4,7 @@ package suppliers
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -632,6 +633,49 @@ func (s *Service) Purchases(ctx context.Context, q PurchaseQuery) ([]domain.Purc
 		q.Limit = DefaultLimit
 	}
 	return s.store.Purchases(ctx, q)
+}
+
+// Damaged is the units of one purchase line that arrived damaged: never received, never charged (0.10.0).
+type Damaged struct {
+	BusinessDate string
+	PurchaseNo   int64
+	SupplierName string
+	ProductID    id.ID
+	NameAR       string
+	NameEN       string
+	UnitCode     string
+	DamagedMicro int64
+	Currency     string
+	// ValueMinor is what they would have cost at the line's unit price, in the purchase's currency.
+	ValueMinor int64
+}
+
+// DamagedOnArrival is the damaged units on the purchases of business dates from..to, voided purchases left out. Unguarded:
+// the loss report reads it, and the loss report is the owner's.
+func (s *Service) DamagedOnArrival(ctx context.Context, from, to string) ([]Damaged, error) {
+	bought, err := s.store.Purchases(ctx, PurchaseQuery{From: from, To: to, Limit: math.MaxInt32})
+	if err != nil {
+		return nil, err
+	}
+	currencies, err := s.ports.Catalogue.Currencies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []Damaged{}
+	for _, p := range bought {
+		if p.Status == domain.StatusVoided {
+			continue
+		}
+		for _, l := range p.Lines {
+			if l.DamagedMicro == 0 {
+				continue
+			}
+			out = append(out, Damaged{BusinessDate: p.BusinessDate, PurchaseNo: p.PurchaseNo, SupplierName: p.SupplierName,
+				ProductID: l.ProductID, NameAR: l.NameAR, NameEN: l.NameEN, UnitCode: l.UnitCode, DamagedMicro: l.DamagedMicro,
+				Currency: p.Currency, ValueMinor: l.DamagedValueMinor(decimalsOf(currencies, p.Currency))})
+		}
+	}
+	return out, nil
 }
 
 // ─── Money ─────────────────────────────────────────────────────────────────────────────────────────────────────────

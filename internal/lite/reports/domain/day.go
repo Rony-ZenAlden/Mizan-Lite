@@ -43,7 +43,7 @@ func inBoth(minor int64, currency string, nano int64, found bool, pair Pair) Con
 
 // Losses are the stock that left without a sale, and what counts found, at the cost each row moved at (D-L6.6).
 type Losses struct {
-	Spoiled   Converted // damaged, expired
+	Spoiled   Converted // damaged, expired, spoiled
 	OwnUse    Converted // own use, gifts
 	Other     Converted // other write-offs
 	Shortfall Converted // a count found less
@@ -97,7 +97,7 @@ func LossesOn(movements []Movement, date string, rate Rate, found bool, pair Pai
 			l.Surplus.Add(v)
 		case m.Kind == MoveCount:
 			l.Shortfall.Add(v)
-		case m.Reason == ReasonDamaged || m.Reason == ReasonExpired:
+		case m.Reason == ReasonDamaged || m.Reason == ReasonExpired || m.Reason == ReasonSpoiled:
 			l.Spoiled.Add(v)
 		case m.Reason == ReasonOwnUse || m.Reason == ReasonGift:
 			l.OwnUse.Add(v)

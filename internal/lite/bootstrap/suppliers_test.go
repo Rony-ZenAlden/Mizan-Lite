@@ -6,6 +6,8 @@ import (
 
 	"github.com/mizan-erp/mizan/internal/kernel/errs"
 	ownerdomain "github.com/mizan-erp/mizan/internal/lite/owner/domain"
+	"github.com/mizan-erp/mizan/internal/lite/stock"
+	stockdomain "github.com/mizan-erp/mizan/internal/lite/stock/domain"
 	"github.com/mizan-erp/mizan/internal/lite/suppliers"
 	suppliersdomain "github.com/mizan-erp/mizan/internal/lite/suppliers/domain"
 )
@@ -82,5 +84,45 @@ func TestAPurchaseIsReceivedIntoTheRealStockBook(t *testing.T) {
 	}
 	if st, _ := app.Suppliers.StatementOf(ctx, marwa.ID, "SYP"); st.BalanceMinor != 0 || len(st.Entries) != 2 {
 		t.Fatalf("the pounds book after the void: %+v", st)
+	}
+}
+
+// TestSpoiledStockIsWrittenOffAndReportedAtCost proves the rebuilt ledger on the real graph (0.10.0): 'spoiled' is a
+// reason the database takes, the write-off comes off the shelf at the average cost, and the loss report reads it beside
+// the goods that arrived damaged.
+func TestSpoiledStockIsWrittenOffAndReportedAtCost(t *testing.T) {
+	ctx := context.Background()
+	app, oil := startFast(t)
+	if _, err := app.Stock.Opening(ctx, stock.ReceiveInput{ProductID: oil.ID, Quantity: "10",
+		Cost: stockdomain.CostInput{Mode: stockdomain.CostTotal, Amount: "20", Currency: "USD"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range stockdomain.SpoilageReasons {
+		if _, err := app.Stock.Adjust(ctx, stock.AdjustInput{ProductID: oil.ID, Direction: stock.DirectionOut, Quantity: "1", Reason: reason}); err != nil {
+			t.Fatalf("writing off as %s: %v", reason, err)
+		}
+	}
+	marwa, err := app.Suppliers.Create(ctx, suppliersdomain.Draft{Name: "المروى"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = app.Suppliers.RecordPurchase(ctx, suppliersdomain.Input{SupplierID: marwa.ID, Currency: "USD",
+		Lines: []suppliersdomain.LineInput{{ProductID: oil.ID, Quantity: "5", Damaged: "2", UnitCost: "2"}}}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := app.Reports.Losses(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Three litres at $2.00, one for each reason: $6.00.
+	if len(report.Lines) != 3 || report.Total.USD != 600 || len(report.ByReason) != 3 || report.ByReason[2].Reason != "spoiled" {
+		t.Fatalf("the loss report %+v", report)
+	}
+	if len(report.Arrival) != 1 || report.Arrival[0].DamagedMicro != 2_000_000 || report.Arrival[0].ValueMinor != 400 {
+		t.Fatalf("goods that arrived damaged %+v", report.Arrival)
+	}
+	day, err := app.Reports.Day(ctx, "")
+	if err != nil || day.Losses.Spoiled.USD != 600 {
+		t.Fatalf("the day's statement counts the spoiled with the damaged and expired: %+v, %v", day.Losses, err)
 	}
 }

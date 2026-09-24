@@ -4,8 +4,13 @@
 --   §2 The printed invoice: a customer's city (الجهة), and how many of a product make one carton (طرد) — on the
 --      product, and copied onto every sale line as the line keeps its name and unit.
 --   §3 The A4 invoice, recorded in print_jobs like every other printed document.
---   §4 Suppliers, their purchases — lines, damage, discounts — and the payables book.
---   §5 What the shop owes its suppliers, taken off its capital.
+--   §4 Stock that spoiled — food gone bad — written off under a reason of its own, beside damaged and expired.
+--   §5 Suppliers, their purchases — lines, damage, discounts — and the payables book.
+--   §6 What the shop owes its suppliers, taken off its capital.
+--
+-- ORDER MATTERS (as 0010 found): §4 rebuilds stock_ledger inside the runner's transaction, where foreign keys stay on.
+-- stock_levels points at the ledger and is copied aside first; purchase_lines (§5) will point at it too, and is created
+-- after the rebuild, so there are none of its rows to break.
 --
 -- Every nullable comparison in a CHECK is guarded (PROGRESS O7).
 
@@ -69,7 +74,109 @@ DROP TABLE print_jobs;
 ALTER TABLE print_jobs_r12 RENAME TO print_jobs;
 CREATE INDEX ix_print_jobs_subject ON print_jobs (subject_id, outcome);
 
--- ── §4. Suppliers, purchases, and what the shop owes them ───────────────────────────────────────────────────────────
+-- ── §4. Stock that spoiled ──────────────────────────────────────────────────────────────────────────────────────────
+--
+-- The owner's spoilage screen (2026-09-24) writes stock off as damaged, expired or spoiled. 'spoiled' is food gone bad
+-- before its date — a tub of labneh in the heat — which neither 'damaged' (broken, crushed) nor 'expired' (past its
+-- date) says. reason_code is a CHECK, which SQLite cannot alter, so the ledger is rebuilt exactly as 0010 left it with
+-- the one word added: stock_levels copied aside and put back, the new table's self-reference naming the NEW table, the
+-- indexes and 0011's trigger made again.
+CREATE TABLE stock_levels_copy AS SELECT * FROM stock_levels;
+DROP TABLE stock_levels;
+
+CREATE TABLE stock_ledger_r12 (
+  id                         CHAR(36)    NOT NULL PRIMARY KEY,
+  product_id                 CHAR(36)    NOT NULL REFERENCES products(id),
+  seq                        BIGINT      NOT NULL CHECK (seq >= 1),
+  business_date              CHAR(10)    NOT NULL,
+  occurred_at                CHAR(24)    NOT NULL,
+  kind                       VARCHAR(20) NOT NULL CHECK (kind IN (
+                               'opening', 'receipt', 'receipt_reversal', 'count', 'adjustment',
+                               'package_out', 'content_in', 'cost_correction', 'sale', 'sale_void', 'sale_return')),
+  quantity_micro             BIGINT      NOT NULL,
+  unit_cost_usd_micro        BIGINT      NOT NULL CHECK (unit_cost_usd_micro >= 0),
+  on_hand_before_micro       BIGINT      NOT NULL,
+  avg_cost_before_usd_micro  BIGINT      NOT NULL CHECK (avg_cost_before_usd_micro >= 0),
+  on_hand_after_micro        BIGINT      NOT NULL,
+  avg_cost_after_usd_micro   BIGINT      NOT NULL CHECK (avg_cost_after_usd_micro >= 0),
+  entered_currency           CHAR(3)     REFERENCES currencies(code),
+  entered_unit_cost_micro    BIGINT,
+  local_per_usd_nano         BIGINT,
+  reason_code                VARCHAR(16),
+  note                       VARCHAR(200),
+  reverses_id                CHAR(36)    REFERENCES stock_ledger_r12(id),
+  pair_id                    CHAR(36),
+  sale_id                    CHAR(36)    REFERENCES sales(id),
+  sale_line_id               CHAR(36)    REFERENCES sale_lines(id),
+  created_at                 CHAR(24)    NOT NULL,
+
+  CONSTRAINT ck_ledger_quantity_by_kind CHECK (
+    (kind IN ('opening', 'receipt', 'content_in', 'sale_void', 'sale_return') AND quantity_micro > 0) OR
+    (kind IN ('receipt_reversal', 'package_out', 'sale')                     AND quantity_micro < 0) OR
+    (kind = 'adjustment'                                                     AND quantity_micro <> 0) OR
+    (kind = 'count') OR
+    (kind = 'cost_correction'                                                AND quantity_micro = 0)),
+  CONSTRAINT ck_ledger_after_follows_before CHECK (on_hand_after_micro = on_hand_before_micro + quantity_micro),
+  CONSTRAINT ck_ledger_reason_where_needed CHECK (
+    (kind IN ('count', 'adjustment')) = (reason_code IS NOT NULL)),
+  CONSTRAINT ck_ledger_reason_known CHECK (
+    reason_code IS NULL OR reason_code IN ('count', 'damaged', 'expired', 'spoiled', 'own_use', 'gift', 'other')),
+  CONSTRAINT ck_ledger_other_needs_note CHECK (reason_code IS NULL OR reason_code <> 'other' OR note IS NOT NULL),
+  CONSTRAINT ck_ledger_reversal_links CHECK ((kind IN ('receipt_reversal', 'sale_void')) = (reverses_id IS NOT NULL)),
+  CONSTRAINT ck_ledger_package_pairs CHECK ((kind IN ('package_out', 'content_in')) = (pair_id IS NOT NULL)),
+  CONSTRAINT ck_ledger_sale_links CHECK (
+    (kind IN ('sale', 'sale_void', 'sale_return')) = (sale_id IS NOT NULL AND sale_line_id IS NOT NULL)),
+  CONSTRAINT ck_ledger_sale_links_both_or_neither CHECK ((sale_id IS NULL) = (sale_line_id IS NULL)),
+  CONSTRAINT ck_ledger_entered_cost CHECK (
+    (entered_currency IS NULL AND entered_unit_cost_micro IS NULL AND local_per_usd_nano IS NULL) OR
+    (kind IN ('opening', 'receipt') AND entered_unit_cost_micro IS NOT NULL AND entered_unit_cost_micro >= 0 AND (
+       (entered_currency IS NOT NULL AND entered_currency = 'USD' AND local_per_usd_nano IS NULL) OR
+       (entered_currency IS NOT NULL AND entered_currency <> 'USD' AND
+        local_per_usd_nano IS NOT NULL AND local_per_usd_nano > 0)))),
+  CONSTRAINT ux_ledger_reversed_once UNIQUE (reverses_id),
+  CONSTRAINT ux_ledger_product_seq UNIQUE (product_id, seq)
+);
+
+INSERT INTO stock_ledger_r12 (
+  id, product_id, seq, business_date, occurred_at, kind, quantity_micro, unit_cost_usd_micro,
+  on_hand_before_micro, avg_cost_before_usd_micro, on_hand_after_micro, avg_cost_after_usd_micro,
+  entered_currency, entered_unit_cost_micro, local_per_usd_nano, reason_code, note, reverses_id, pair_id,
+  sale_id, sale_line_id, created_at)
+SELECT
+  id, product_id, seq, business_date, occurred_at, kind, quantity_micro, unit_cost_usd_micro,
+  on_hand_before_micro, avg_cost_before_usd_micro, on_hand_after_micro, avg_cost_after_usd_micro,
+  entered_currency, entered_unit_cost_micro, local_per_usd_nano, reason_code, note, reverses_id, pair_id,
+  sale_id, sale_line_id, created_at
+FROM stock_ledger;
+
+DROP TABLE stock_ledger;
+ALTER TABLE stock_ledger_r12 RENAME TO stock_ledger;
+
+CREATE INDEX ix_stock_ledger_date ON stock_ledger (business_date);
+CREATE INDEX ix_stock_ledger_sale ON stock_ledger (sale_id);
+CREATE UNIQUE INDEX ux_stock_ledger_sale_line_kind ON stock_ledger (sale_line_id, kind)
+  WHERE kind IN ('sale', 'sale_void');
+
+-- 0011's guard, dropped with the old table.
+CREATE TRIGGER tr_stock_ledger_no_open_price BEFORE INSERT ON stock_ledger
+WHEN (SELECT open_price FROM products WHERE id = NEW.product_id) = 1
+BEGIN
+  SELECT RAISE(ABORT, 'an open-priced product holds no stock');
+END;
+
+CREATE TABLE stock_levels (
+  product_id               CHAR(36)  NOT NULL PRIMARY KEY REFERENCES products(id),
+  on_hand_micro            BIGINT    NOT NULL,
+  avg_cost_usd_micro       BIGINT    NOT NULL CHECK (avg_cost_usd_micro >= 0),
+  last_movement_id         CHAR(36)  NOT NULL REFERENCES stock_ledger(id),
+  row_version              BIGINT    NOT NULL DEFAULT 1,
+  updated_at               CHAR(24)  NOT NULL
+);
+INSERT INTO stock_levels (product_id, on_hand_micro, avg_cost_usd_micro, last_movement_id, row_version, updated_at)
+  SELECT product_id, on_hand_micro, avg_cost_usd_micro, last_movement_id, row_version, updated_at FROM stock_levels_copy;
+DROP TABLE stock_levels_copy;
+
+-- ── §5. Suppliers, purchases, and what the shop owes them ───────────────────────────────────────────────────────────
 --
 -- A book of its own, separate from the customers' (the owner's request, 2026-09-24): a customer's balance is owed TO the
 -- shop and a supplier's is owed BY it, and a book that held both would net one against the other.
@@ -189,7 +296,7 @@ CREATE TABLE supplier_entries (
 );
 CREATE INDEX ix_supplier_entries_day ON supplier_entries (business_date);
 
--- ── §5. What the shop owes is part of what it is worth ──────────────────────────────────────────────────────────────
+-- ── §6. What the shop owes is part of what it is worth ──────────────────────────────────────────────────────────────
 --
 -- The capital in dollars (0011) was stock + drawer + what customers owe. What the shop owes its suppliers comes off it:
 -- a shop that bought 1,000 dollars of stock on credit is not 1,000 dollars richer. Days recorded before 0.10.0 had no

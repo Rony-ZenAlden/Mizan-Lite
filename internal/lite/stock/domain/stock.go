@@ -114,13 +114,18 @@ const (
 	ReasonCount   Reason = "count"
 	ReasonDamaged Reason = "damaged"
 	ReasonExpired Reason = "expired"
+	// ReasonSpoiled is food gone bad before its date — neither broken nor expired (0.10.0).
+	ReasonSpoiled Reason = "spoiled"
 	ReasonOwnUse  Reason = "own_use"
 	ReasonGift    Reason = "gift"
 	ReasonOther   Reason = "other"
 )
 
 // AdjustmentReasons are the reasons an adjustment may give, in display order.
-var AdjustmentReasons = []Reason{ReasonDamaged, ReasonExpired, ReasonOwnUse, ReasonGift, ReasonOther}
+var AdjustmentReasons = []Reason{ReasonDamaged, ReasonExpired, ReasonSpoiled, ReasonOwnUse, ReasonGift, ReasonOther}
+
+// SpoilageReasons are the write-offs the spoilage screen records: stock lost, not given away (0.10.0).
+var SpoilageReasons = []Reason{ReasonDamaged, ReasonExpired, ReasonSpoiled}
 
 // Currency is a currency a cost may be typed in.
 type Currency struct {

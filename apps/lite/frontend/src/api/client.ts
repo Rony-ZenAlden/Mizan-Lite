@@ -120,6 +120,8 @@ export type MonthReport = Plain<api.MonthReportDTO>;
 export type ProductRow = Plain<api.ProductRowDTO>;
 export type ProductsReport = Plain<api.ProductsReportDTO>;
 export type StockReport = Plain<api.StockReportDTO>;
+export type LossReport = Plain<api.LossReportDTO>;
+export type LossLine = Plain<api.LossLineDTO>;
 export type Drawer = Plain<api.DrawerDTO>;
 export type DrawerCurrency = Plain<api.DrawerCurrencyDTO>;
 export type CashEntry = Plain<api.CashEntryDTO>;
@@ -290,6 +292,8 @@ export function createClient() {
       period: (from: string, to: string) => unwrap(() => Reports.Period(api.RangeInput.createFrom({ from, to }))),
       products: (from: string, to: string) => unwrap(() => Reports.Products(api.RangeInput.createFrom({ from, to }))),
       stock: (from: string, to: string) => unwrap(() => Reports.Stock(api.RangeInput.createFrom({ from, to }))),
+      // What was lost — spoiled, damaged, expired, short — at cost, and goods that arrived damaged (0.10.0).
+      losses: (from: string, to: string) => unwrap(() => Reports.Losses(api.RangeInput.createFrom({ from, to }))),
     },
     cash: {
       drawer: (date: string) => unwrap(() => Cash.Drawer(date)),

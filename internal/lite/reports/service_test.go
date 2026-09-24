@@ -142,3 +142,23 @@ func TestTheReportsModuleWritesNothing(t *testing.T) {
 		t.Fatalf("scanned %d files: %v", files, err)
 	}
 }
+
+// TestTheLossReportIsTheOwners (0.10.0): costs, so it asks for owner mode; the month to date when no range is given; and
+// the goods that arrived damaged come with it.
+func TestTheLossReportIsTheOwners(t *testing.T) {
+	svc, f, g := newService()
+	f.MoveList = []domain.Movement{{ID: "m1", ProductID: "p1", BusinessDate: "2026-09-14", Kind: domain.MoveAdjustment,
+		Reason: domain.ReasonExpired, QuantityMicro: -2_000_000, UnitCostMicro: 1_000_000}}
+	f.ArrivalList = []domain.ArrivalDamage{{BusinessDate: "2026-09-02", PurchaseNo: 3, DamagedMicro: 1_000_000, Currency: "USD", ValueMinor: 250}}
+	if _, err := svc.Losses(ctx, "", ""); errs.CodeOf(err) != reports.CodeOwnerRequired {
+		t.Fatalf("the losses outside owner mode: %v", err)
+	}
+	g.Elevated = true
+	r, err := svc.Losses(ctx, "", "")
+	if err != nil || r.From != "2026-09-01" || r.To != "2026-09-15" || len(r.Lines) != 1 || r.Total.USD != 200 || len(r.Arrival) != 1 {
+		t.Fatalf("Losses = %+v, %v", r, err)
+	}
+	if _, err := svc.Losses(ctx, "2026-09-10", "2026-09-01"); errs.CategoryOf(err) != errs.CategoryValidation {
+		t.Fatalf("a range backwards: %v", err)
+	}
+}

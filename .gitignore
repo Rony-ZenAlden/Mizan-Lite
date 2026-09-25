@@ -100,3 +100,31 @@ testdata/rapid/
 /build/lite-e2e/
 /apps/lite/frontend/playwright-report/
 /apps/lite/frontend/test-results/
+
+# ── Publishing hygiene (2026-09-25, before the repository goes public) ─────────────
+# Installers and disk images wherever a build leaves them; /dist/ above already holds the release folder.
+*.dmg
+*.msi
+*.pkg
+*.appx
+# More database shapes and their side files. Never a shop's data in the repository (the *.db rules above keep
+# the upgrade matrix's fixtures).
+*.sqlite
+*.sqlite3
+*.db-journal
+# A Mizan Lite backup's manifest, beside the .db it describes.
+*.db.json
+# Logs and tool caches.
+*.log
+.eslintcache
+.cache/
+coverage/
+# A local Go workspace is one developer's layout, not the project's.
+go.work
+go.work.sum
+# macOS and Windows file-system noise.
+._*
+.AppleDouble
+.Spotlight-V100
+.Trashes
+desktop.ini

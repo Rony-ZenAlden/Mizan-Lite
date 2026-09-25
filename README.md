@@ -97,15 +97,15 @@ Pre-compiled builds are published on the [**Releases**](../../releases/latest) p
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 13+ (Apple silicon and Intel) | `Mizan Lite <version>.dmg` | a universal application; drag it to Applications |
-| Windows 10/11 (64-bit) | `Mizan Lite <version> Setup.exe` | installer, with the WebView2 runtime included, so it installs offline |
-| Windows 10/11 (64-bit) | `Mizan Lite <version>.exe` | portable, with no installation |
+| macOS 13+ (Apple silicon and Intel) | `Mizan.Lite.<version>.dmg` | a universal application; drag it to Applications |
+| Windows 10/11 (64-bit) | `Mizan.Lite.<version>.Setup.exe` | installer, with the WebView2 runtime included, so it installs offline |
+| Windows 10/11 (64-bit) | `Mizan.Lite.<version>.exe` | portable, with no installation |
 
-Each release carries a `SHA256SUMS-<version>.txt`. Check your download against it:
+Each release carries a `SHA256SUMS-<version>.txt`. Check your download against it, in the folder you downloaded to:
 
 ```bash
-shasum -a 256 -c SHA256SUMS-0.10.1.txt                   # macOS / Linux
-Get-FileHash ".\Mizan Lite 0.10.1 Setup.exe" -Algorithm SHA256   # Windows PowerShell
+shasum -a 256 -c SHA256SUMS-0.10.1.txt --ignore-missing          # macOS / Linux
+Get-FileHash .\Mizan.Lite.0.10.1.Setup.exe -Algorithm SHA256      # Windows PowerShell: compare with the file
 ```
 
 > **The builds are not code-signed yet.** On macOS, open the app once with right-click → **Open**, or use
